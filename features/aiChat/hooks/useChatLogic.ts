@@ -7,24 +7,17 @@ import { MODEL_CATALOG, MELSA_KERNEL } from '../../../services/melsaKernel';
 import { STOIC_KERNEL } from '../../../services/stoicKernel';
 import { executeNeuralTool } from '../services/toolHandler';
 import { speakWithMelsa } from '../../../services/elevenLabsService';
-
-interface ToolConfig {
-    search: boolean;
-    vault: boolean;
-    visual: boolean;
-}
+import { useVault } from '../../../contexts/VaultContext';
 
 export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) => {
     const [threads, setThreads] = useLocalStorage<ChatThread[]>('chat_threads', []);
     const [activeThreadId, setActiveThreadId] = useLocalStorage<string | null>('active_thread_id', null);
     
-    // SECURITY UPGRADE: Vault Sync is now Session-Based (lost on refresh) for better security
-    const [isVaultSynced, setIsVaultSynced] = useState<boolean>(false);
+    // SECURITY: Use Global Context
+    const { isVaultUnlocked, lockVault, unlockVault, isVaultConfigEnabled } = useVault();
     
     // Settings
     const [isAutoSpeak, setIsAutoSpeak] = useLocalStorage<boolean>('is_auto_speak', false);
-    const [melsaConfig] = useLocalStorage<ToolConfig>('melsa_tools_config', { search: true, vault: true, visual: true });
-    const [stoicConfig] = useLocalStorage<ToolConfig>('stoic_tools_config', { search: true, vault: true, visual: false });
     
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -41,13 +34,8 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
     const personaMode = activeThread?.persona || 'melsa';
     
-    // Check if Vault is allowed by System Config
-    const isVaultConfigEnabled = personaMode === 'melsa' ? melsaConfig.vault : stoicConfig.vault;
-
-    // Auto-lock if config is disabled dynamically
-    if (isVaultSynced && !isVaultConfigEnabled) {
-        setIsVaultSynced(false);
-    }
+    // Check Config relative to persona
+    const vaultEnabled = isVaultConfigEnabled(personaMode);
 
     const handleNewChat = useCallback(async (persona: 'melsa' | 'stoic' = 'melsa') => {
         const welcome = persona === 'melsa' 
@@ -60,7 +48,8 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             persona,
             model_id: 'gemini-3-pro-preview',
             messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
-            updated: new Date().toISOString()
+            updated: new Date().toISOString(),
+            isPinned: false
         };
         
         setThreads(prev => [newThread, ...prev]);
@@ -71,19 +60,27 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         setThreads(prev => prev.map(t => t.id === id ? { ...t, title: newTitle, updated: new Date().toISOString() } : t));
     }, [setThreads]);
 
-    const sendMessage = async () => {
+    const togglePinThread = useCallback(async (id: string) => {
+        setThreads(prev => prev.map(t => t.id === id ? { ...t, isPinned: !t.isPinned } : t));
+    }, [setThreads]);
+
+    const sendMessage = async (e?: React.FormEvent, attachment?: { data: string, mimeType: string }) => {
         const userMsg = input.trim();
-        if (!userMsg || isLoading || !activeThreadId || !activeThread) return;
+        // Allow empty message if there is an attachment
+        if ((!userMsg && !attachment) || isLoading || !activeThreadId || !activeThread) return;
 
         // Auto-rename thread based on first message if generic title
-        if (activeThread.messages.length <= 1 && activeThread.title.startsWith('SESSION_')) {
+        if (activeThread.messages.length <= 1 && activeThread.title.startsWith('SESSION_') && userMsg) {
             renameThread(activeThreadId, userMsg.slice(0, 30).toUpperCase());
+        } else if (activeThread.messages.length <= 1 && activeThread.title.startsWith('SESSION_') && attachment) {
+            renameThread(activeThreadId, "IMAGE_ANALYSIS");
         }
 
         // Add User Message
+        const messageText = attachment ? (userMsg ? userMsg : "Sent an image.") : userMsg;
         const updatedMessages: ChatMessage[] = [
             ...activeThread.messages, 
-            { id: uuidv4(), role: 'user', text: userMsg, metadata: { status: 'success' } }
+            { id: uuidv4(), role: 'user', text: messageText, metadata: { status: 'success' } }
         ];
 
         // Create Placeholder for AI Message
@@ -95,14 +92,23 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             metadata: { status: 'success', model: activeModel.name, provider: activeModel.provider } 
         };
 
-        setThreads(prev => prev.map(t => t.id === activeThreadId ? { ...t, messages: [...updatedMessages, initialModelMessage] } : t));
+        // Update thread with new messages AND update the timestamp so it bumps to top
+        const now = new Date().toISOString();
+        setThreads(prev => prev.map(t => t.id === activeThreadId ? { 
+            ...t, 
+            messages: [...updatedMessages, initialModelMessage],
+            updated: now 
+        } : t));
+        
         setInput('');
         setIsLoading(true);
 
         try {
-            // RAG CONTEXT INJECTION LOGIC
+            // RAG CONTEXT INJECTION LOGIC (STRICT SECURITY)
             let noteContext = "";
-            if (isVaultSynced && isVaultConfigEnabled) {
+            
+            // CRITICAL CHECK: Global Unlock State && Config Enabled
+            if (isVaultUnlocked && vaultEnabled) {
                 // Limit context size to avoid token overflow
                 const relevantNotes = notes.slice(0, 50); 
                 const contextList = relevantNotes.map(n => {
@@ -111,17 +117,20 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                         : '';
                     return `- [${n.id.slice(0,4)}] ${n.title} ${taskInfo}: ${n.content.slice(0, 200)}...`;
                 }).join('\n');
-                noteContext = `[VAULT_DATABASE_ACTIVE]\nBerikut adalah cuplikan catatan user:\n${contextList}\n[END_VAULT]`;
+                noteContext = `[VAULT_DATABASE_ACTIVE]\n[SECURITY: UNLOCKED]\nBerikut adalah cuplikan catatan user yang TERENKRIPSI namun dibuka untuk sesi ini:\n${contextList}\n[END_VAULT]`;
             } else {
-                noteContext = isVaultConfigEnabled 
-                    ? "🚫 [[VAULT_ACCESS_LOCKED]] (User has not authenticated via PIN)" 
-                    : "🚫 [[VAULT_SYSTEM_OFFLINE]] (Module disabled in System Configuration)";
+                noteContext = vaultEnabled 
+                    ? "🚫 [[VAULT_ACCESS_LOCKED]] (User has NOT authenticated via PIN in Dashboard/Chat. DO NOT reveal any personal data.)" 
+                    : "🚫 [[VAULT_SYSTEM_OFFLINE]] (Module disabled in System Configuration. No access possible.)";
             }
 
             const kernel = personaMode === 'melsa' ? MELSA_KERNEL : STOIC_KERNEL;
             
             // Execute Stream - Kernel will handle routing logic and errors internally
-            const stream = kernel.streamExecute(userMsg, activeThread.model_id, noteContext);
+            // Note: Stoic kernel currently doesn't support attachment in `streamExecute` via types signature, 
+            // but for simplicity we assume Melsa use cases for visuals mostly. 
+            // If Stoic used, attachment will be ignored or handled if kernel updated.
+            const stream = kernel.streamExecute(userMsg || (attachment ? "Analyze this image." : "."), activeThread.model_id, noteContext, attachment);
             
             let accumulatedText = "";
             let currentFunctionCall: any = null;
@@ -138,7 +147,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                         text: accumulatedText,
                         metadata: { 
                             ...m.metadata, 
-                            // If kernel sends metadata update (e.g. provider switch), apply it
                             ...(chunk.metadata ? chunk.metadata : {}),
                             groundingChunks: chunk.groundingChunks || m.metadata?.groundingChunks 
                         }
@@ -146,7 +154,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 } : t));
             }
 
-            // Text-to-Speech Trigger (Only if pure text, not function call)
             if (isAutoSpeak && accumulatedText && !currentFunctionCall) {
                 speakWithMelsa(accumulatedText.replace(/[*#_`]/g, ''), personaMode === 'melsa' ? 'Melsa' : 'Fenrir');
             }
@@ -156,10 +163,10 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 let toolResult = "";
                 
                 if (currentFunctionCall.name === 'manage_note') {
-                    if (!isVaultConfigEnabled) {
+                    if (!vaultEnabled) {
                         toolResult = "❌ SYSTEM_ERROR: Vault Module is disabled in Settings.";
-                    } else if (!isVaultSynced) {
-                        toolResult = "❌ ACCESS_DENIED: Vault Access is Locked. User must click 'Authenticate' in the UI.";
+                    } else if (!isVaultUnlocked) {
+                        toolResult = "❌ ACCESS_DENIED: Vault Access is Locked. Ask user to click 'Authenticate' (Logo Gembok).";
                     } else {
                         toolResult = await executeNeuralTool(currentFunctionCall, notes, setNotes);
                     }
@@ -181,7 +188,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 }
             }
         } catch (err: any) {
-             // Fallback for catastrophic kernel failure (should rarely happen due to Kernel's internal try-catch loop)
              setThreads(prev => prev.map(t => t.id === activeThreadId ? { 
                 ...t, 
                 messages: t.messages.map(m => m.id === modelMessageId ? {
@@ -196,8 +202,9 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     return {
         threads, setThreads,
         activeThread, activeThreadId, setActiveThreadId,
-        isVaultSynced, setIsVaultSynced,
-        isVaultConfigEnabled, // Exported for UI
+        isVaultSynced: isVaultUnlocked, 
+        setIsVaultSynced: (val: boolean) => val ? unlockVault() : lockVault(), // Bridge to Context
+        isVaultConfigEnabled: vaultEnabled,
         isAutoSpeak, setIsAutoSpeak, 
         input, setInput,
         isLoading,
@@ -205,6 +212,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         personaMode,
         handleNewChat,
         renameThread,
+        togglePinThread,
         sendMessage
     };
 };

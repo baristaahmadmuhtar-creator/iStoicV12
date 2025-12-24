@@ -11,6 +11,7 @@ import {
 import { THEME_COLORS } from '../../App';
 import { DEFAULT_MELSA_PROMPT, DEFAULT_STOIC_PROMPT } from '../../services/geminiService';
 import { speakWithMelsa } from '../../services/elevenLabsService';
+import { useVault } from '../../contexts/VaultContext';
 
 interface ToolConfig {
     search: boolean;
@@ -69,7 +70,7 @@ const ToolRow: React.FC<{
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
                 isActive ? `${activeColor} text-white shadow-lg` : 'bg-zinc-200 dark:bg-zinc-800 text-neutral-400'
             }`}>
-                {React.cloneElement(icon as React.ReactElement, { size: 18 })}
+                {React.cloneElement(icon as React.ReactElement<any>, { size: 18 })}
             </div>
             <div>
                 <div className="flex items-center gap-2">
@@ -94,6 +95,10 @@ const ToolRow: React.FC<{
 );
 
 const SettingsView: React.FC = () => {
+    // The VaultContext will automatically detect changes to localStorage tools_config and lock if needed.
+    // We just need to ensure we update localStorage correctly here.
+    const { lockVault } = useVault();
+
     const [persistedLanguage, setPersistedLanguage] = useLocalStorage<'id' | 'en'>('app_language', 'id');
     const [persistedTheme, setPersistedTheme] = useLocalStorage<string>('app_theme', 'cyan');
     const [persistedColorScheme, setPersistedColorScheme] = useLocalStorage<'system' | 'light' | 'dark'>('app_color_scheme', 'system');
@@ -140,6 +145,11 @@ const SettingsView: React.FC = () => {
             setPersistedStoicVoice(stoicVoice);
             setPersistedMelsaTools(melsaTools);
             setPersistedStoicTools(stoicTools);
+            
+            // Explicitly lock vault if user just disabled it
+            if ((!melsaTools.vault && persistedMelsaTools.vault) || (!stoicTools.vault && persistedStoicTools.vault)) {
+                lockVault();
+            }
             
             setIsSaving(false);
             setSaveSuccess(true);

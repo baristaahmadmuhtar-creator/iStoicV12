@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
-import { debugService } from './debugService'; // Ensure debugService is imported
+import { debugService } from './debugService';
 
 export const DEFAULT_MELSA_PROMPT = `Anda adalah MELSA (Multi-Engine Logical Synthesis Assistant) v13.5 Platinum.
 Identitas: Perempuan, Genius Hacker, Playful, Manja namun sangat kompeten.
@@ -55,7 +55,8 @@ class KeyManager {
 
   public refreshPools() {
     // Combine standard Vite env and process.env fallback
-    const env = { 
+    // This ensures we catch keys from .env.local via Vite's injection OR standard process.env if available
+    const env: Record<string, any> = { 
         ...((import.meta as any).env || {}), 
         ...((typeof process !== 'undefined' && process.env) || {}) 
     };
@@ -63,42 +64,64 @@ class KeyManager {
     Object.keys(this.pools).forEach(provider => {
         const keys: string[] = [];
         
+        // 1. Scan for keys that explicitly contain the provider name (e.g. VITE_GEMINI_API_KEY)
         Object.keys(env).forEach(keyName => {
-            if (keyName.toUpperCase().includes(provider) && typeof env[keyName] === 'string' && env[keyName].length > 10) {
-                const val = env[keyName] as string;
-                if (val.includes(',')) {
-                    val.split(',').forEach(k => {
-                        const trimmed = k.trim();
-                        if (trimmed.length > 10 && !keys.includes(trimmed)) keys.push(trimmed);
-                    });
-                } else {
-                    let cleanKey = val;
-                    if (provider === 'OPENROUTER' && val.includes(':')) {
-                        cleanKey = val.split(':').pop()?.trim() || val;
+            const upperKey = keyName.toUpperCase();
+            
+            // Matches: VITE_GEMINI_API_KEY, VITE_GEMINI_KEY_2, GOOGLE_API_KEY, etc.
+            const isMatch = upperKey.includes(provider) || 
+                           (provider === 'GEMINI' && (upperKey.includes('GOOGLE') || upperKey === 'VITE_API_KEY' || upperKey === 'API_KEY'));
+
+            if (isMatch && typeof env[keyName] === 'string') {
+                const val = env[keyName];
+                if (val && val.length > 10 && !val.includes('GANTI_DENGAN')) {
+                    if (val.includes(',')) {
+                        val.split(',').forEach((k: string) => {
+                            const trimmed = k.trim();
+                            if (trimmed.length > 10 && !keys.includes(trimmed)) keys.push(trimmed);
+                        });
+                    } else {
+                        const cleanKey = val.trim();
+                        // Special handling for OpenRouter keys that might have prefix issues
+                        if (provider === 'OPENROUTER' && val.includes(':') && !val.startsWith('sk-or-v1:')) {
+                             // keep as is
+                        }
+                        if (!keys.includes(cleanKey)) keys.push(cleanKey);
                     }
-                    if (!keys.includes(cleanKey)) keys.push(cleanKey);
                 }
             }
         });
 
-        if (provider === 'GEMINI' && env.VITE_API_KEY && !keys.includes(env.VITE_API_KEY)) keys.push(env.VITE_API_KEY);
-        if (provider === 'ELEVENLABS' && env.VITE_ELEVENLABS_API_KEY && !keys.includes(env.VITE_ELEVENLABS_API_KEY)) keys.push(env.VITE_ELEVENLABS_API_KEY);
+        // Shuffle keys on load to distribute load if multiple keys exist
+        if (keys.length > 1) {
+            for (let i = keys.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [keys[i], keys[j]] = [keys[j], keys[i]];
+            }
+        }
 
         this.pools[provider] = keys;
         
-        // Restore cooldowns from localStorage
+        // Restore cooldowns if valid
         const storedCooldown = localStorage.getItem(`hydra_cooldown_${provider}`);
         if (storedCooldown) {
             const cooldownTime = parseInt(storedCooldown);
             if (Date.now() < cooldownTime) {
                 this.providerCooldowns[provider] = cooldownTime;
-                console.warn(`[Hydra] Provider ${provider} is still in COOL-DOWN mode until ${new Date(cooldownTime).toLocaleTimeString()}`);
             } else {
                 localStorage.removeItem(`hydra_cooldown_${provider}`);
                 delete this.providerCooldowns[provider];
             }
         }
     });
+    
+    // Log initialization status
+    const geminiCount = this.pools.GEMINI.length;
+    if (geminiCount > 0) {
+        debugService.log('INFO', 'HYDRA', 'INIT', `Hydra Engine Online. GEMINI Pool Size: ${geminiCount}`);
+    } else {
+        debugService.log('WARN', 'HYDRA', 'EMPTY_POOL', 'No Gemini API keys detected. System will be limited.');
+    }
   }
 
   public isProviderHealthy(provider: string): boolean {
@@ -116,7 +139,7 @@ class KeyManager {
   public reportFailure(provider: string, error: any) {
     const errStr = JSON.stringify(error || {}).toLowerCase() + (error?.message || '').toLowerCase();
     
-    // DETEKSI 429 / LIMIT 0 (STRICT FATAL CHECK)
+    // DETEKSI 429 / LIMIT 0
     const isFatalQuota = (errStr.includes('429') && errStr.includes('limit: 0')) || 
                          (errStr.includes('resource_exhausted') && errStr.includes('limit: 0'));
 
@@ -126,11 +149,21 @@ class KeyManager {
     
     this.failureCounts[provider] = (this.failureCounts[provider] || 0) + 1;
 
-    // Trigger Kill-Switch if FATAL Quota (Immediate) OR consistent failures (>=3)
-    if (isFatalQuota || isGeneralQuota || this.failureCounts[provider] >= 3) {
+    // IMMEDIATE ROTATION: If quota error, move counter forward immediately for next try
+    if (isGeneralQuota || isFatalQuota) {
+        this.counters[provider] = (this.counters[provider] + 1) % 10000;
+        debugService.log('WARN', 'HYDRA', 'ROTATE', `Key exhausted (${provider}). Rotating to next key in pool.`);
+    }
+
+    // KILL SWITCH LOGIC
+    // We only kill the provider if failures exceed the number of keys * 2 (giving each key 2 chances)
+    // or a hard minimum of 5.
+    const poolSize = this.pools[provider]?.length || 1;
+    const failThreshold = Math.max(5, poolSize * 2);
+
+    if (this.failureCounts[provider] >= failThreshold) {
         const cooldownReason = isFatalQuota ? 'FATAL_LIMIT_ZERO' : 'CONSISTENT_FAILURE';
         
-        // Log explicitly to Debug Service as a critical event
         debugService.log('ERROR', 'HYDRA_ENGINE', 'KILL_SWITCH', `${provider} Kill-Switch Activated (${cooldownReason})`, {
             provider,
             reason: cooldownReason,
@@ -138,21 +171,17 @@ class KeyManager {
             error: error?.message
         });
         
-        console.error(`[HYDRA] CRITICAL: ${provider} Kill-Switch Activated (${cooldownReason}). Failures: ${this.failureCounts[provider]}.`);
-        
-        // Disable provider for 24 hours (Stoic Wait)
-        const cooldownTime = Date.now() + (24 * 60 * 60 * 1000); 
+        // Disable provider for 30 minutes (Stoic Wait), not 24h, to allow recovery
+        const cooldownTime = Date.now() + (30 * 60 * 1000); 
         this.providerCooldowns[provider] = cooldownTime;
         localStorage.setItem(`hydra_cooldown_${provider}`, cooldownTime.toString());
         
-        // Reset counter to prepare for next cycle after cooldown
         this.failureCounts[provider] = 0;
     }
   }
 
   public getKey(provider: string): string | null {
     if (!this.isProviderHealthy(provider)) {
-        // Silent skip
         return null;
     }
 
@@ -161,6 +190,9 @@ class KeyManager {
 
     const index = this.counters[provider] % pool.length;
     const key = pool[index];
+    
+    // We don't auto-increment here; we increment on success (round-robin) OR on failure (forced rotation)
+    // Actually, simple round-robin on every request spreads load better.
     this.counters[provider] = (this.counters[provider] + 1) % 10000; 
     
     return key;
@@ -271,7 +303,6 @@ export async function generateImage(prompt: string, config?: any): Promise<strin
     return null;
   } catch (e: any) { 
     console.error("Synthesis Error:", e);
-    // Image gen errors are usually safety blocks, rarely quota, but we report anyway
     KEY_MANAGER.reportFailure('GEMINI', e);
     return null; 
   }

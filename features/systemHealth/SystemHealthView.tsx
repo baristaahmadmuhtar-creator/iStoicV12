@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
     Activity, Terminal, ShieldCheck, Zap, AlertTriangle, 
@@ -160,27 +161,19 @@ export const SystemHealthView: React.FC = () => {
         }
     };
 
-    // Auto-Run Protocols on Mount
+    // Initialize without auto-running heavy protocols that clutter logs
     useEffect(() => {
-        // Run optimization first
-        setTimeout(() => {
-            executeRepair('OPTIMIZE_MEMORY');
-        }, 500);
-
-        // Refresh Keys & Check Cooldowns (Hydra Engine Cycle)
-        setTimeout(() => {
-            executeRepair('REFRESH_KEYS');
-        }, 1200);
+        // Initial data sync only
+        setHealth(debugService.getSystemHealth());
+        setProviders(KEY_MANAGER.getAllProviderStatuses());
+        calcStorage();
+        updateStorageList();
     }, []);
 
     // Subscribe to Data Sources
     useEffect(() => {
         setLogs(debugService.getLogs());
-        setHealth(debugService.getSystemHealth());
-        setProviders(KEY_MANAGER.getAllProviderStatuses());
-        calcStorage();
-        updateStorageList();
-
+        
         const interval = setInterval(() => {
             setHealth(debugService.getSystemHealth());
             setProviders(KEY_MANAGER.getAllProviderStatuses());
@@ -618,7 +611,7 @@ const RepairButton: React.FC<{ icon: React.ReactNode, label: string, onClick: ()
             </div>
 
             <div className={`transition-all duration-300 flex flex-col items-center gap-3 ${status === 'SUCCESS' ? 'opacity-0' : 'opacity-100'}`}>
-                {status === 'LOADING' ? <RefreshCw size={20} className="animate-spin" /> : React.cloneElement(icon as React.ReactElement, { size: 20 })}
+                {status === 'LOADING' ? <RefreshCw size={20} className="animate-spin" /> : React.cloneElement(icon as React.ReactElement<any>, { size: 20 })}
                 <span className="text-[8px] font-black uppercase tracking-widest text-center leading-tight">{label}</span>
             </div>
         </button>

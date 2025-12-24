@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
     const keyPatterns = [
         'GEMINI', 'GROQ', 'DEEPSEEK', 'OPENAI', 
         'XAI', 'MISTRAL', 'OPENROUTER', 'ELEVENLABS', 
-        'API_KEY', 'VAULT_PIN_HASH'
+        'API_KEY', 'VAULT_PIN_HASH', 'GOOGLE'
     ];
 
     const processEnv: Record<string, string> = {};

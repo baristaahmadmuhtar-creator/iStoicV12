@@ -1,5 +1,5 @@
 
-import { Trash2, X, CheckSquare, Square, Archive, Layers, ShieldAlert, FileJson, Bookmark, ArchiveRestore, Download } from 'lucide-react';
+import { Trash2, X, Archive, FileJson, Bookmark, ArchiveRestore, ShieldAlert } from 'lucide-react';
 import React from 'react';
 import { type Note } from '../../types';
 
@@ -18,11 +18,8 @@ interface NoteBatchActionsProps {
 
 export const NoteBatchActions: React.FC<NoteBatchActionsProps> = ({
     selectedCount,
-    totalCount,
     isViewingArchive,
     selectedNotes,
-    onSelectAll,
-    onDeselectAll,
     onDeleteSelected,
     onArchiveSelected,
     onPinSelected,
@@ -46,65 +43,50 @@ export const NoteBatchActions: React.FC<NoteBatchActionsProps> = ({
 
     return (
         <>
-            {/* Responsive Panel Container 
-                Z-INDEX UPDATE: z-[1100] ensures it sits ABOVE the MobileNav (z-900) 
-            */}
+            {/* Floating Island Container */}
             <div className={`
-                fixed z-[1100] bg-[#f8f9fa]/95 dark:bg-[#080809]/95 backdrop-blur-2xl border-black/5 dark:border-white/10 shadow-[0_0_80px_rgba(0,0,0,0.4)] transition-all duration-500 cubic-bezier(0.2, 0, 0, 1)
+                fixed z-[1100] transition-all duration-500 cubic-bezier(0.2, 0, 0, 1) left-1/2 -translate-x-1/2
                 
-                /* MOBILE LAYOUT: Bottom Contextual Bar */
-                inset-x-0 bottom-0 border-t flex flex-row items-center justify-between p-3 pb-safe-offset-2
-                ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-[120%] opacity-0 pointer-events-none'}
-
-                /* DESKTOP LAYOUT: Right Vertical Sidebar */
-                md:inset-y-0 md:right-0 md:left-auto md:bottom-auto md:w-24 md:h-full md:border-l md:border-t-0 md:flex-col md:p-0
-                md:${isVisible ? 'translate-x-0' : 'translate-x-full'}
+                /* MOBILE LAYOUT: Bottom Floating Bar */
+                bottom-6 w-[90%] md:w-auto md:min-w-[400px]
+                
+                ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-[200%] opacity-0 pointer-events-none'}
             `}>
-                
-                {/* Header / Counter */}
-                <div className="px-4 py-2 md:p-6 md:border-b md:border-black/5 md:dark:border-white/10 flex flex-col items-center gap-1 md:bg-accent/5 min-w-[80px]">
-                    <div className="flex items-center gap-2 md:flex-col">
-                        <p className="text-2xl md:text-3xl font-black text-accent leading-none italic">{selectedCount}</p>
-                        <p className="tech-mono text-[8px] md:text-[7px] font-black text-neutral-500 uppercase tracking-[0.2em]">SELECTED</p>
+                <div className="bg-[#0c0c0e]/90 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] rounded-[24px] p-2 flex items-center gap-2 ring-1 ring-white/5">
+                    
+                    {/* Counter Badge */}
+                    <div className="bg-white text-black px-4 py-3 rounded-2xl flex flex-col items-center justify-center min-w-[60px]">
+                        <span className="text-xl font-black italic leading-none">{selectedCount}</span>
+                        <span className="text-[7px] font-black uppercase tracking-wider">NODES</span>
                     </div>
-                </div>
 
-                {/* Actions Grid */}
-                <div className="flex-1 flex flex-row md:flex-col items-center justify-center gap-3 md:gap-6 px-2 overflow-x-auto md:overflow-y-auto no-scrollbar md:py-6 w-full">
-                    <ActionButton icon={<Bookmark size={20} />} label="PIN" onClick={onPinSelected} />
-                    <ActionButton icon={isViewingArchive ? <ArchiveRestore size={20} /> : <Archive size={20} />} label={isViewingArchive ? 'RESTORE' : 'ARCHIVE'} onClick={onArchiveSelected} />
-                    <ActionButton icon={<FileJson size={20} />} label="EXPORT" onClick={handleExport} />
-                    
                     {/* Divider */}
-                    <div className="w-[1px] h-8 bg-black/10 dark:bg-white/10 mx-2 md:w-8 md:h-[1px] md:my-2 md:mx-0"></div>
-                    
-                    <ActionButton icon={<ShieldAlert size={20} />} label="PURGE" onClick={onDeleteSelected} variant="danger" />
-                </div>
+                    <div className="w-[1px] h-8 bg-white/10 mx-1"></div>
 
-                {/* Footer / Close */}
-                <div className="p-0 md:p-4 md:border-t md:border-black/5 md:dark:border-white/5 md:bg-black/5 md:dark:bg-white/5 md:pb-8">
+                    {/* Actions Row */}
+                    <div className="flex flex-1 justify-center gap-1">
+                        <ActionButton icon={<Bookmark size={18} />} label="PIN" onClick={onPinSelected} />
+                        <ActionButton icon={isViewingArchive ? <ArchiveRestore size={18} /> : <Archive size={18} />} label={isViewingArchive ? 'RESTORE' : 'ARCHIVE'} onClick={onArchiveSelected} />
+                        <ActionButton icon={<FileJson size={18} />} label="EXPORT" onClick={handleExport} />
+                        <div className="w-[1px] h-8 bg-white/10 mx-1"></div>
+                        <ActionButton icon={<ShieldAlert size={18} />} label="PURGE" onClick={onDeleteSelected} variant="danger" />
+                    </div>
+
+                    {/* Close Button */}
                     <button 
                         onClick={onCancel} 
-                        className="w-10 h-10 md:w-full md:h-auto md:py-4 rounded-xl bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-black dark:hover:text-white transition-all flex flex-col items-center justify-center gap-2 group"
-                        title="Cancel Selection"
+                        className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-all ml-1"
                     >
-                        <X size={22} className="group-hover:rotate-90 transition-transform duration-300" />
-                        <span className="text-[7px] font-black uppercase tracking-widest hidden md:block opacity-60 group-hover:opacity-100">CANCEL</span>
+                        <X size={18} />
                     </button>
                 </div>
             </div>
             
-            {/* Dim Overlay for Desktop (Optional focus mode) */}
+            {/* Dim Overlay */}
             <div 
                 onClick={onCancel}
-                className={`fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[1050] transition-opacity duration-500 ${isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                className={`fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[1050] transition-opacity duration-500 ${isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
             ></div>
-
-            <style>{`
-                .pb-safe-offset-2 {
-                    padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
-                }
-            `}</style>
         </>
     );
 };
@@ -112,14 +94,14 @@ export const NoteBatchActions: React.FC<NoteBatchActionsProps> = ({
 const ActionButton: React.FC<{ icon: React.ReactNode, label: string, onClick: () => void, variant?: 'normal' | 'danger' }> = ({ icon, label, onClick, variant = 'normal' }) => (
     <button 
         onClick={onClick}
-        className={`relative w-12 h-12 md:w-14 md:h-14 md:rounded-2xl rounded-xl flex flex-col items-center justify-center gap-1 transition-all duration-300 group overflow-hidden ${
+        className={`relative w-12 h-12 md:w-14 md:h-14 rounded-xl flex flex-col items-center justify-center gap-1 transition-all duration-300 group overflow-hidden ${
             variant === 'danger' 
-            ? 'text-red-500 hover:bg-red-500 hover:text-white hover:shadow-[0_0_20px_rgba(239,68,68,0.4)]' 
-            : 'text-neutral-500 dark:text-neutral-400 hover:text-accent hover:bg-accent/10 dark:hover:bg-accent/5 hover:scale-105'
+            ? 'text-red-500 hover:bg-red-500 hover:text-white' 
+            : 'text-neutral-400 hover:text-black hover:bg-white'
         }`}
         title={label}
     >
-        <div className="relative z-10">{icon}</div>
-        <span className={`text-[6px] md:text-[5px] font-black uppercase tracking-[0.2em] hidden md:block opacity-0 group-hover:opacity-100 transition-opacity translate-y-2 group-hover:translate-y-0`}>{label}</span>
+        <div className="relative z-10 transition-transform duration-300 group-hover:scale-110">{icon}</div>
+        <span className={`text-[6px] font-black uppercase tracking-[0.1em] hidden md:block opacity-0 group-hover:opacity-100 transition-all translate-y-1 group-hover:translate-y-0`}>{label}</span>
     </button>
 );

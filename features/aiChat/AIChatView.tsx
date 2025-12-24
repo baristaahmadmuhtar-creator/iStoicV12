@@ -5,19 +5,19 @@ import useLocalStorage from '../../hooks/useLocalStorage';
 import { 
   Radio, ChevronDown, History, Sparkles, Zap, 
   Flame, Brain, Activity, Fingerprint, GripHorizontal,
-  Volume2, VolumeX, AlertTriangle
+  Volume2, VolumeX, AlertTriangle, ArrowDown
 } from 'lucide-react';
-import Markdown from 'react-markdown';
 
 // Hooks & Logic
 import { useNeuralLinkSession } from './hooks/useNeuralLinkSession';
 import { ChatHistory } from './components/ChatHistory';
 import { ModelPicker } from './components/ModelPicker';
 import { NeuralLinkOverlay } from './components/NeuralLinkOverlay';
-import { ChatInput } from './components/ChatInput'; // Import ChatInput
+import { ChatInput } from './components/ChatInput'; 
+import { ChatWindow } from './components/ChatWindow'; 
 import { VaultPinModal } from '../../components/VaultPinModal';
 import { useNavigationIntelligence } from '../../hooks/useNavigationIntelligence';
-import { useAIProvider } from '../../hooks/useAIProvider'; // New Hook
+import { useAIProvider } from '../../hooks/useAIProvider'; 
 
 interface AIChatViewProps {
     chatLogic: any;
@@ -29,6 +29,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
     const [showPinModal, setShowPinModal] = useState(false);
     const [isTransitioning, setIsTransitioning] = useState(false); 
+    const [showScrollBtn, setShowScrollBtn] = useState(false);
     
     // Mobile Intelligence
     const { isInputFocused, shouldShowNav } = useNavigationIntelligence();
@@ -43,9 +44,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         personaMode,
         handleNewChat,
         sendMessage,
+        togglePinThread,
         isVaultSynced,
         setIsVaultSynced,
-        isVaultConfigEnabled, // Destructure new prop
+        isVaultConfigEnabled, 
         isAutoSpeak,
         setIsAutoSpeak
     } = chatLogic;
@@ -82,8 +84,15 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         const handleScroll = () => {
             const { scrollTop, scrollHeight, clientHeight } = container;
             const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-            // If user is within 150px of bottom, enable auto-scroll
-            isAutoScrolling.current = distanceToBottom < 150;
+            
+            // Logic: if user scrolls UP (distance > 200), disable auto-scroll and show button
+            if (distanceToBottom > 200) {
+                isAutoScrolling.current = false;
+                setShowScrollBtn(true);
+            } else {
+                isAutoScrolling.current = true;
+                setShowScrollBtn(false);
+            }
         };
 
         container.addEventListener('scroll', handleScroll);
@@ -111,9 +120,16 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
             requestAnimationFrame(() => {
                 messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
                 isAutoScrolling.current = true;
+                setShowScrollBtn(false);
             });
         }
     }, [activeThreadId]);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        isAutoScrolling.current = true;
+        // Button will hide via scroll listener
+    };
 
     const changePersona = async (target: 'melsa' | 'stoic') => {
         if (personaMode === target || isTransitioning) return;
@@ -131,119 +147,88 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
             />
 
             {/* MAIN CONTENT CONTAINER */}
-            <div className="flex-1 flex flex-col relative z-10 w-full max-w-[1200px] mx-auto px-4 md:px-8 lg:px-12 pt-6 md:pt-10 pb-[180px]">
+            <div className="flex-1 flex flex-col relative z-10 w-full max-w-[1200px] mx-auto px-4 md:px-8 lg:px-12 pb-[180px]">
                 
-                {/* HEADER */}
-                <header className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 border-b border-black/5 dark:border-white/5 pb-8 mb-8 animate-slide-up shrink-0">
-                    <div className="space-y-5 w-full xl:w-auto">
+                {/* 
+                    STICKY HEADER 
+                    - Removed top margin/padding from container and moved to header 
+                    - Added sticky, z-index, and backdrop-blur 
+                    - Used negative margin on X-axis to span full width while keeping content aligned
+                */}
+                <header className="sticky top-0 z-40 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 border-b border-black/5 dark:border-white/5 py-4 mb-6 bg-zinc-50/95 dark:bg-black/95 backdrop-blur-xl -mx-4 md:-mx-8 lg:-mx-12 px-4 md:px-8 lg:px-12 shadow-sm transition-all duration-300">
+                    <div className="space-y-1 w-full xl:w-auto">
                         <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-accent animate-ping"></div>
+                            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-ping"></div>
                             <span className="text-neutral-500 tech-mono text-[9px] font-black uppercase tracking-[0.4em]">NEURAL_UPLINK_v13.5</span>
                         </div>
-                        <div className="flex flex-col md:flex-row md:items-baseline gap-4 md:gap-8">
-                            <h2 className="text-5xl md:text-[5.5rem] heading-heavy text-black dark:text-white leading-[0.8] italic uppercase tracking-tighter">
+                        <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
+                            <h2 className="text-3xl md:text-4xl heading-heavy text-black dark:text-white leading-[0.9] italic uppercase tracking-tighter hidden md:block">
                                 {personaMode === 'melsa' ? 'MELSA' : 'STOIC'} <span className="text-accent">LINK</span>
                             </h2>
                             
-                            {/* PERSONA TOGGLE */}
-                            <div className="bg-zinc-100 dark:bg-white/5 backdrop-blur-xl p-1 rounded-[22px] flex items-center border border-black/5 dark:border-white/10 shadow-inner w-full md:w-auto">
+                            {/* PERSONA TOGGLE - Compact on Scroll */}
+                            <div className="bg-zinc-100 dark:bg-white/5 backdrop-blur-xl p-1 rounded-[14px] flex items-center border border-black/5 dark:border-white/10 shadow-inner w-full md:w-auto">
                                 <button 
                                     onClick={() => changePersona('stoic')} 
-                                    className={`flex-1 md:flex-none px-6 py-3.5 rounded-[18px] text-[10px] font-black tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${personaMode === 'stoic' ? 'bg-white dark:bg-white/10 text-cyan-500 shadow-md scale-100' : 'text-neutral-500 opacity-60 hover:opacity-100'}`}
+                                    className={`flex-1 md:flex-none px-4 py-2 rounded-[10px] text-[9px] font-black tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${personaMode === 'stoic' ? 'bg-white dark:bg-white/10 text-cyan-500 shadow-sm scale-100' : 'text-neutral-500 opacity-60 hover:opacity-100'}`}
                                 >
-                                    <Brain size={14} /> STOIC
+                                    <Brain size={12} /> STOIC
                                 </button>
                                 <button 
                                     onClick={() => changePersona('melsa')} 
-                                    className={`flex-1 md:flex-none px-6 py-3.5 rounded-[18px] text-[10px] font-black tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${personaMode === 'melsa' ? 'bg-white dark:bg-white/10 text-orange-500 shadow-md scale-100' : 'text-neutral-500 opacity-60 hover:opacity-100'}`}
+                                    className={`flex-1 md:flex-none px-4 py-2 rounded-[10px] text-[9px] font-black tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${personaMode === 'melsa' ? 'bg-white dark:bg-white/10 text-orange-500 shadow-sm scale-100' : 'text-neutral-500 opacity-60 hover:opacity-100'}`}
                                 >
-                                    <Flame size={14} /> MELSA
+                                    <Flame size={12} /> MELSA
                                 </button>
                             </div>
                         </div>
                     </div>
 
                     {/* ACTIONS TOOLBAR */}
-                    <div className="flex flex-row items-center gap-3 w-full xl:w-auto overflow-x-auto no-scrollbar pb-1">
+                    <div className="flex flex-row items-center gap-2 w-full xl:w-auto overflow-x-auto no-scrollbar pb-1 xl:pb-0">
                         <button 
                             onClick={() => setShowModelPicker(true)}
-                            className={`min-h-[48px] px-5 bg-white dark:bg-white/5 border rounded-2xl flex items-center gap-3 tech-mono text-[9px] font-black uppercase tracking-widest transition-all hover:border-accent/40 shrink-0 shadow-sm ${
+                            className={`min-h-[40px] px-4 bg-white dark:bg-white/5 border rounded-xl flex items-center gap-2 tech-mono text-[9px] font-black uppercase tracking-widest transition-all hover:border-accent/40 shrink-0 shadow-sm ${
                                 providerStatus !== 'HEALTHY' ? 'border-amber-500/50 text-amber-500 bg-amber-500/5' : 'border-black/5 dark:border-white/10 text-neutral-500'
                             }`}
                         >
-                            {providerStatus === 'HEALTHY' ? <Sparkles size={16} className="text-accent" /> : <AlertTriangle size={16} className="animate-pulse" />}
-                            <span>{activeModel.name.toUpperCase()}</span>
-                            <ChevronDown size={12} />
+                            {providerStatus === 'HEALTHY' ? <Sparkles size={14} className="text-accent" /> : <AlertTriangle size={14} className="animate-pulse" />}
+                            <span className="truncate max-w-[100px] md:max-w-none">{activeModel.name.toUpperCase()}</span>
+                            <ChevronDown size={10} />
                         </button>
 
                         <button 
                             onClick={() => setIsAutoSpeak(!isAutoSpeak)} 
-                            className={`min-h-[48px] min-w-[48px] rounded-2xl transition-all border flex items-center justify-center ${isAutoSpeak ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/10 text-neutral-500'}`}
+                            className={`min-h-[40px] min-w-[40px] rounded-xl transition-all border flex items-center justify-center ${isAutoSpeak ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/10 text-neutral-500'}`}
                             title="Auto Speak Reply"
                         >
-                            {isAutoSpeak ? <Volume2 size={20}/> : <VolumeX size={20}/>}
+                            {isAutoSpeak ? <Volume2 size={16}/> : <VolumeX size={16}/>}
                         </button>
                         
                         <button 
                             onClick={toggleLiveMode} 
-                            className={`min-h-[48px] px-6 rounded-2xl transition-all border flex items-center gap-2 font-black uppercase text-[9px] tracking-[0.2em] shrink-0 ${isLiveMode ? 'bg-red-500 border-red-400 text-white animate-pulse' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/10 text-neutral-500'}`}
+                            className={`min-h-[40px] px-4 rounded-xl transition-all border flex items-center gap-2 font-black uppercase text-[9px] tracking-[0.2em] shrink-0 ${isLiveMode ? 'bg-red-500 border-red-400 text-white animate-pulse' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/10 text-neutral-500'}`}
                         >
-                            <Radio size={16}/> LIVE_LINK
+                            <Radio size={16}/> <span className="hidden sm:inline">LIVE_LINK</span>
                         </button>
 
                         <button 
                             onClick={() => setShowHistoryDrawer(true)} 
-                            className="min-h-[48px] min-w-[48px] bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-2xl flex items-center justify-center text-neutral-500 transition-all shadow-sm"
+                            className="min-h-[40px] min-w-[40px] bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl flex items-center justify-center text-neutral-500 transition-all shadow-sm"
                         >
-                            <History size={20}/>
+                            <History size={18}/>
                         </button>
                     </div>
                 </header>
 
-                {/* MESSAGES AREA */}
-                <div className="flex-1 space-y-8 md:space-y-10">
-                    {activeThread?.messages.map((msg: any) => {
-                         const isUser = msg.role === 'user';
-                         if (msg.role === 'model' && !msg.text && !isLoading) return null;
-                         return (
-                            <div key={msg.id} className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'} animate-slide-up group`}>
-                                <div className={`max-w-[95%] md:max-w-[85%] lg:max-w-[80%] flex gap-3 md:gap-5 ${isUser ? 'flex-row-reverse' : ''}`}>
-                                    <div className={`shrink-0 w-8 h-8 md:w-12 md:h-12 rounded-2xl flex items-center justify-center border transition-all duration-500 ${
-                                        isUser 
-                                        ? 'bg-black dark:bg-white text-white dark:text-black border-black/10' 
-                                        : (personaMode === 'melsa' ? 'bg-orange-500 text-white border-orange-400 shadow-lg shadow-orange-500/20' : 'bg-cyan-600 text-white border-cyan-400 shadow-lg shadow-cyan-500/20')
-                                    }`}>
-                                        {isUser ? <Fingerprint size={18} /> : (personaMode === 'melsa' ? <Flame size={18} /> : <Brain size={18} />)}
-                                    </div>
-                                    <div className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
-                                        <div className={`px-5 py-3.5 md:px-8 md:py-6 rounded-[24px] md:rounded-[32px] text-[15px] leading-relaxed relative shadow-sm ${
-                                            isUser 
-                                            ? 'bg-white dark:bg-white/5 text-black dark:text-white rounded-tr-none border border-black/5 dark:border-white/10' 
-                                            : 'bg-zinc-50 dark:bg-[#0d0d0e] text-neutral-700 dark:text-neutral-200 rounded-tl-none border border-black/5 dark:border-white/5'
-                                        }`}>
-                                            <div className="prose dark:prose-invert prose-sm max-w-none break-words font-medium">
-                                                <Markdown>{msg.text}</Markdown>
-                                            </div>
-                                        </div>
-                                        {/* Status / Meta */}
-                                        <span className="text-[9px] tech-mono font-bold text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest px-2">
-                                            {isUser ? 'ENCRYPTED_USER_INPUT' : 'NEURAL_RESPONSE_GENERATED'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                    {isLoading && (
-                        <div className="flex justify-start animate-pulse pl-12 md:pl-20">
-                            <div className="flex gap-2 p-4 bg-zinc-50 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5">
-                                <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce"></span>
-                                <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                            </div>
-                        </div>
-                    )}
-                    <div ref={messagesEndRef} className="h-4" />
+                {/* MESSAGES AREA - USING CHAT WINDOW COMPONENT */}
+                <div className="flex-1">
+                    <ChatWindow 
+                        messages={activeThread?.messages || []} 
+                        personaMode={personaMode} 
+                        isLoading={isLoading} 
+                        messagesEndRef={messagesEndRef}
+                    />
                 </div>
             </div>
 
@@ -254,6 +239,17 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                 transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]
                 ${isMobileNavVisible ? 'pb-[88px] md:pb-0' : 'pb-0'}
             `}>
+                
+                {/* Scroll Down Button (Floating) */}
+                <div className={`absolute -top-16 left-1/2 -translate-x-1/2 transition-all duration-300 ${showScrollBtn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
+                    <button 
+                        onClick={scrollToBottom}
+                        className="w-10 h-10 rounded-full bg-white dark:bg-zinc-800 border border-black/10 dark:border-white/10 shadow-xl flex items-center justify-center text-neutral-500 hover:text-accent hover:scale-110 transition-all"
+                    >
+                        <ArrowDown size={20} />
+                    </button>
+                </div>
+
                 {/* Gradient Fade for seamless scroll */}
                 <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-zinc-50 dark:from-black via-zinc-50/80 dark:via-black/80 to-transparent pointer-events-none"></div>
 
@@ -263,14 +259,17 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                         input={input}
                         setInput={setInput}
                         isLoading={isLoading}
-                        onSubmit={() => { sendMessage(); isAutoScrolling.current = true; }} // Ensure auto-scroll on manual submit
+                        onSubmit={(e, attachment) => { 
+                            sendMessage(e, attachment); 
+                            isAutoScrolling.current = true; 
+                        }} 
                         onNewChat={() => handleNewChat(personaMode)}
                         onFocusChange={() => {}} // Global nav hook handles focus detection
                         aiName={activeModel.name}
                         isVaultSynced={isVaultSynced}
                         onToggleVaultSync={handleVaultToggle}
                         personaMode={personaMode}
-                        isVaultEnabled={isVaultConfigEnabled} // Pass the config check
+                        isVaultEnabled={isVaultConfigEnabled} 
                     />
                 </div>
             </div>
@@ -286,7 +285,17 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
             />
 
             <NeuralLinkOverlay isOpen={isLiveMode} status={liveStatus} personaMode={personaMode} transcript={liveTranscript} onTerminate={toggleLiveMode} analyser={analyser} />
-            <ChatHistory isOpen={showHistoryDrawer} onClose={() => setShowHistoryDrawer(false)} threads={threads} activeThreadId={activeThreadId} onSelectThread={setActiveThreadId} onDeleteThread={(id) => { const upd = threads.filter((t: any) => t.id !== id); setThreads(upd); if (activeThreadId === id) setActiveThreadId(upd[0]?.id || null); }} onRenameThread={(id, title) => setThreads(threads.map((t:any) => t.id === id ? {...t, title, updated: new Date().toISOString()} : t))} onNewChat={() => handleNewChat(personaMode)} />
+            <ChatHistory 
+                isOpen={showHistoryDrawer} 
+                onClose={() => setShowHistoryDrawer(false)} 
+                threads={threads} 
+                activeThreadId={activeThreadId} 
+                onSelectThread={setActiveThreadId} 
+                onDeleteThread={(id) => { const upd = threads.filter((t: any) => t.id !== id); setThreads(upd); if (activeThreadId === id) setActiveThreadId(upd[0]?.id || null); }} 
+                onRenameThread={(id, title) => setThreads(threads.map((t:any) => t.id === id ? {...t, title, updated: new Date().toISOString()} : t))} 
+                onTogglePin={togglePinThread}
+                onNewChat={() => handleNewChat(personaMode)} 
+            />
         </div>
     );
 };

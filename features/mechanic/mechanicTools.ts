@@ -101,14 +101,9 @@ export const executeMechanicTool = async (call: any): Promise<string> => {
                  actions.push("GC_SKIP");
              }
 
-             // 2. Flush internal buffers
-             const logsFreed = debugService.getLogs().length;
-             if (logsFreed > 5) { // Only clear if significant clutter
-                 debugService.clear();
-                 actions.push(`BUFFER_FLUSH [${logsFreed}]`);
-             } else {
-                 actions.push("BUFFER_CLEAN");
-             }
+             // 2. Report buffer status instead of auto-clearing
+             const currentLogs = debugService.getLogs().length;
+             actions.push(`BUFFER_STATUS [${currentLogs}/200]`);
 
              // 3. Clear some internal React caches if possible (simulated by suggesting reload)
              actions.push("HEAP_COMPACTED");

@@ -26,6 +26,7 @@ export interface ChatThread {
   model_id: string; // Changed to match PB field
   messages: ChatMessage[];
   updated: string; // PB uses 'updated'
+  isPinned?: boolean;
   user?: string;
 }
 

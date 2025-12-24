@@ -3,7 +3,7 @@ import {
     Activity, Terminal, Cpu, Zap, Wifi, HardDrive, 
     RefreshCw, ShieldCheck, Trash2, 
     ChevronRight, Send, Command, Network, Server,
-    AlertTriangle, CheckCircle2, Play, FileText
+    AlertTriangle, CheckCircle2, Play, FileText, BrainCircuit
 } from 'lucide-react';
 import { debugService } from '../../services/debugService';
 import { KEY_MANAGER, type ProviderStatus } from '../../services/geminiService';
@@ -63,9 +63,9 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
     const parts = text.split('###');
     const getSection = (titlePart: string) => parts.find(s => s.toUpperCase().includes(titlePart)) || '';
 
-    // Extract Summary Text (Everything after "SYSTEM INTEGRITY: XX%" until next section)
-    const summarySection = getSection('SYSTEM INTEGRITY');
-    const summaryText = summarySection ? summarySection.replace(/SYSTEM INTEGRITY:\s*\d+%(\s*\**\s*)?/i, '').trim() : '';
+    // Extract Cognitive Insight (The natural language mission brief)
+    const insightSection = getSection('COGNITIVE INSIGHT');
+    const insightText = insightSection ? insightSection.replace(/COGNITIVE INSIGHT(\s*\**\s*)?/i, '').trim() : '';
 
     const anomaliesContent = getSection('ANOMALIES DETECTED');
     const actionsContent = getSection('RECOMMENDED ACTIONS');
@@ -74,53 +74,65 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
     const actionList = actionsContent.split('\n').filter(l => l.trim().match(/^\d+\./)).map(l => l.replace(/^\d+\./, '').trim());
 
     return (
-        <div className="bg-zinc-900/50 rounded-2xl border border-white/10 p-5 my-2 space-y-5 font-sans animate-fade-in w-full">
+        <div className="bg-zinc-900/50 rounded-[32px] border border-white/10 p-6 md:p-8 my-4 space-y-6 font-sans animate-fade-in w-full shadow-2xl relative overflow-hidden">
+            {/* Background Texture */}
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none"></div>
+
             {/* Header: Score */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-6 relative z-10">
                 <div>
-                    <h4 className="text-xs font-black uppercase tracking-widest text-white flex items-center gap-2">
-                        <Activity size={14} className="text-accent"/> Diagnostic Report
+                    <h4 className="text-xs font-black uppercase tracking-[0.3em] text-white flex items-center gap-2">
+                        <Activity size={14} className="text-accent animate-pulse"/> DIAGNOSTIC_MATRIX_ID_{Math.floor(Math.random()*10000)}
                     </h4>
-                    <p className="text-[9px] text-neutral-400 mt-1 tech-mono">AUTO_GENERATED_ANALYSIS</p>
+                    <p className="text-[9px] text-neutral-500 mt-1 tech-mono uppercase tracking-widest">Neural Layer Analysis v13.5</p>
                 </div>
-                <div className={`text-4xl font-black italic tracking-tighter ${score >= 90 ? 'text-emerald-500' : score >= 70 ? 'text-amber-500' : 'text-red-500'}`}>
-                    {score}%
+                <div className="text-right">
+                    <p className="text-[8px] font-bold text-neutral-500 uppercase tracking-widest mb-1">INTEGRITY_INDEX</p>
+                    <div className={`text-5xl font-black italic tracking-tighter ${score >= 90 ? 'text-emerald-400' : score >= 70 ? 'text-amber-400' : 'text-red-500'}`}>
+                        {score}%
+                    </div>
                 </div>
             </div>
 
-            {/* Natural Language Summary */}
-            {summaryText && (
-                <div className="bg-black/20 rounded-xl p-4 border border-white/5">
-                    <div className="flex items-center gap-2 mb-2 text-neutral-500 text-[9px] font-black uppercase tracking-widest">
-                        <FileText size={10} /> SITUATION_REPORT
+            {/* Natural Language Summary Card */}
+            {insightText && (
+                <div className="bg-white/[0.03] rounded-2xl p-5 border border-white/5 relative group transition-all hover:bg-white/[0.05]">
+                    <div className="flex items-center gap-3 mb-4 text-accent/70 text-[9px] font-black uppercase tracking-[0.2em]">
+                        <BrainCircuit size={14} className="group-hover:rotate-12 transition-transform" /> COGNITIVE_INSIGHT_SUMMARY
                     </div>
-                    <div className="text-[10px] text-neutral-300 leading-relaxed italic prose-sm dark:prose-invert max-w-none">
-                        <Markdown>{summaryText}</Markdown>
+                    <div className="text-[11px] md:text-xs text-neutral-300 leading-relaxed italic prose-sm dark:prose-invert max-w-none border-l-2 border-accent/20 pl-4 py-1">
+                        <Markdown>{insightText}</Markdown>
                     </div>
                 </div>
             )}
 
-            {/* Anomalies */}
-            {anomalyList.length > 0 && !anomalyList[0].toLowerCase().includes('none') && (
-                <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20">
-                    <h5 className="text-[9px] font-bold text-red-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <AlertTriangle size={12} /> Anomalies Detected
+            {/* Grid for Anomalies and Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Anomalies */}
+                <div className={`${anomalyList.length > 0 && !anomalyList[0].toLowerCase().includes('none') ? 'bg-red-500/[0.03] border-red-500/20' : 'bg-emerald-500/[0.03] border-emerald-500/20'} rounded-2xl p-5 border flex flex-col`}>
+                    <h5 className={`text-[9px] font-black uppercase tracking-wider mb-4 flex items-center gap-2 ${anomalyList.length > 0 && !anomalyList[0].toLowerCase().includes('none') ? 'text-red-400' : 'text-emerald-400'}`}>
+                        <AlertTriangle size={12} /> {anomalyList.length > 0 && !anomalyList[0].toLowerCase().includes('none') ? 'ANOMALIES_DETECTED' : 'SYSTEM_STABLE'}
                     </h5>
-                    <ul className="space-y-2">
-                        {anomalyList.map((a, i) => (
-                            <li key={i} className="text-[10px] text-red-200 pl-4 relative before:content-['•'] before:absolute before:left-0 before:text-red-500 leading-relaxed">
-                                {a}
-                            </li>
-                        ))}
-                    </ul>
+                    {anomalyList.length > 0 && !anomalyList[0].toLowerCase().includes('none') ? (
+                        <ul className="space-y-3 flex-1">
+                            {anomalyList.map((a, i) => (
+                                <li key={i} className="text-[10px] text-neutral-400 pl-4 relative before:content-['>'] before:absolute before:left-0 before:text-red-500/50 leading-relaxed font-mono">
+                                    {a}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-6 gap-2 text-emerald-500/40">
+                             <CheckCircle2 size={32} strokeWidth={1} />
+                             <span className="text-[8px] font-bold uppercase tracking-widest">All Core Links Nominal</span>
+                        </div>
+                    )}
                 </div>
-            )}
 
-            {/* Actions */}
-            {actionList.length > 0 && (
-                <div>
-                    <h5 className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <Zap size={12} className="text-accent" /> Recommended Actions
+                {/* Actions */}
+                <div className="bg-white/[0.03] rounded-2xl p-5 border border-white/5">
+                    <h5 className="text-[9px] font-black text-neutral-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <Zap size={12} className="text-accent" /> PROTOCOL_REVIEWS
                     </h5>
                     <div className="space-y-2">
                         {actionList.map((action, i) => {
@@ -128,14 +140,15 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
                             const toolCmd = toolMatch ? toolMatch[1] : null;
                             
                             return (
-                                <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/10 transition-colors gap-3">
-                                    <span className="text-[10px] text-neutral-300 leading-tight">{action}</span>
+                                <div key={i} className="flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5 hover:border-accent/20 transition-colors gap-3 group/item">
+                                    <span className="text-[10px] text-neutral-400 leading-tight group-hover/item:text-neutral-200 transition-colors">{action}</span>
                                     {toolCmd && (
                                         <button 
-                                            onClick={() => onExecute(toolCmd === 'GET_DIAGNOSTICS' ? "Run Diagnostics" : toolCmd === 'OPTIMIZE_MEMORY' ? "Optimize memory" : `Run ${toolCmd}`)}
-                                            className="shrink-0 px-3 py-1.5 bg-accent/10 hover:bg-accent text-accent hover:text-black border border-accent/20 hover:border-accent text-[8px] font-black uppercase rounded-lg transition-all flex items-center gap-1"
+                                            onClick={() => onExecute(toolCmd === 'GET_DIAGNOSTICS' ? "Run System Scan" : toolCmd === 'OPTIMIZE_MEMORY' ? "Execute memory optimization" : `Trigger ${toolCmd} protocol`)}
+                                            className="shrink-0 w-8 h-8 bg-accent/10 hover:bg-accent text-accent hover:text-black rounded-lg transition-all flex items-center justify-center"
+                                            title="Run This Tool"
                                         >
-                                            <Play size={8} /> EXECUTE
+                                            <Play size={10} />
                                         </button>
                                     )}
                                 </div>
@@ -143,15 +156,16 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
                         })}
                     </div>
                 </div>
-            )}
+            </div>
             
-            {/* Safe Status Fallback */}
-            {anomalyList.length > 0 && anomalyList[0].toLowerCase().includes('none') && (
-                 <div className="flex items-center gap-2 text-emerald-500 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
-                    <CheckCircle2 size={14} />
-                    <span className="text-[10px] font-bold uppercase tracking-wide">All Systems Operational</span>
-                 </div>
-            )}
+            <div className="pt-4 border-t border-white/5 flex justify-between items-center opacity-30">
+                <span className="text-[7px] font-mono text-neutral-500 uppercase tracking-[0.4em]">Verified_by_Melsa_Kernel</span>
+                <div className="flex gap-1">
+                    <div className="w-1 h-1 bg-white rounded-full"></div>
+                    <div className="w-1 h-1 bg-white rounded-full"></div>
+                    <div className="w-1 h-1 bg-white rounded-full"></div>
+                </div>
+            </div>
         </div>
     );
 };
@@ -222,7 +236,6 @@ export const MelsaMechanicView: React.FC = () => {
                     responseText += chunk.text;
                     setMessages(prev => {
                         const newMsgs = [...prev];
-                        // Update the LAST mechanic message
                         newMsgs[newMsgs.length - 1] = { role: 'mechanic', text: responseText };
                         return newMsgs;
                     });
@@ -237,40 +250,45 @@ export const MelsaMechanicView: React.FC = () => {
 
                     const result = await executeMechanicTool(chunk.functionCall);
                     
-                    // Dynamic prompt engineering based on tool output to enhance natural language response
-                    let synthesisPrompt = `Tool Output: ${result}.\n\nAnalyze this result and provide a status update.`;
+                    // Specialized Summarization Engine Logic
+                    // We use Flash to parse the raw tool JSON into the structured UI report.
+                    let synthesisPrompt = `Tool Result: ${result}.\n\nProvide a human-readable status update.`;
 
                     if (chunk.functionCall.name === 'system_mechanic_tool') {
                         const action = (chunk.functionCall.args as any)?.action;
                         if (action === 'GET_DIAGNOSTICS') {
                             synthesisPrompt = `
-[TELEMETRY_DATA_RECEIVED]
+[DATA_FEED_RAW]
 ${result}
 
 [DIRECTIVE]
-You are the Melsa Mechanic AI. Analyze the raw JSON telemetry above.
-1. Derive a 'System Integrity' score (0-100) based on latency (<1000ms is good), memory (<500MB is good), and error counts.
-2. Generate a 'Mission Brief' summary in natural language (Cyberpunk/Tech tone). Be expressive but concise.
-3. List active anomalies.
-4. Recommend maintenance protocols.
+You are acting as the specialized Melsa Summarization Engine.
+Translate the technical JSON data above into a high-level "Mission Brief".
 
-[REQUIRED_OUTPUT_SCHEMA]
-You MUST use this Markdown structure exactly for the UI to parse it:
+[INTEGRITY_LOGIC]
+- Score: Start at 100%. Deduct 10% per COOLDOWN/OFFLINE provider, 5% if Latency > 1000ms.
+- Memory: Low usage (<100MB) is EXCELLENT (healthy baseline), not ineffective. High usage (>500MB) is a warning.
 
+[REQUIRED_MARKDOWN_STRUCTURE]
 ### SYSTEM INTEGRITY: [Calculated_Score]%
-[Your natural language Mission Brief here.]
+
+### COGNITIVE INSIGHT
+[Write a professional but flavor-rich mission-brief style summary here. 
+Explain the system's current readiness in natural language. 
+Address the latency and memory usage from a mechanic's perspective.
+Avoid sounding robotic. Talk to the Operator.]
 
 ### ⚠️ ANOMALIES DETECTED
-- [Specific Anomaly or "None"]
+- [List specific issues or "None. All subsystems operating within normal parameters."]
 
 ### ⚡ RECOMMENDED ACTIONS
-1. [Action Step 1]
-2. [Action Step 2]
+1. [Clear maintenance step]
+2. [Tool execution suggestion if relevant, e.g., 'Run 'REFRESH_KEYS' protocol']
 `;
                         }
                     }
                     
-                    // Feed result back with refined instruction
+                    // Execute the synthesis via Kernel (effectively integrating the "Summarizer model")
                     const followUp = await MECHANIC_KERNEL.execute(
                         synthesisPrompt, 
                         'gemini-3-flash-preview',
@@ -311,17 +329,17 @@ You MUST use this Markdown structure exactly for the UI to parse it:
                     </h1>
                     <div className="flex items-center gap-2 mt-2">
                         <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_#10b981]"></div>
-                        <p className="text-[9px] tech-mono font-bold text-neutral-500 uppercase tracking-[0.3em]">SYSTEM_DIAGNOSTICS_MODULE</p>
+                        <p className="text-[9px] tech-mono font-bold text-neutral-500 uppercase tracking-[0.3em]">NEURAL_DIAGNOSTICS_MATRIX</p>
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <div className="px-4 py-2 bg-white dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 flex items-center gap-3 shadow-sm">
+                    <div className="px-4 py-2 bg-white dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 flex items-center gap-3 shadow-sm transition-all hover:border-accent/30">
                         <Wifi size={14} className={health.avgLatency > 1000 ? "text-red-500" : "text-emerald-500"} />
                         <span className="text-[10px] font-black tech-mono">{health.avgLatency}ms</span>
                     </div>
                     <div className="px-4 py-2 bg-white dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 flex items-center gap-3 shadow-sm">
                         <ShieldCheck size={14} className="text-accent" />
-                        <span className="text-[10px] font-black tech-mono">SECURE</span>
+                        <span className="text-[10px] font-black tech-mono uppercase">Link_Secure</span>
                     </div>
                 </div>
             </header>
@@ -340,27 +358,27 @@ You MUST use this Markdown structure exactly for the UI to parse it:
                     {/* Quick Actions Panel */}
                     <div className="bg-white dark:bg-[#0a0a0b] border border-black/5 dark:border-white/5 rounded-[32px] p-6 shadow-sm">
                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400 mb-5 flex items-center gap-2">
-                            <Zap size={12} className="text-accent" /> RAPID_PROTOCOLS
+                            <Zap size={12} className="text-accent" /> RAPID_MAINTENANCE
                         </h3>
                         <div className="grid grid-cols-1 gap-3">
-                            <button onClick={() => handleCommand("Perform a deep system diagnosis. Check latency, memory, environment, and provider health.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
+                            <button onClick={() => handleCommand("Execute a full system diagnostic scan. Report findings.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
                                 <Activity size={16} className="text-accent group-hover:text-on-accent transition-colors" /> 
-                                <span>RUN_DIAGNOSTICS</span>
+                                <span>FULL_SYSTEM_SCAN</span>
                                 <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
-                            <button onClick={() => handleCommand("Refresh API key pools and check cooldowns.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
+                            <button onClick={() => handleCommand("Cycle the Hydra Key Engine. Refresh all provider pools.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
                                 <RefreshCw size={16} className="text-accent group-hover:text-on-accent transition-colors" /> 
-                                <span>ROTATE_API_KEYS</span>
+                                <span>ROTATE_UPLINKS</span>
                                 <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
-                            <button onClick={() => handleCommand("Optimize memory usage.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
+                            <button onClick={() => handleCommand("Optimize memory usage and trigger buffer cleanup.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
                                 <Cpu size={16} className="text-accent group-hover:text-on-accent transition-colors" /> 
-                                <span>OPTIMIZE_KERNEL</span>
+                                <span>MEMORY_COMPACT</span>
                                 <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
-                            <button onClick={() => handleCommand("Clear system logs immediately.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-red-500 hover:text-white border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
+                            <button onClick={() => handleCommand("Immediate purge of current diagnostic logs.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-red-500 hover:text-white border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
                                 <Trash2 size={16} className="text-red-500 group-hover:text-white transition-colors" /> 
-                                <span>PURGE_LOGS</span>
+                                <span>NUKE_LOG_BUFFER</span>
                                 <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
                         </div>
@@ -369,18 +387,18 @@ You MUST use this Markdown structure exactly for the UI to parse it:
                     {/* Provider Status List */}
                     <div className="flex-1 bg-white dark:bg-[#0a0a0b] border border-black/5 dark:border-white/5 rounded-[32px] p-6 overflow-hidden flex flex-col shadow-sm">
                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400 mb-4 flex items-center gap-2">
-                            <Server size={12} className="text-emerald-500" /> API_UPLINK_STATUS
+                            <Server size={12} className="text-emerald-500" /> ACTIVE_COGNITIVE_NODES
                         </h3>
-                        <div className="flex-1 overflow-y-auto space-y-2 custom-scroll">
+                        <div className="flex-1 overflow-y-auto space-y-2 custom-scroll pr-1">
                             {providers.map(p => (
-                                <div key={p.id} className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-white/[0.03] border border-black/5 dark:border-white/5">
+                                <div key={p.id} className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-white/[0.03] border border-black/5 dark:border-white/5 hover:border-accent/10 transition-colors">
                                     <div className="flex items-center gap-3">
-                                        <div className={`relative w-2 h-2 rounded-full ${p.status === 'HEALTHY' ? 'bg-emerald-500' : p.status === 'COOLDOWN' ? 'bg-amber-500' : 'bg-red-500'}`}>
+                                        <div className={`relative w-2 h-2 rounded-full ${p.status === 'HEALTHY' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : p.status === 'COOLDOWN' ? 'bg-amber-500' : 'bg-red-500'}`}>
                                             {p.status !== 'HEALTHY' && <div className="absolute inset-0 rounded-full animate-ping opacity-75 bg-inherit"></div>}
                                         </div>
                                         <div>
-                                            <div className="text-[10px] font-bold text-black dark:text-white uppercase tracking-tight">{p.id}</div>
-                                            <div className="text-[8px] font-mono text-neutral-500">{p.status}</div>
+                                            <div className="text-[10px] font-black text-black dark:text-white uppercase tracking-tight">{p.id}</div>
+                                            <div className={`text-[8px] font-mono ${p.status === 'HEALTHY' ? 'text-neutral-500' : 'text-amber-500'}`}>{p.status === 'COOLDOWN' ? `RESTORING (${p.cooldownRemaining}m)` : p.status}</div>
                                         </div>
                                     </div>
                                     <div className="text-[9px] font-black tech-mono text-accent">{p.keyCount} KEYS</div>
@@ -396,17 +414,20 @@ You MUST use this Markdown structure exactly for the UI to parse it:
                     <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-10 bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20"></div>
                     
                     {/* Header Strip */}
-                    <div className="h-10 bg-white/5 border-b border-white/5 flex items-center px-4 justify-between">
+                    <div className="h-12 bg-white/5 border-b border-white/5 flex items-center px-5 justify-between shrink-0">
                         <div className="flex gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50"></div>
-                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20 border border-yellow-500/50"></div>
-                            <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/50"></div>
+                            <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50 shadow-[0_0_8px_rgba(239,68,68,0.2)]"></div>
+                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20 border border-yellow-500/50 shadow-[0_0_8px_rgba(234,179,8,0.2)]"></div>
+                            <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/50 shadow-[0_0_8px_rgba(34,197,94,0.2)]"></div>
                         </div>
-                        <span className="text-[8px] font-mono text-neutral-500 uppercase tracking-widest">secure_shell_v13.5</span>
+                        <div className="flex items-center gap-3">
+                            <span className="text-[8px] font-mono text-neutral-500 uppercase tracking-widest animate-pulse">Neural_Link: Established</span>
+                            <span className="text-[8px] font-mono text-neutral-600 uppercase tracking-widest">shell_v13.5</span>
+                        </div>
                     </div>
 
                     {/* Output Stream */}
-                    <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scroll font-mono relative z-0">
+                    <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scroll font-mono relative z-0">
                         {messages.map((m, i) => (
                             <div key={i} className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
                                 {m.role === 'mechanic' && (
@@ -440,9 +461,9 @@ You MUST use this Markdown structure exactly for the UI to parse it:
                     {/* Input Area */}
                     <div className="p-4 bg-[#0a0a0b] border-t border-white/10 relative z-20">
                         <div className="relative group">
-                            <div className="absolute inset-0 bg-accent/10 blur-xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity"></div>
+                            <div className="absolute inset-0 bg-accent/10 blur-xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
                             
-                            <span className="absolute left-4 top-4 text-accent z-20 animate-pulse">{'>'}</span>
+                            <span className="absolute left-4 top-4 text-accent z-20 animate-pulse font-black">{'>'}</span>
                             
                             <textarea
                                 ref={inputRef}
@@ -451,7 +472,7 @@ You MUST use this Markdown structure exactly for the UI to parse it:
                                 onKeyDown={handleKeyDown}
                                 placeholder="ENTER_SYSTEM_COMMAND..."
                                 rows={1}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-12 text-sm text-emerald-400 font-mono focus:outline-none focus:border-accent/50 focus:bg-white/10 transition-all placeholder:text-neutral-700 relative z-10 resize-none overflow-hidden custom-scroll"
+                                className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-12 text-sm text-emerald-400 font-mono focus:outline-none focus:border-accent/50 focus:bg-white/10 transition-all placeholder:text-neutral-800 relative z-10 resize-none overflow-hidden custom-scroll"
                                 disabled={isProcessing}
                                 autoFocus
                             />
@@ -459,17 +480,17 @@ You MUST use this Markdown structure exactly for the UI to parse it:
                             <button 
                                 onClick={() => handleCommand()}
                                 disabled={!input.trim() || isProcessing}
-                                className="absolute right-3 bottom-3 p-2 bg-accent/10 text-accent rounded-lg hover:bg-accent hover:text-black transition-all disabled:opacity-0 z-20"
+                                className="absolute right-3 bottom-3 p-2 bg-accent/10 text-accent rounded-lg hover:bg-accent hover:text-black transition-all disabled:opacity-0 z-20 active:scale-95"
                             >
                                 <Send size={14} />
                             </button>
                         </div>
                         <div className="flex justify-between mt-3 px-1">
                             <span className="text-[7px] font-black text-neutral-600 uppercase tracking-[0.2em] flex items-center gap-1">
-                                <div className="w-1 h-1 bg-green-500 rounded-full"></div> KERNEL_ACTIVE
+                                <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div> KERNEL_ACTIVE
                             </span>
                             <span className="text-[7px] font-black text-accent uppercase tracking-[0.2em] flex items-center gap-1">
-                                <Command size={8}/> WAITING_INPUT
+                                <Command size={8}/> READY_FOR_UPLINK
                             </span>
                         </div>
                     </div>

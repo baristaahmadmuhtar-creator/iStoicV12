@@ -2,7 +2,7 @@
 import React, { useState, memo } from 'react';
 import { type FeatureID, FEATURES } from '../constants';
 import useLocalStorage from '../hooks/useLocalStorage';
-import { Settings, Flame, Cpu } from 'lucide-react';
+import { Settings, Flame, Cpu, Activity, Zap } from 'lucide-react';
 import { useNavigationIntelligence } from '../hooks/useNavigationIntelligence';
 
 interface SidebarProps {
@@ -22,35 +22,14 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
       en: { dashboard: "TERMINAL", notes: "VAULT_DB", chat: "NEURAL_LINK", tools: "ARSENAL", system: "SYSTEM", settings: "CONFIG" }
   };
 
-  const featureTooltips = {
-      id: { 
-          dashboard: "Akses Dashboard Utama", 
-          notes: "Buka Vault Database", 
-          chat: "Mulai Neural Link Chat", 
-          tools: "Akses Arsenal AI Tools",
-          system: "Diagnosa Kesehatan Sistem & Terminal",
-          settings: "Buka Konfigurasi Sistem",
-          logo: "Kembali ke Dashboard"
-      },
-      en: { 
-          dashboard: "Access Main Dashboard", 
-          notes: "Open Vault Database", 
-          chat: "Start Neural Link Chat", 
-          tools: "Access AI Tools Arsenal",
-          system: "System Health Diagnostics & Terminal",
-          settings: "Open System Configuration",
-          logo: "Return to Dashboard"
-      }
-  };
-
   const getLabel = (id: string) => (featureNames[language] as any)[id] || id;
-  const getTooltip = (id: string) => (featureTooltips[language] as any)[id] || "";
 
   const handleLogoClick = () => setActiveFeature('dashboard');
 
   return (
     <>
-      <div className="hidden md:block w-[72px] h-full flex-none shrink-0 transition-all duration-500" />
+      {/* Spacer to push content */}
+      <div className="hidden md:block w-[80px] h-full flex-none shrink-0 transition-all duration-500" />
 
       <aside 
         onMouseEnter={() => setIsHovered(true)}
@@ -58,99 +37,108 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
         className={`
           hidden md:flex flex-col fixed top-0 left-0 bottom-0 
           z-[1200] 
-          bg-zinc-50/90 dark:bg-[#050505]/90 backdrop-blur-2xl 
-          border-r border-black/5 dark:border-white/5
+          bg-[#050505]/80 dark:bg-[#000000]/80 backdrop-blur-2xl 
+          border-r border-white/5
           transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]
-          ${isHovered ? 'w-[260px] shadow-[20px_0_40px_rgba(0,0,0,0.1)]' : 'w-[72px]'}
-          ${isForcedStealth ? 'opacity-20 pointer-events-none grayscale blur-[1px]' : 'opacity-100'}
+          ${isHovered ? 'w-[280px] shadow-[20px_0_60px_rgba(0,0,0,0.5)]' : 'w-[80px]'}
+          ${isForcedStealth ? 'opacity-0 pointer-events-none -translate-x-full' : 'opacity-100 translate-x-0'}
         `}
       >
-        <div className="flex flex-col h-full w-full overflow-hidden py-6">
+        <div className="flex flex-col h-full w-full overflow-hidden py-8">
           
-          <div className={`px-3 mb-8 transition-all duration-500 ${isHovered ? 'items-start' : 'items-center'} flex flex-col`}>
+          {/* LOGO SECTION */}
+          <div className={`px-5 mb-10 transition-all duration-500 ${isHovered ? 'items-start' : 'items-center'} flex flex-col`}>
               <button 
                 onClick={handleLogoClick}
-                title={getTooltip('logo')}
-                aria-label={getTooltip('logo')}
                 className={`
                   relative group outline-none transition-all duration-500
-                  ${isHovered ? 'w-full flex items-center gap-4 px-2' : 'w-12 h-12 flex items-center justify-center'}
+                  ${isHovered ? 'w-full flex items-center gap-4' : 'w-12 h-12 flex items-center justify-center'}
                 `}
               >
                 <div className={`
                   shrink-0 w-10 h-10 rounded-xl flex items-center justify-center 
                   bg-gradient-to-br from-[var(--accent-color)] to-blue-600 text-white 
-                  shadow-[0_0_15px_var(--accent-glow)] transition-all duration-500 
-                  group-hover:scale-110 group-hover:rotate-3
+                  shadow-[0_0_20px_var(--accent-glow)] transition-all duration-500 
+                  group-hover:scale-110 relative overflow-hidden
                 `}>
+                  <div className="absolute inset-0 bg-white/20 skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
                   {personaMode === 'melsa' ? <Flame size={20} strokeWidth={2.5} /> : <Cpu size={20} strokeWidth={2.5} />}
                 </div>
 
-                <div className={`flex flex-col items-start overflow-hidden whitespace-nowrap transition-all duration-500 ${isHovered ? 'opacity-100 max-w-[200px]' : 'opacity-0 max-w-0'}`}>
-                  <h1 className="text-lg font-black italic tracking-tighter text-black dark:text-white leading-none">
+                <div className={`flex flex-col items-start overflow-hidden whitespace-nowrap transition-all duration-500 ${isHovered ? 'opacity-100 max-w-[200px] translate-x-0' : 'opacity-0 max-w-0 -translate-x-4'}`}>
+                  <h1 className="text-xl font-black italic tracking-tighter text-white leading-none">
                     ISTOIC<span className="text-[var(--accent-color)]">AI</span>
                   </h1>
-                  <span className="text-[8px] tech-mono font-bold text-neutral-400 tracking-widest mt-0.5">PLATINUM_OS</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-[7px] tech-mono font-bold text-neutral-400 tracking-widest uppercase">PLATINUM_OS</span>
+                  </div>
                 </div>
               </button>
           </div>
 
-          <nav className="flex-1 flex flex-col gap-2 px-3 w-full">
+          {/* NAVIGATION LINKS */}
+          <nav className="flex-1 flex flex-col gap-3 px-4 w-full">
             {FEATURES.map((feature) => {
               const isActive = activeFeature === feature.id;
               const label = getLabel(feature.id);
-              const tooltip = getTooltip(feature.id);
               
               return (
                 <button
                   key={feature.id}
                   onClick={() => setActiveFeature(feature.id)}
-                  title={tooltip}
-                  aria-label={label}
                   className={`
-                    relative flex items-center rounded-xl transition-all duration-300 group
-                    ${isHovered ? 'w-full px-3 py-3 gap-4' : 'w-12 h-12 justify-center'}
+                    relative flex items-center rounded-xl transition-all duration-300 group overflow-hidden
+                    ${isHovered ? 'w-full px-4 py-3.5 gap-4' : 'w-12 h-12 justify-center mx-auto'}
                     ${isActive 
-                      ? 'bg-[var(--accent-color)]/10 text-[var(--accent-color)]' 
-                      : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}
+                      ? 'bg-[var(--accent-color)]/10 text-[var(--accent-color)] border border-[var(--accent-color)]/20 shadow-[0_0_15px_rgba(var(--accent-rgb),0.1)]' 
+                      : 'text-neutral-500 hover:text-white hover:bg-white/5 border border-transparent'}
                   `}
                 >
+                  {/* Active Indicator Line */}
                   {isActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[var(--accent-color)] rounded-r-full shadow-[0_0_10px_var(--accent-color)]" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-[var(--accent-color)] shadow-[0_0_10px_var(--accent-color)]" />
                   )}
 
-                  <div className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`}>
+                  <div className={`transition-transform duration-300 relative z-10 ${isActive ? 'scale-110 drop-shadow-[0_0_5px_var(--accent-color)]' : 'group-hover:scale-110'}`}>
                     {React.cloneElement(feature.icon as React.ReactElement<any>, { size: 20 })}
                   </div>
 
                   <div className={`overflow-hidden whitespace-nowrap transition-all duration-300 ${isHovered ? 'opacity-100 max-w-[150px]' : 'opacity-0 max-w-0'}`}>
-                    <span className="text-[10px] font-black tracking-[0.2em] uppercase">{label}</span>
+                    <span className="text-[10px] font-black tracking-[0.25em] uppercase">{label}</span>
                   </div>
-
-                  {isHovered && isActive && (
-                    <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-pulse" />
-                  )}
                 </button>
               );
             })}
           </nav>
 
-          <div className="mt-auto px-3 flex flex-col gap-2">
-             <div className={`h-[1px] bg-black/5 dark:bg-white/5 mx-2 mb-2 transition-all ${isHovered ? 'opacity-100' : 'opacity-0'}`} />
+          {/* SYSTEM FOOTER */}
+          <div className="mt-auto px-4 flex flex-col gap-4">
+             {isHovered && (
+                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 animate-fade-in">
+                    <div className="flex justify-between items-center text-[8px] font-black text-neutral-500 uppercase tracking-widest mb-2">
+                        <span>SYSTEM_HEALTH</span>
+                        <span className="text-green-500">98%</span>
+                    </div>
+                    <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-full bg-green-500 w-[98%] shadow-[0_0_10px_#22c55e]"></div>
+                    </div>
+                 </div>
+             )}
+
+             <div className={`h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent mx-2 mb-2 transition-all ${isHovered ? 'opacity-100' : 'opacity-0'}`} />
 
              <button 
                 onClick={() => setActiveFeature('settings')}
                 className={`
                   flex items-center rounded-xl transition-all duration-300 group
-                  ${isHovered ? 'w-full px-3 py-3 gap-4 bg-black/5 dark:bg-white/5' : 'w-12 h-12 justify-center hover:bg-black/5 dark:hover:bg-white/5'}
-                  ${activeFeature === 'settings' ? 'text-black dark:text-white' : 'text-neutral-500'}
+                  ${isHovered ? 'w-full px-4 py-3 gap-4 bg-white/5 hover:bg-white/10 border border-white/5' : 'w-12 h-12 justify-center mx-auto hover:bg-white/5'}
+                  ${activeFeature === 'settings' ? 'text-white border-white/20' : 'text-neutral-500'}
                 `}
-                title={getTooltip('settings')}
-                aria-label={getTooltip('settings')}
              >
-                <Settings size={18} className={activeFeature === 'settings' ? 'animate-spin-slow' : ''} />
+                <Settings size={18} className={activeFeature === 'settings' ? 'animate-spin-slow' : 'group-hover:rotate-45 transition-transform'} />
                 <div className={`overflow-hidden whitespace-nowrap transition-all duration-300 ${isHovered ? 'opacity-100 max-w-[150px]' : 'opacity-0 max-w-0'}`}>
-                    <span className="text-[10px] font-black tracking-[0.2em] uppercase">SYSTEM_CONFIG</span>
+                    <span className="text-[10px] font-black tracking-[0.2em] uppercase">SYS_CONFIG</span>
                 </div>
              </button>
           </div>

@@ -5,15 +5,10 @@ import { type Note } from '../../types';
 import { type FeatureID } from '../../constants';
 import { ArrowUpRight, ChevronRight, Target, Brain, Zap, FileText, ShieldCheck, DatabaseZap, Lock, Unlock, Activity } from 'lucide-react';
 import { VaultPinModal } from '../../components/VaultPinModal';
+import { useVault } from '../../contexts/VaultContext';
 
 interface DashboardProps {
     onNavigate: (feature: FeatureID) => void;
-}
-
-interface ToolConfig {
-    search: boolean;
-    vault: boolean;
-    visual: boolean;
 }
 
 const StatBox: React.FC<{ label: string; value: string; isPulse?: boolean; color?: string }> = ({ label, value, isPulse, color }) => (
@@ -78,27 +73,19 @@ const ModuleCard: React.FC<{
 
 const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
     const [notes] = useLocalStorage<Note[]>('notes', []);
-    // Note: In Dashboard, we just show UI state. Actual logic is in Chat. But we show a toggle here too.
-    // Since we moved isVaultSynced to Session State (non-persistent) in ChatLogic, 
-    // The dashboard toggle will likely be out of sync if used independently without a shared context.
-    // However, the request asked for logic improvement. For simplicity in this architecture without Redux,
-    // we will treat the Dashboard toggle as a "Session Starter" which might need re-auth in Chat if state isn't lifted.
-    // For now, let's keep the existing localstorage behavior here visually but verify config.
-    const [isVaultSynced, setIsVaultSynced] = useState(false); 
+    
+    // USE GLOBAL VAULT CONTEXT
+    const { isVaultUnlocked, unlockVault, lockVault, isVaultConfigEnabled } = useVault();
+    
     const [personaMode] = useLocalStorage<'melsa' | 'stoic'>('ai_persona_mode', 'melsa');
     const [layout] = useLocalStorage<'grid' | 'list' | 'minimal' | 'compact'>('app_dashboard_layout', 'grid');
     const [language] = useLocalStorage<'id' | 'en'>('app_language', 'id');
     
-    // Read Config
-    const [melsaConfig] = useLocalStorage<ToolConfig>('melsa_tools_config', { search: true, vault: true, visual: true });
-    
     const [showPinModal, setShowPinModal] = useState(false);
-    
-    // Logic: Real Sync Level Calculation
     const [syncLevel, setSyncLevel] = useState(0);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-    const isVaultConfigEnabled = melsaConfig.vault;
+    const vaultEnabled = isVaultConfigEnabled(personaMode);
 
     useEffect(() => {
         const handleStatus = () => setIsOnline(navigator.onLine);
@@ -108,9 +95,8 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
         // Calculate Logic
         let level = 20; // Base System Integrity
         if (isOnline) level += 30; // Network Connectivity
-        if (isVaultSynced) level += 50; // Vault Access (Critical)
+        if (isVaultUnlocked) level += 50; // Vault Access (Critical)
         
-        // Minor random fluctuation for "Live" feel if fully synced
         if (level === 100) {
             const jitter = Math.random() > 0.5 ? 0 : -1;
             level += jitter;
@@ -122,7 +108,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
             window.removeEventListener('online', handleStatus);
             window.removeEventListener('offline', handleStatus);
         };
-    }, [isVaultSynced, isOnline, notes.length]);
+    }, [isVaultUnlocked, isOnline, notes.length]);
 
 
     const translations = {
@@ -169,9 +155,9 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
     const t = translations[language];
 
     const toggleVaultAccess = () => {
-        if (!isVaultConfigEnabled) return;
-        if (isVaultSynced) {
-            setIsVaultSynced(false);
+        if (!vaultEnabled) return;
+        if (isVaultUnlocked) {
+            lockVault();
         } else {
             setShowPinModal(true);
         }
@@ -188,7 +174,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
             <VaultPinModal 
                 isOpen={showPinModal} 
                 onClose={() => setShowPinModal(false)} 
-                onSuccess={() => setIsVaultSynced(true)} 
+                onSuccess={() => unlockVault()} 
             />
 
             <div className="max-w-[1600px] mx-auto w-full space-y-12 md:space-y-16">
@@ -269,33 +255,33 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
                     {/* Control Hub */}
                     <div className="lg:col-span-4 flex flex-col gap-6">
                         {/* Vault Access Controller */}
-                        <div className={`p-8 rounded-[32px] border transition-all duration-500 flex flex-col justify-between group h-full shadow-lg ${isVaultSynced ? 'bg-white dark:bg-[#0a0a0b] border-accent/50' : 'bg-zinc-100 dark:bg-white/5 border-transparent'} ${!isVaultConfigEnabled ? 'opacity-50 grayscale' : ''}`}>
+                        <div className={`p-8 rounded-[32px] border transition-all duration-500 flex flex-col justify-between group h-full shadow-lg ${isVaultUnlocked ? 'bg-white dark:bg-[#0a0a0b] border-accent/50' : 'bg-zinc-100 dark:bg-white/5 border-transparent'} ${!vaultEnabled ? 'opacity-50 grayscale' : ''}`}>
                             <div className="flex items-start justify-between">
                                 <div className="space-y-4">
-                                    <div className={`flex items-center gap-3 ${isVaultSynced ? 'text-accent' : 'text-neutral-500'}`}>
-                                        <DatabaseZap size={20} className={isVaultSynced ? 'animate-pulse' : ''} />
+                                    <div className={`flex items-center gap-3 ${isVaultUnlocked ? 'text-accent' : 'text-neutral-500'}`}>
+                                        <DatabaseZap size={20} className={isVaultUnlocked ? 'animate-pulse' : ''} />
                                         <span className="tech-mono text-[9px] font-black uppercase tracking-[0.3em]">{t.vaultAccess}</span>
                                     </div>
-                                    <h3 className={`text-3xl font-black uppercase italic leading-none tracking-tighter ${isVaultSynced ? 'text-black dark:text-white' : 'text-neutral-400'}`}>
-                                        {!isVaultConfigEnabled ? 'MODULE DISABLED' : (isVaultSynced ? 'SYSTEM CONNECTED' : 'ACCESS LOCKED')}
+                                    <h3 className={`text-3xl font-black uppercase italic leading-none tracking-tighter ${isVaultUnlocked ? 'text-black dark:text-white' : 'text-neutral-400'}`}>
+                                        {!vaultEnabled ? 'MODULE DISABLED' : (isVaultUnlocked ? 'SYSTEM CONNECTED' : 'ACCESS LOCKED')}
                                     </h3>
                                 </div>
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isVaultSynced ? 'bg-accent text-black' : 'bg-black/10 dark:bg-white/10 text-neutral-500'}`}>
-                                    {!isVaultConfigEnabled ? <Lock size={20} /> : (isVaultSynced ? <Unlock size={20} /> : <Lock size={20} />)}
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isVaultUnlocked ? 'bg-accent text-black' : 'bg-black/10 dark:bg-white/10 text-neutral-500'}`}>
+                                    {!vaultEnabled ? <Lock size={20} /> : (isVaultUnlocked ? <Unlock size={20} /> : <Lock size={20} />)}
                                 </div>
                             </div>
                             
                             <button 
-                                onClick={isVaultConfigEnabled ? toggleVaultAccess : () => onNavigate('settings')}
+                                onClick={vaultEnabled ? toggleVaultAccess : () => onNavigate('settings')}
                                 className={`mt-8 w-full py-4 rounded-xl font-black uppercase text-[10px] tracking-[0.3em] transition-all flex items-center justify-center gap-3 ${
-                                    !isVaultConfigEnabled 
+                                    !vaultEnabled 
                                     ? 'bg-black/10 text-neutral-500 cursor-help' 
-                                    : isVaultSynced 
+                                    : isVaultUnlocked 
                                         ? 'bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white' 
                                         : 'bg-black dark:bg-white text-white dark:text-black hover:scale-[1.02]'
                                 }`}
                             >
-                                {!isVaultConfigEnabled ? 'ENABLE IN SETTINGS' : (isVaultSynced ? 'TERMINATE CONNECTION' : 'AUTHENTICATE')}
+                                {!vaultEnabled ? 'ENABLE IN SETTINGS' : (isVaultUnlocked ? 'TERMINATE CONNECTION' : 'AUTHENTICATE')}
                             </button>
                         </div>
                     </div>

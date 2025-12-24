@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d0d0e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>IStoicAI | Platinum Cognitive Terminal v13.5</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Plus Jakarta Sans', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+              serif: ['Playfair Display', 'serif'],
+            },
+            animation: {
+              'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'spin-slow': 'spin 8s linear infinite',
+              'slide-up': 'slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'slide-down': 'slideDown 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'fade-in': 'fadeIn 0.4s ease-out forwards',
+              'float': 'float 6s ease-in-out infinite',
+            },
+            keyframes: {
+              slideUp: {
+                '0%': { opacity: '0', transform: 'translate3d(0, 20px, 0)' },
+                '100%': { opacity: '1', transform: 'translate3d(0, 0, 0)' },
+              },
+              slideDown: {
+                '0%': { opacity: '0', transform: 'translate3d(0, -20px, 0)' },
+                '100%': { opacity: '1', transform: 'translate3d(0, 0, 0)' },
+              },
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translate3d(0, 0, 0)' },
+                '50%': { transform: 'translate3d(0, -10px, 0)' },
+              }
+            },
+            colors: {
+              accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
+              'on-accent': 'rgb(var(--on-accent-rgb) / <alpha-value>)',
+            },
+            screens: {
+              'xs': '375px',
+            }
+          },
+        },
+      }
+    </script>
+    <style>
+      :root {
+        --bg-deep: #050505;
+        --text-main: #ffffff;
+        --card-bg: rgba(255, 255, 255, 0.03);
+        --card-border: rgba(255, 255, 255, 0.08);
+        --accent-color: #00f0ff;
+        --accent-rgb: 0, 240, 255;
+        --on-accent-color: #000000;
+        --on-accent-rgb: 0, 0, 0;
+        --accent-glow: rgba(0, 240, 255, 0.15);
+        --nav-accent: #00f0ff; 
+        --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      
+      html.light {
+        --bg-deep: #f2f4f6;
+        --text-main: #0a0a0a;
+        --card-bg: rgba(255, 255, 255, 0.85);
+        --card-border: rgba(0, 0, 0, 0.06);
+        --glass-border: 1px solid rgba(0, 0, 0, 0.05);
+      }
+
+      body {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        background-color: var(--bg-deep);
+        color: var(--text-main);
+        margin: 0;
+        overflow: hidden;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        height: 100vh;
+        height: 100dvh;
+        width: 100vw;
+        overscroll-behavior-y: none;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: 
+          radial-gradient(circle at 50% 0%, rgba(var(--accent-rgb), 0.08) 0%, transparent 50%),
+          linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+        background-size: 100% 100%, 40px 40px, 40px 40px;
+        z-index: -1;
+        pointer-events: none;
+      }
+
+      *:focus { outline: none !important; }
+      
+      .tech-mono { font-family: 'JetBrains Mono', monospace; }
+
+      .glass-card-3d {
+        background: var(--card-bg);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: var(--glass-border);
+        border-radius: 24px;
+        transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1), background-color 0.3s ease;
+        will-change: transform;
+      }
+
+      .glass-card-3d:hover {
+        border-color: rgba(var(--accent-rgb), 0.3);
+        background: rgba(255, 255, 255, 0.05);
+        transform: translate3d(0, -2px, 0) scale(1.002);
+        box-shadow: 0 20px 40px -10px var(--accent-glow);
+      }
+      
+      .text-shadow-glow {
+        text-shadow: 0 0 10px var(--nav-accent);
+      }
+
+      .heading-heavy {
+        font-weight: 900;
+        letter-spacing: -0.06em;
+        text-transform: uppercase;
+        font-style: italic;
+      }
+
+      .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+      .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+      .custom-scroll::-webkit-scrollbar-thumb {
+        background: rgba(128, 128, 128, 0.2);
+        border-radius: 10px;
+      }
+      .custom-scroll::-webkit-scrollbar-thumb:hover {
+        background: var(--accent-color);
+      }
+
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      
+      button, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+
+      .theme-transition {
+        transition: background-color 0.3s ease, color 0.3s ease;
+      }
+
+      [contenteditable]:empty:before {
+        content: attr(placeholder);
+        color: #555;
+        cursor: text;
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
+    "path": "https://esm.sh/path@^0.12.7",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "uuid": "https://esm.sh/uuid@^13.0.0",
+    "openai": "https://esm.sh/openai@^6.15.0",
+    "groq-sdk": "https://esm.sh/groq-sdk@^0.37.0",
+    "@mistralai/mistralai": "https://esm.sh/@mistralai/mistralai@^1.11.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="theme-transition overflow-hidden antialiased selection:text-black">
+    <div id="root" class="h-full w-full overflow-hidden"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  created: string; // PB uses 'created'
+  updated: string; // PB uses 'updated'
+  is_pinned?: boolean; // PB conventions usually snake_case
+  is_archived?: boolean;
+  tasks?: TaskItem[];
+  user?: string;
+}
+
+export interface TaskItem {
+  id: string;
+  text: string;
+  isCompleted: boolean;
+  dueDate?: string; 
+}
+
+export interface ChatThread {
+  id: string;
+  title: string;
+  persona: 'melsa' | 'stoic';
+  model_id: string; // Changed to match PB field
+  messages: ChatMessage[];
+  updated: string; // PB uses 'updated'
+  user?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  text: string;
+  metadata?: {
+    model?: string;
+    provider?: string;
+    latency?: number;
+    status: 'success' | 'error' | 'retrying';
+    errorDetails?: string;
+    groundingChunks?: any[];
+  };
+}
+
+export type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'TODO' | 'KERNEL' | 'TRACE';
+
+export interface LogEntry {
+  id: string;
+  timestamp: string;
+  layer: string;
+  level: LogLevel;
+  code: string;
+  message: string;
+  payload?: any;
+}
+
+export interface ModelMetadata {
+  id: string;
+  name: string;
+  category: 'GEMINI_3' | 'GEMINI_2_5' | 'ARSENAL';
+  provider: 'GEMINI' | 'GROQ' | 'DEEPSEEK' | 'OPENAI' | 'XAI' | 'MISTRAL' | 'OPENROUTER';
+  description: string;
+  specs: { context: string; speed: 'INSTANT' | 'FAST' | 'THINKING' | 'DEEP'; intelligence: number; }
+}

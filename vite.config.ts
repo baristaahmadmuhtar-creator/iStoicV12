@@ -7,11 +7,11 @@ export default defineConfig(({ mode }) => {
     // Load local .env
     const env = loadEnv(mode, '.', '');
     
-    // Explicit list for Hydra Multi-Link Engine
+    // Explicit list for Hydra Multi-Link Engine & Security
     const keyPatterns = [
         'GEMINI', 'GROQ', 'DEEPSEEK', 'OPENAI', 
         'XAI', 'MISTRAL', 'OPENROUTER', 'ELEVENLABS', 
-        'API_KEY', 'VAULT_PIN'
+        'API_KEY', 'VAULT_PIN_HASH'
     ];
 
     const processEnv: Record<string, string> = {};

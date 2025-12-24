@@ -10,6 +10,12 @@ interface DashboardProps {
     onNavigate: (feature: FeatureID) => void;
 }
 
+interface ToolConfig {
+    search: boolean;
+    vault: boolean;
+    visual: boolean;
+}
+
 const StatBox: React.FC<{ label: string; value: string; isPulse?: boolean; color?: string }> = ({ label, value, isPulse, color }) => (
     <div className="bg-white dark:bg-[#0a0a0b] p-6 flex flex-col justify-center rounded-[24px] border border-black/5 dark:border-white/5 shadow-sm hover:shadow-xl hover:scale-105 transition-all duration-500 group min-w-[140px]">
         <p className="tech-mono text-[9px] text-neutral-400 font-black uppercase tracking-[0.3em] mb-2 italic group-hover:text-accent transition-colors flex items-center gap-2">
@@ -72,15 +78,27 @@ const ModuleCard: React.FC<{
 
 const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
     const [notes] = useLocalStorage<Note[]>('notes', []);
-    const [isVaultSynced, setIsVaultSynced] = useLocalStorage<boolean>('is_vault_synced', false);
+    // Note: In Dashboard, we just show UI state. Actual logic is in Chat. But we show a toggle here too.
+    // Since we moved isVaultSynced to Session State (non-persistent) in ChatLogic, 
+    // The dashboard toggle will likely be out of sync if used independently without a shared context.
+    // However, the request asked for logic improvement. For simplicity in this architecture without Redux,
+    // we will treat the Dashboard toggle as a "Session Starter" which might need re-auth in Chat if state isn't lifted.
+    // For now, let's keep the existing localstorage behavior here visually but verify config.
+    const [isVaultSynced, setIsVaultSynced] = useState(false); 
     const [personaMode] = useLocalStorage<'melsa' | 'stoic'>('ai_persona_mode', 'melsa');
     const [layout] = useLocalStorage<'grid' | 'list' | 'minimal' | 'compact'>('app_dashboard_layout', 'grid');
     const [language] = useLocalStorage<'id' | 'en'>('app_language', 'id');
+    
+    // Read Config
+    const [melsaConfig] = useLocalStorage<ToolConfig>('melsa_tools_config', { search: true, vault: true, visual: true });
+    
     const [showPinModal, setShowPinModal] = useState(false);
     
     // Logic: Real Sync Level Calculation
     const [syncLevel, setSyncLevel] = useState(0);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+    const isVaultConfigEnabled = melsaConfig.vault;
 
     useEffect(() => {
         const handleStatus = () => setIsOnline(navigator.onLine);
@@ -151,6 +169,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
     const t = translations[language];
 
     const toggleVaultAccess = () => {
+        if (!isVaultConfigEnabled) return;
         if (isVaultSynced) {
             setIsVaultSynced(false);
         } else {
@@ -219,13 +238,13 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
                         </h3>
                         <div className="space-y-4">
                             {notes.slice(0, 3).map((note, i) => (
-                                <div key={note.id} onClick={() => onNavigate('notes')} style={{ animationDelay: `${i * 100}ms` }} className="p-6 bg-white dark:bg-[#0a0a0b] rounded-[24px] border border-black/5 dark:border-white/5 flex items-center justify-between group cursor-pointer hover:border-accent/30 transition-all duration-500 shadow-sm hover:shadow-xl hover:-translate-x-1 animate-slide-up">
-                                    <div className="flex items-center gap-6">
+                                <div key={note.id} onClick={() => onNavigate('notes')} style={{ animationDelay: `${i * 100}ms` }} className="p-6 bg-white dark:bg-[#0a0a0b] rounded-[24px] border border-black/5 dark:border-white/5 flex items-center justify-center group cursor-pointer hover:border-accent/30 transition-all duration-500 shadow-sm hover:shadow-xl hover:-translate-x-1 animate-slide-up">
+                                    <div className="flex items-center gap-6 w-full">
                                         <div className="w-14 h-14 rounded-2xl bg-zinc-100 dark:bg-white/5 flex items-center justify-center group-hover:bg-accent text-neutral-400 group-hover:text-on-accent transition-all border border-black/5 dark:border-white/5 shadow-inner">
                                             <FileText size={24} />
                                         </div>
-                                        <div className="overflow-hidden">
-                                            <h4 className="text-xl font-black text-black dark:text-white uppercase italic tracking-tighter leading-none mb-2 group-hover:translate-x-2 transition-transform truncate max-w-[200px] md:max-w-md">{note.title || t.untitled}</h4>
+                                        <div className="overflow-hidden flex-1">
+                                            <h4 className="text-xl font-black text-black dark:text-white uppercase italic tracking-tighter leading-none mb-2 group-hover:translate-x-2 transition-transform truncate">{note.title || t.untitled}</h4>
                                             <p className="text-[9px] tech-mono text-neutral-500 font-black uppercase tracking-widest flex items-center gap-3">
                                                 <span>ID: {note.id.slice(0, 8)}</span>
                                                 <span className="w-1 h-1 rounded-full bg-neutral-400"></span>
@@ -250,7 +269,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
                     {/* Control Hub */}
                     <div className="lg:col-span-4 flex flex-col gap-6">
                         {/* Vault Access Controller */}
-                        <div className={`p-8 rounded-[32px] border transition-all duration-500 flex flex-col justify-between group h-full shadow-lg ${isVaultSynced ? 'bg-white dark:bg-[#0a0a0b] border-accent/50' : 'bg-zinc-100 dark:bg-white/5 border-transparent'}`}>
+                        <div className={`p-8 rounded-[32px] border transition-all duration-500 flex flex-col justify-between group h-full shadow-lg ${isVaultSynced ? 'bg-white dark:bg-[#0a0a0b] border-accent/50' : 'bg-zinc-100 dark:bg-white/5 border-transparent'} ${!isVaultConfigEnabled ? 'opacity-50 grayscale' : ''}`}>
                             <div className="flex items-start justify-between">
                                 <div className="space-y-4">
                                     <div className={`flex items-center gap-3 ${isVaultSynced ? 'text-accent' : 'text-neutral-500'}`}>
@@ -258,23 +277,25 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
                                         <span className="tech-mono text-[9px] font-black uppercase tracking-[0.3em]">{t.vaultAccess}</span>
                                     </div>
                                     <h3 className={`text-3xl font-black uppercase italic leading-none tracking-tighter ${isVaultSynced ? 'text-black dark:text-white' : 'text-neutral-400'}`}>
-                                        {isVaultSynced ? 'SYSTEM CONNECTED' : 'ACCESS LOCKED'}
+                                        {!isVaultConfigEnabled ? 'MODULE DISABLED' : (isVaultSynced ? 'SYSTEM CONNECTED' : 'ACCESS LOCKED')}
                                     </h3>
                                 </div>
                                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isVaultSynced ? 'bg-accent text-black' : 'bg-black/10 dark:bg-white/10 text-neutral-500'}`}>
-                                    {isVaultSynced ? <Unlock size={20} /> : <Lock size={20} />}
+                                    {!isVaultConfigEnabled ? <Lock size={20} /> : (isVaultSynced ? <Unlock size={20} /> : <Lock size={20} />)}
                                 </div>
                             </div>
                             
                             <button 
-                                onClick={toggleVaultAccess}
+                                onClick={isVaultConfigEnabled ? toggleVaultAccess : () => onNavigate('settings')}
                                 className={`mt-8 w-full py-4 rounded-xl font-black uppercase text-[10px] tracking-[0.3em] transition-all flex items-center justify-center gap-3 ${
-                                    isVaultSynced 
-                                    ? 'bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white' 
-                                    : 'bg-black dark:bg-white text-white dark:text-black hover:scale-[1.02]'
+                                    !isVaultConfigEnabled 
+                                    ? 'bg-black/10 text-neutral-500 cursor-help' 
+                                    : isVaultSynced 
+                                        ? 'bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white' 
+                                        : 'bg-black dark:bg-white text-white dark:text-black hover:scale-[1.02]'
                                 }`}
                             >
-                                {isVaultSynced ? 'TERMINATE CONNECTION' : 'AUTHENTICATE'}
+                                {!isVaultConfigEnabled ? 'ENABLE IN SETTINGS' : (isVaultSynced ? 'TERMINATE CONNECTION' : 'AUTHENTICATE')}
                             </button>
                         </div>
                     </div>

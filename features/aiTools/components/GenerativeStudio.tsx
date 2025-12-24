@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { generateVideo } from '../../../services/geminiService';
 import { generateMultiModalImage } from '../../../services/providerEngine';
-import { ImageIcon, Video, Sparkles, Download, Trash2, ChevronDown, Monitor } from 'lucide-react';
+import { ImageIcon, Video, Sparkles, Download, Trash2, ChevronDown, Monitor, AlertCircle } from 'lucide-react';
 import { ToolGroup } from './ToolGroup';
+import { useAIProvider } from '../../../hooks/useAIProvider';
 
 interface GenerativeStudioProps {
     isOpen: boolean;
@@ -25,13 +26,16 @@ export const GenerativeStudio: React.FC<GenerativeStudioProps> = ({ isOpen, onTo
     const [selectedProvider, setSelectedProvider] = useState<string>('GEMINI');
     const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash-image');
 
+    // Use hook for current selected provider health
+    const { isHealthy, status: providerStatus } = useAIProvider(selectedProvider);
+
     // Dynamic Loading Messages
     useEffect(() => {
         if (!loading) return;
         const messages = loading === 'IMAGE' ? [
-            "SYNTHESIZING_PIXELS...", "CALIBRATING_OPTICS...", "INJECTING_CREATIVITY...", "POLISHING_REFLECTIONS...", "FINALIZING_RENDER..."
+            "MANIFESTING VISUAL CONCEPT...", "ALIGNING PIXELS...", "POLISHING REFLECTIONS...", "FINALIZING RENDER..."
         ] : [
-            "INJECTING_VEO_VECTORS...", "TEMPORAL_STABILIZATION...", "FLUID_DYNAMICS_SYNC...", "VEO_ENGINE_WARMUP...", "ENCODING_COGNITION..."
+            "TEMPORAL STABILIZATION...", "FLUID DYNAMICS SYNC...", "ENCODING COGNITION..."
         ];
 
         let msgIdx = 0;
@@ -64,6 +68,11 @@ export const GenerativeStudio: React.FC<GenerativeStudioProps> = ({ isOpen, onTo
 
     const handleGenerateImage = async () => {
         if (!prompt || loading) return;
+        if (!isHealthy) {
+            setErrorMsg(`Provider ${selectedProvider} is currently ${providerStatus}. Check API keys.`);
+            return;
+        }
+
         if (selectedProvider === 'GEMINI' && (imageSize === '2K' || imageSize === '4K')) {
             if (!await ensureApiKey()) return;
         }
@@ -83,17 +92,21 @@ export const GenerativeStudio: React.FC<GenerativeStudioProps> = ({ isOpen, onTo
         } catch (e: any) { 
             console.error(e);
             if (e.message && e.message.includes("Requested entity was not found")) {
-                setErrorMsg("⚠️ AUTH_ERROR: Key tidak valid. Membuka dialog...");
+                setErrorMsg("Access credentials required for this operation.");
                 const aistudio = (window as any).aistudio;
                 if (aistudio) await aistudio.openSelectKey();
             } else {
-                setErrorMsg(`ERROR: ${e.message}`);
+                setErrorMsg("Unable to manifest visual at this time.");
             }
         } finally { setLoading(null); }
     };
 
     const handleGenerateVideo = async () => {
         if (!prompt || loading) return;
+        if (!isHealthy) {
+            setErrorMsg(`GEMINI provider is ${providerStatus}.`);
+            return;
+        }
         if (!await ensureApiKey()) return;
 
         setLoading('VIDEO');
@@ -106,11 +119,11 @@ export const GenerativeStudio: React.FC<GenerativeStudioProps> = ({ isOpen, onTo
         } catch (e: any) { 
             console.error(e);
             if (e.message && e.message.includes("Requested entity was not found")) {
-                setErrorMsg("⚠️ AUTH_ERROR: Key tidak valid. Membuka dialog...");
+                setErrorMsg("Access credentials required for this operation.");
                 const aistudio = (window as any).aistudio;
                 if (aistudio) await aistudio.openSelectKey();
             } else {
-                setErrorMsg(`ERROR: ${e.message}`);
+                setErrorMsg("Unable to generate video stream at this time.");
             }
         } finally { setLoading(null); }
     };
@@ -142,12 +155,15 @@ export const GenerativeStudio: React.FC<GenerativeStudioProps> = ({ isOpen, onTo
                 {/* Provider & Model Selector */}
                 <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1 space-y-2">
-                        <label className="text-[9px] tech-mono font-black uppercase tracking-[0.3em] text-neutral-500 pl-2">Engine Provider</label>
+                        <label className="text-[9px] tech-mono font-black uppercase tracking-[0.3em] text-neutral-500 pl-2 flex items-center justify-between">
+                            Engine Provider
+                            {!isHealthy && <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10} /> {providerStatus}</span>}
+                        </label>
                         <div className="relative">
                             <select 
                                 value={selectedProvider} 
                                 onChange={(e) => { setSelectedProvider(e.target.value); setSelectedModel(providers.find(p => p.id === e.target.value)?.models[0].id || ''); }}
-                                className="w-full bg-zinc-100 dark:bg-white/5 p-3 rounded-xl border border-black/5 dark:border-white/5 text-[10px] font-black uppercase tracking-widest text-black dark:text-white focus:outline-none focus:border-accent/30 appearance-none"
+                                className={`w-full bg-zinc-100 dark:bg-white/5 p-3 rounded-xl border border-black/5 dark:border-white/5 text-[10px] font-black uppercase tracking-widest text-black dark:text-white focus:outline-none focus:border-accent/30 appearance-none ${!isHealthy ? 'border-red-500/30' : ''}`}
                             >
                                 {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
@@ -199,9 +215,9 @@ export const GenerativeStudio: React.FC<GenerativeStudioProps> = ({ isOpen, onTo
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-5 pt-4">
-                    <button onClick={handleGenerateImage} disabled={!!loading || !prompt.trim()} className="flex-1 py-6 bg-[var(--accent-color)] text-on-accent rounded-[24px] font-black uppercase text-[11px] tracking-[0.4em] flex items-center justify-center gap-4 shadow-2xl hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:scale-100 transition-all duration-500"><ImageIcon size={20} /> GENERATE_IMAGE</button>
+                    <button onClick={handleGenerateImage} disabled={!!loading || !prompt.trim() || !isHealthy} className="flex-1 py-6 bg-[var(--accent-color)] text-on-accent rounded-[24px] font-black uppercase text-[11px] tracking-[0.4em] flex items-center justify-center gap-4 shadow-2xl hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:scale-100 transition-all duration-500"><ImageIcon size={20} /> GENERATE_IMAGE</button>
                     {selectedProvider === 'GEMINI' && (
-                        <button onClick={handleGenerateVideo} disabled={!!loading || !prompt.trim()} className="flex-1 py-6 bg-zinc-100 dark:bg-white/5 text-black dark:text-white rounded-[24px] font-black uppercase text-[11px] tracking-[0.4em] flex items-center justify-center gap-4 border border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40 transition-all duration-500 shadow-lg"><Video size={20} /> VEO_VIDEO</button>
+                        <button onClick={handleGenerateVideo} disabled={!!loading || !prompt.trim() || !isHealthy} className="flex-1 py-6 bg-zinc-100 dark:bg-white/5 text-black dark:text-white rounded-[24px] font-black uppercase text-[11px] tracking-[0.4em] flex items-center justify-center gap-4 border border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40 transition-all duration-500 shadow-lg"><Video size={20} /> VEO_VIDEO</button>
                     )}
                 </div>
 

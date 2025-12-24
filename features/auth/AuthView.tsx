@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, ArrowRight, Loader2, Fingerprint, Terminal, AlertTriangle, Lock } from 'lucide-react';
+import { ArrowRight, Loader2, Fingerprint, Terminal, AlertTriangle, Lock } from 'lucide-react';
+import { verifyPin } from '../../utils/crypto';
 
 interface AuthViewProps {
     onAuthSuccess: () => void;
@@ -12,18 +13,18 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
     const [passcode, setPasscode] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // REAL SECURITY: Verify against Environment Variable
-    // Casting import.meta to any to avoid TS errors in this context
-    const SYSTEM_KEY = (
-        (process.env as any).VITE_VAULT_PIN || 
-        (import.meta as any).env?.VITE_VAULT_PIN || 
-        '123456' // Default fallback for dev, warns in production
+    // SECURITY: We now fetch the HASH, not the PIN itself.
+    // Casting import.meta to any to avoid TS errors
+    const SYSTEM_HASH = (
+        (process.env as any).VITE_VAULT_PIN_HASH || 
+        (import.meta as any).env?.VITE_VAULT_PIN_HASH || 
+        '' // No default hardcoded PIN allowed. Must be set in Env.
     );
 
     useEffect(() => {
         if (inputRef.current) inputRef.current.focus();
-        if (SYSTEM_KEY === '123456') {
-            console.warn("⚠️ SECURITY WARNING: Using default access code '123456'. Set VITE_VAULT_PIN in .env for production.");
+        if (!SYSTEM_HASH) {
+            console.error("⚠️ SECURITY ALERT: VITE_VAULT_PIN_HASH is not set in environment variables. Access will be impossible.");
         }
     }, []);
 
@@ -32,9 +33,11 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         setLoading(true);
         setError(null);
 
-        // Simulate network handshake delay for UX
-        setTimeout(() => {
-            if (passcode === SYSTEM_KEY) {
+        // Simulate network handshake delay for UX (and to mitigate timing attacks)
+        setTimeout(async () => {
+            const isValid = await verifyPin(passcode, SYSTEM_HASH);
+            
+            if (isValid) {
                 onAuthSuccess();
             } else {
                 setError("ACCESS_DENIED: Invalid Passcode.");
@@ -65,7 +68,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                     <div className="flex items-center justify-center gap-2 text-neutral-500">
                         <Terminal size={12} />
                         <p className="text-[9px] tech-mono font-bold uppercase tracking-[0.4em]">
-                            SECURE_ACCESS_V13.5
+                            SECURE_HASH_V13.5
                         </p>
                     </div>
                 </div>
@@ -80,36 +83,44 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                         </div>
                     )}
 
-                    <form onSubmit={handleLogin} className="space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-[9px] tech-mono font-black text-neutral-500 uppercase tracking-widest pl-2 flex items-center gap-2">
-                                <Lock size={10} /> Identity Passcode
-                            </label>
-                            <div className="relative">
-                                <input 
-                                    ref={inputRef}
-                                    type="password" 
-                                    value={passcode}
-                                    onChange={e => { setPasscode(e.target.value); setError(null); }}
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 px-6 text-center text-xl font-black text-white tracking-[0.5em] focus:outline-none focus:border-accent/50 focus:bg-white/10 transition-all placeholder:text-neutral-800 focus:shadow-[0_0_30px_rgba(var(--accent-rgb),0.1)]"
-                                    placeholder="••••••"
-                                    autoComplete="off"
-                                />
+                    {!SYSTEM_HASH ? (
+                         <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-6">
+                            <p className="text-[10px] text-amber-500 font-bold leading-relaxed">
+                                SETUP REQUIRED: Please set `VITE_VAULT_PIN_HASH` in your .env file.
+                            </p>
+                         </div>
+                    ) : (
+                        <form onSubmit={handleLogin} className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[9px] tech-mono font-black text-neutral-500 uppercase tracking-widest pl-2 flex items-center gap-2">
+                                    <Lock size={10} /> Identity Passcode
+                                </label>
+                                <div className="relative">
+                                    <input 
+                                        ref={inputRef}
+                                        type="password" 
+                                        value={passcode}
+                                        onChange={e => { setPasscode(e.target.value); setError(null); }}
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 px-6 text-center text-xl font-black text-white tracking-[0.5em] focus:outline-none focus:border-accent/50 focus:bg-white/10 transition-all placeholder:text-neutral-800 focus:shadow-[0_0_30px_rgba(var(--accent-rgb),0.1)]"
+                                        placeholder="••••••"
+                                        autoComplete="off"
+                                    />
+                                </div>
                             </div>
-                        </div>
 
-                        <button 
-                            type="submit" 
-                            disabled={loading || !passcode} 
-                            className="w-full py-5 bg-white text-black hover:bg-accent hover:text-black rounded-2xl font-black uppercase text-[11px] tracking-[0.3em] flex items-center justify-center gap-3 transition-all shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed group/btn"
-                        >
-                            {loading ? <Loader2 className="animate-spin" size={18} /> : <>INITIALIZE_LINK <ArrowRight size={18} className="group-hover/btn:translate-x-1 transition-transform" /></>}
-                        </button>
-                    </form>
+                            <button 
+                                type="submit" 
+                                disabled={loading || !passcode} 
+                                className="w-full py-5 bg-white text-black hover:bg-accent hover:text-black rounded-2xl font-black uppercase text-[11px] tracking-[0.3em] flex items-center justify-center gap-3 transition-all shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed group/btn"
+                            >
+                                {loading ? <Loader2 className="animate-spin" size={18} /> : <>INITIALIZE_LINK <ArrowRight size={18} className="group-hover/btn:translate-x-1 transition-transform" /></>}
+                            </button>
+                        </form>
+                    )}
 
                     <div className="mt-8 text-center">
                         <p className="text-[8px] text-neutral-600 font-mono uppercase tracking-widest">
-                            ENCRYPTED_SESSION // LOCAL_STORAGE_PERSISTENCE
+                            SHA256_ENCRYPTED // LOCAL_STORAGE_PERSISTENCE
                         </p>
                     </div>
                 </div>

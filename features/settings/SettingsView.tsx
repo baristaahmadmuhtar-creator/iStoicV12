@@ -6,11 +6,17 @@ import {
     Shield, Trash2, Cpu, Languages, Palette, Layout, Save, CheckCircle2, 
     Volume2, Mic2, Moon, Sun, Monitor, X, Check, HelpCircle, RefreshCw,
     Terminal, UserCheck, Sparkles, MessageSquare, ChevronRight, Activity, Zap, Globe, User, UserRound, Play, Info,
-    Flame, Brain
+    Flame, Brain, DatabaseZap, Image as ImageIcon
 } from 'lucide-react';
 import { THEME_COLORS } from '../../App';
 import { DEFAULT_MELSA_PROMPT, DEFAULT_STOIC_PROMPT } from '../../services/geminiService';
 import { speakWithMelsa } from '../../services/elevenLabsService';
+
+interface ToolConfig {
+    search: boolean;
+    vault: boolean;
+    visual: boolean;
+}
 
 const SettingsSection: React.FC<{ title: string; children: React.ReactNode; icon: React.ReactNode }> = ({ title, children, icon }) => (
     <div className="space-y-6 animate-slide-up">
@@ -42,14 +48,67 @@ const SettingsItem: React.FC<{ label: string; desc: string; icon: React.ReactNod
     </div>
 );
 
+const ToolRow: React.FC<{ 
+    label: string; 
+    description: string;
+    icon: React.ReactNode; 
+    isActive: boolean; 
+    onClick: () => void;
+    activeColor: string; // expecting tailwind bg class e.g. "bg-orange-500"
+    badge?: string;
+}> = ({ label, description, icon, isActive, onClick, activeColor, badge }) => (
+    <button 
+        onClick={onClick}
+        className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group text-left ${
+            isActive 
+            ? 'bg-white/80 dark:bg-black/40 border-black/5 dark:border-white/10 shadow-sm' 
+            : 'bg-transparent border-transparent hover:bg-black/5 dark:hover:bg-white/5 opacity-70 hover:opacity-100'
+        }`}
+    >
+        <div className="flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                isActive ? `${activeColor} text-white shadow-lg` : 'bg-zinc-200 dark:bg-zinc-800 text-neutral-400'
+            }`}>
+                {React.cloneElement(icon as React.ReactElement, { size: 18 })}
+            </div>
+            <div>
+                <div className="flex items-center gap-2">
+                    <h5 className={`text-[10px] font-black uppercase tracking-widest ${isActive ? 'text-black dark:text-white' : 'text-neutral-500'}`}>{label}</h5>
+                    {badge && isActive && (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[7px] font-bold tracking-wider">{badge}</span>
+                    )}
+                </div>
+                <p className="text-[10px] text-neutral-500 font-medium leading-tight max-w-[200px] mt-0.5">{description}</p>
+            </div>
+        </div>
+        
+        {/* Toggle Switch */}
+        <div className={`w-11 h-6 rounded-full p-1 transition-colors duration-300 relative ${
+            isActive ? activeColor : 'bg-zinc-300 dark:bg-zinc-700'
+        }`}>
+            <div className={`w-4 h-4 bg-white rounded-full shadow-sm absolute top-1 transition-all duration-300 ${
+                isActive ? 'left-[22px]' : 'left-1'
+            }`} />
+        </div>
+    </button>
+);
+
 const SettingsView: React.FC = () => {
     const [persistedLanguage, setPersistedLanguage] = useLocalStorage<'id' | 'en'>('app_language', 'id');
     const [persistedTheme, setPersistedTheme] = useLocalStorage<string>('app_theme', 'cyan');
     const [persistedColorScheme, setPersistedColorScheme] = useLocalStorage<'system' | 'light' | 'dark'>('app_color_scheme', 'system');
+    
+    // Prompts
     const [persistedMelsaPrompt, setPersistedMelsaPrompt] = useLocalStorage<string>('custom_melsa_prompt', DEFAULT_MELSA_PROMPT);
     const [persistedStoicPrompt, setPersistedStoicPrompt] = useLocalStorage<string>('custom_stoic_prompt', DEFAULT_STOIC_PROMPT);
+    
+    // Voices
     const [persistedMelsaVoice, setPersistedMelsaVoice] = useLocalStorage<string>('melsa_voice', 'Zephyr');
     const [persistedStoicVoice, setPersistedStoicVoice] = useLocalStorage<string>('stoic_voice', 'Fenrir');
+
+    // Tools Configuration
+    const [persistedMelsaTools, setPersistedMelsaTools] = useLocalStorage<ToolConfig>('melsa_tools_config', { search: true, vault: true, visual: true });
+    const [persistedStoicTools, setPersistedStoicTools] = useLocalStorage<ToolConfig>('stoic_tools_config', { search: true, vault: true, visual: false });
     
     const [language, setLanguage] = useState(persistedLanguage);
     const [theme, setTheme] = useState(persistedTheme);
@@ -58,6 +117,10 @@ const SettingsView: React.FC = () => {
     const [stoicPrompt, setStoicPrompt] = useState(persistedStoicPrompt);
     const [melsaVoice, setMelsaVoice] = useState(persistedMelsaVoice);
     const [stoicVoice, setStoicVoice] = useState(persistedStoicVoice);
+    
+    // Tool State
+    const [melsaTools, setMelsaTools] = useState(persistedMelsaTools);
+    const [stoicTools, setStoicTools] = useState(persistedStoicTools);
     
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
@@ -75,6 +138,9 @@ const SettingsView: React.FC = () => {
             setPersistedStoicPrompt(stoicPrompt);
             setPersistedMelsaVoice(melsaVoice);
             setPersistedStoicVoice(stoicVoice);
+            setPersistedMelsaTools(melsaTools);
+            setPersistedStoicTools(stoicTools);
+            
             setIsSaving(false);
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 2000);
@@ -183,10 +249,45 @@ const SettingsView: React.FC = () => {
                                         </button>
                                     </div>
                                     
-                                    <div className="flex bg-white dark:bg-black/40 p-1 rounded-2xl border border-black/5">
-                                        {['Zephyr', 'Kore', 'Melsa'].map(v => (
-                                            <button key={v} onClick={() => setMelsaVoice(v)} className={`flex-1 min-h-[44px] text-[10px] font-black uppercase rounded-xl transition-all ${melsaVoice === v ? 'bg-orange-600 text-white shadow-md' : 'text-neutral-500 opacity-60'}`}>{v}</button>
-                                        ))}
+                                    <div className="space-y-2">
+                                        <p className="text-[9px] tech-mono font-black text-neutral-500 uppercase tracking-widest pl-2">AUDIO_SYNTHESIS_MODULE</p>
+                                        <div className="flex bg-white dark:bg-black/40 p-1 rounded-2xl border border-black/5">
+                                            {['Zephyr', 'Kore', 'Melsa'].map(v => (
+                                                <button key={v} onClick={() => setMelsaVoice(v)} className={`flex-1 min-h-[44px] text-[10px] font-black uppercase rounded-xl transition-all ${melsaVoice === v ? 'bg-orange-600 text-white shadow-md' : 'text-neutral-500 opacity-60'}`}>{v}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Melsa Tools */}
+                                    <div className="space-y-3">
+                                        <p className="text-[9px] tech-mono font-black text-neutral-500 uppercase tracking-widest pl-2">ACTIVE_EXTENSIONS</p>
+                                        <div className="flex flex-col gap-2">
+                                            <ToolRow 
+                                                label="WEB_SEARCH" 
+                                                description="Real-time web grounding for factual queries."
+                                                icon={<Globe />} 
+                                                isActive={melsaTools.search} 
+                                                activeColor="bg-orange-600"
+                                                onClick={() => setMelsaTools(prev => ({...prev, search: !prev.search}))} 
+                                            />
+                                            <ToolRow 
+                                                label="VAULT_ACCESS" 
+                                                description="Permission to R/W memory. Requires active PIN session."
+                                                icon={<DatabaseZap />} 
+                                                isActive={melsaTools.vault} 
+                                                activeColor="bg-orange-600"
+                                                badge="ENCRYPTED"
+                                                onClick={() => setMelsaTools(prev => ({...prev, vault: !prev.vault}))} 
+                                            />
+                                            <ToolRow 
+                                                label="VISUAL_CORTEX" 
+                                                description="Image generation and computer vision analysis."
+                                                icon={<ImageIcon />} 
+                                                isActive={melsaTools.visual} 
+                                                activeColor="bg-orange-600"
+                                                onClick={() => setMelsaTools(prev => ({...prev, visual: !prev.visual}))} 
+                                            />
+                                        </div>
                                     </div>
 
                                     <textarea 
@@ -203,10 +304,46 @@ const SettingsView: React.FC = () => {
                                         <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><Brain size={24} /></div>
                                         <h4 className="text-xl font-black italic text-black dark:text-white uppercase tracking-tighter">STOIC_CORE</h4>
                                     </div>
-                                    <div className="flex bg-white dark:bg-black/40 p-1 rounded-2xl border border-black/5">
-                                        {['Fenrir', 'Puck'].map(v => (
-                                            <button key={v} onClick={() => setStoicVoice(v)} className={`flex-1 min-h-[44px] text-[10px] font-black uppercase rounded-xl transition-all ${stoicVoice === v ? 'bg-blue-600 text-white shadow-md' : 'text-neutral-500 opacity-60'}`}>{v}</button>
-                                        ))}
+                                    
+                                    <div className="space-y-2">
+                                        <p className="text-[9px] tech-mono font-black text-neutral-500 uppercase tracking-widest pl-2">AUDIO_SYNTHESIS_MODULE</p>
+                                        <div className="flex bg-white dark:bg-black/40 p-1 rounded-2xl border border-black/5">
+                                            {['Fenrir', 'Puck'].map(v => (
+                                                <button key={v} onClick={() => setStoicVoice(v)} className={`flex-1 min-h-[44px] text-[10px] font-black uppercase rounded-xl transition-all ${stoicVoice === v ? 'bg-blue-600 text-white shadow-md' : 'text-neutral-500 opacity-60'}`}>{v}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Stoic Tools */}
+                                    <div className="space-y-3">
+                                        <p className="text-[9px] tech-mono font-black text-neutral-500 uppercase tracking-widest pl-2">ACTIVE_EXTENSIONS</p>
+                                        <div className="flex flex-col gap-2">
+                                            <ToolRow 
+                                                label="WEB_SEARCH" 
+                                                description="Real-time web grounding for factual queries."
+                                                icon={<Globe />} 
+                                                isActive={stoicTools.search} 
+                                                activeColor="bg-blue-600"
+                                                onClick={() => setStoicTools(prev => ({...prev, search: !prev.search}))} 
+                                            />
+                                            <ToolRow 
+                                                label="VAULT_ACCESS" 
+                                                description="Logic analysis of historical data. Requires PIN."
+                                                icon={<DatabaseZap />} 
+                                                isActive={stoicTools.vault} 
+                                                activeColor="bg-blue-600"
+                                                badge="SECURE"
+                                                onClick={() => setStoicTools(prev => ({...prev, vault: !prev.vault}))} 
+                                            />
+                                            <ToolRow 
+                                                label="VISUAL_CORTEX" 
+                                                description="Image generation and computer vision analysis."
+                                                icon={<ImageIcon />} 
+                                                isActive={stoicTools.visual} 
+                                                activeColor="bg-blue-600"
+                                                onClick={() => setStoicTools(prev => ({...prev, visual: !prev.visual}))} 
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>

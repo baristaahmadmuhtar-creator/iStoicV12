@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { MobileNav } from './components/MobileNav';
@@ -8,12 +7,13 @@ import SmartNotesView from './features/smartNotes/SmartNotesView';
 import AIChatView from './features/aiChat/AIChatView';
 import AIToolsView from './features/aiTools/AIToolsView';
 import SettingsView from './features/settings/SettingsView';
-import { DebugConsole } from './components/DebugConsole';
+import { SystemHealthView } from './features/systemHealth/SystemHealthView';
 import { TutorialOverlay } from './components/TutorialOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import useLocalStorage from './hooks/useLocalStorage';
 import { useChatLogic } from './features/aiChat/hooks/useChatLogic';
 import { type Note } from './types';
+import { DebugConsole } from './components/DebugConsole';
 
 export const THEME_COLORS: Record<string, string> = {
   cyan: '#00f0ff',
@@ -30,11 +30,11 @@ export const THEME_COLORS: Record<string, string> = {
 
 const App: React.FC = () => {
   const [activeFeature, setActiveFeature] = useState<FeatureID>('dashboard');
-  const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [isTutorialComplete, setIsTutorialComplete] = useLocalStorage<boolean>('app_tutorial_complete', false);
   const [theme] = useLocalStorage<string>('app_theme', 'cyan');
   const [colorScheme] = useLocalStorage<'system' | 'light' | 'dark'>('app_color_scheme', 'system');
   const [notes, setNotes] = useLocalStorage<Note[]>('notes', []);
+  const [isDebugOpen, setIsDebugOpen] = useState(false);
 
   // Neural Chat Global State
   const chatLogic = useChatLogic(notes, setNotes);
@@ -90,6 +90,19 @@ const App: React.FC = () => {
     root.style.setProperty('--nav-accent', navAccent);
   }, [theme, colorScheme]);
 
+  // Global Key Listener for Debug Console
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle on Ctrl + ` (Backtick)
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        setIsDebugOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const renderContent = () => {
     switch (activeFeature) {
       case 'dashboard': return (
@@ -112,6 +125,11 @@ const App: React.FC = () => {
             <AIToolsView />
         </ErrorBoundary>
       );
+      case 'system': return (
+        <ErrorBoundary viewName="SYSTEM_HEALTH">
+            <SystemHealthView />
+        </ErrorBoundary>
+      );
       case 'settings': return (
         <ErrorBoundary viewName="CORE_CONFIG">
             <SettingsView />
@@ -126,17 +144,15 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-[100dvh] w-full text-black dark:text-white font-sans bg-zinc-50 dark:bg-black theme-transition overflow-hidden">
+    <div className="flex h-[100dvh] w-full text-black dark:text-white font-sans bg-zinc-50 dark:bg-black theme-transition overflow-hidden">
       <Sidebar 
         activeFeature={activeFeature} 
         setActiveFeature={setActiveFeature} 
-        onToggleDebug={() => setIsDebugOpen(true)}
         chatLogic={chatLogic}
       />
       
-      <main className="flex-1 relative h-full overflow-hidden bg-zinc-50 dark:bg-black">
-        {/* CRITICAL UPDATE: ID added for Scroll Intelligence */}
-        <div id="main-scroll-container" className="h-full w-full overflow-y-auto custom-scroll pb-safe">
+      <main className="flex-1 relative h-full overflow-hidden bg-zinc-50 dark:bg-black min-w-0">
+        <div id="main-scroll-container" className="h-full w-full overflow-y-auto custom-scroll pb-safe scroll-smooth">
           {renderContent()}
         </div>
       </main>
@@ -144,17 +160,14 @@ const App: React.FC = () => {
       <MobileNav 
         activeFeature={activeFeature} 
         setActiveFeature={setActiveFeature} 
-        onToggleDebug={() => setIsDebugOpen(true)}
         chatLogic={chatLogic} 
       />
 
       <DebugConsole isOpen={isDebugOpen} onClose={() => setIsDebugOpen(false)} />
+
       {!isTutorialComplete && <TutorialOverlay onComplete={() => setIsTutorialComplete(true)} />}
 
       <style>{`
-        .sidebar-morph-active {
-          transition: all 0.7s cubic-bezier(0.2, 0, 0, 1);
-        }
         .pb-safe {
           padding-bottom: env(safe-area-inset-bottom);
         }

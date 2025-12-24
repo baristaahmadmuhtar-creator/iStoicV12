@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { 
   Bold, Italic, Underline, Maximize2, Minimize2, 
   Mic, MicOff, Sparkles, X, RefreshCw, Flame, CheckCircle, Activity,
-  AlignLeft
+  AlignLeft, Wand2
 } from 'lucide-react';
 import { MELSA_KERNEL } from '../../services/melsaKernel';
 
@@ -128,6 +128,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({ initialContent, 
     const r = new SpeechRecognition();
     r.lang = language === 'id' ? 'id-ID' : 'en-US';
     r.continuous = true;
+    r.interimResults = false; // execCommand works best with final results chunks
     r.onstart = () => setIsDictating(true);
     r.onend = () => setIsDictating(false);
     r.onresult = (e: any) => {
@@ -141,6 +142,13 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({ initialContent, 
   return (
     <div className={`flex flex-col h-full transition-all duration-700 ${isFocusMode ? 'fixed inset-0 z-[1200] bg-zinc-50 dark:bg-black p-4 md:p-12 pb-safe' : 'relative'}`}>
       
+      {/* DICTATION OVERLAY */}
+      {isDictating && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-red-500 text-white px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2 animate-bounce shadow-xl z-[1300]">
+            <Activity size={14} className="animate-pulse" /> Recording...
+        </div>
+      )}
+
       {/* MELSA SYNTHESIS MODAL */}
       {showMelsaOverlay && (
         <div className="fixed inset-0 z-[2500] flex items-center justify-center p-4 bg-[#050505]/80 backdrop-blur-xl animate-fade-in">
@@ -172,6 +180,22 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({ initialContent, 
                                     placeholder="Contoh: 'Rapikan teks ini', 'Buat rangkuman', atau 'Ubah jadi nada yang lebih profesional'..."
                                     className="w-full bg-zinc-50 dark:bg-white/[0.03] border border-black/5 dark:border-white/10 p-6 rounded-3xl text-sm font-medium text-black dark:text-white focus:border-orange-500/40 h-40 resize-none outline-none transition-all shadow-inner placeholder:italic placeholder:opacity-50"
                                 />
+                                <div className="flex gap-2 flex-wrap pt-2">
+                                    {[
+                                        { l: 'RINGKAS (CONCISE)', p: 'Tulis ulang konten ini menjadi jauh lebih ringkas, padat, dan langsung pada intinya. Hilangkan repetisi.' },
+                                        { l: 'PROFESIONAL', p: 'Ubah nada bahasa menjadi lebih formal, profesional, elegan, dan korporat.' },
+                                        { l: 'POIN-POIN', p: 'Ubah struktur konten ini menjadi daftar poin-poin (bullet points) agar mudah dibaca sekilas.' },
+                                        { l: 'FIX GRAMMAR', p: 'Perbaiki tata bahasa, ejaan, dan tanda baca sesuai standar baku tanpa mengubah makna.' }
+                                    ].map((action) => (
+                                        <button 
+                                            key={action.l}
+                                            onClick={() => setMelsaInstruction(action.p)}
+                                            className="px-3 py-1.5 rounded-lg border border-orange-500/20 bg-orange-500/5 text-orange-600 hover:bg-orange-500 hover:text-white transition-all text-[9px] font-black uppercase tracking-widest flex items-center gap-1 group"
+                                        >
+                                            <Wand2 size={10} className="opacity-50 group-hover:opacity-100" /> {action.l}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     ) : (

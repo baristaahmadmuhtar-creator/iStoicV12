@@ -2,6 +2,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { type Note } from '../../../types';
 import { generateImage } from '../../../services/geminiService';
+import { executeMechanicTool } from '../../mechanic/mechanicTools';
 
 export const executeNeuralTool = async (
     fc: any, 
@@ -32,12 +33,25 @@ export const executeNeuralTool = async (
             const noteExists = updatedNotes.some(n => n.id === id);
             if (!noteExists) return `ERROR: Node ${id} tidak ditemukan.`;
 
+            let actionStatus = "Sinkronisasi selesai";
+
             updatedNotes = updatedNotes.map(n => {
                 if (n.id === id) {
-                    const noteTasks = [...(n.tasks || [])];
+                    let noteTasks = [...(n.tasks || [])];
+                    
+                    // Task Management Logic
                     if (taskAction === 'ADD' && taskContent) {
                         noteTasks.push({ id: uuidv4(), text: taskContent, isCompleted: false, dueDate: taskDueDate });
+                        actionStatus = "Tugas baru ditambahkan";
+                    } else if (taskAction === 'TOGGLE' && taskContent) {
+                        // Fuzzy toggle matching
+                        const targetTask = noteTasks.find(t => t.text.toLowerCase().includes(taskContent.toLowerCase()));
+                        if (targetTask) {
+                            targetTask.isCompleted = !targetTask.isCompleted;
+                            actionStatus = `Tugas "${targetTask.text}" ditandai ${targetTask.isCompleted ? 'selesai' : 'belum selesai'}`;
+                        }
                     }
+
                     return { 
                         ...n, 
                         title: title || n.title, 
@@ -49,7 +63,7 @@ export const executeNeuralTool = async (
                 return n;
             });
             setNotes(updatedNotes);
-            return `SUCCESS: Sinkronisasi data ke node ${id} selesai.`;
+            return `SUCCESS: ${actionStatus} pada node ${id}.`;
         }
 
         if (action === 'DELETE' && id) {
@@ -61,6 +75,10 @@ export const executeNeuralTool = async (
     if (name === 'generate_visual') {
         const imgUrl = await generateImage(args.prompt);
         return imgUrl ? `IMAGE_GENERATED: ![Visual](${imgUrl})` : "ERROR: Gagal mensintesis visual.";
+    }
+
+    if (name === 'system_mechanic_tool') {
+        return await executeMechanicTool(fc);
     }
 
     return "UNKNOWN_PROTOCOL.";

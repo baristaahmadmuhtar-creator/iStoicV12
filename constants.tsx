@@ -1,12 +1,14 @@
+
 import React from 'react';
 import { 
   LayoutGrid, 
   FileText, 
   Cpu, 
-  Zap
+  Zap,
+  Activity
 } from 'lucide-react';
 
-export type FeatureID = 'dashboard' | 'notes' | 'chat' | 'tools' | 'settings';
+export type FeatureID = 'dashboard' | 'notes' | 'chat' | 'tools' | 'settings' | 'system';
 
 export interface Feature {
     id: FeatureID;
@@ -34,5 +36,10 @@ export const FEATURES: Feature[] = [
         id: 'tools',
         name: 'ARSENAL',
         icon: <Zap size={22} />
+    },
+    {
+        id: 'system',
+        name: 'SYSTEM',
+        icon: <Activity size={22} />
     }
 ];

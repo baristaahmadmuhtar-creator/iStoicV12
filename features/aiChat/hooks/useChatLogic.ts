@@ -8,13 +8,23 @@ import { STOIC_KERNEL } from '../../../services/stoicKernel';
 import { executeNeuralTool } from '../services/toolHandler';
 import { speakWithMelsa } from '../../../services/elevenLabsService';
 
+interface ToolConfig {
+    search: boolean;
+    vault: boolean;
+    visual: boolean;
+}
+
 export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) => {
     const [threads, setThreads] = useLocalStorage<ChatThread[]>('chat_threads', []);
     const [activeThreadId, setActiveThreadId] = useLocalStorage<string | null>('active_thread_id', null);
     
-    // Persist Settings
-    const [isVaultSynced, setIsVaultSynced] = useLocalStorage<boolean>('is_vault_synced', false);
+    // SECURITY UPGRADE: Vault Sync is now Session-Based (lost on refresh) for better security
+    const [isVaultSynced, setIsVaultSynced] = useState<boolean>(false);
+    
+    // Settings
     const [isAutoSpeak, setIsAutoSpeak] = useLocalStorage<boolean>('is_auto_speak', false);
+    const [melsaConfig] = useLocalStorage<ToolConfig>('melsa_tools_config', { search: true, vault: true, visual: true });
+    const [stoicConfig] = useLocalStorage<ToolConfig>('stoic_tools_config', { search: true, vault: true, visual: false });
     
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -30,6 +40,14 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     }, [activeThread]);
 
     const personaMode = activeThread?.persona || 'melsa';
+    
+    // Check if Vault is allowed by System Config
+    const isVaultConfigEnabled = personaMode === 'melsa' ? melsaConfig.vault : stoicConfig.vault;
+
+    // Auto-lock if config is disabled dynamically
+    if (isVaultSynced && !isVaultConfigEnabled) {
+        setIsVaultSynced(false);
+    }
 
     const handleNewChat = useCallback(async (persona: 'melsa' | 'stoic' = 'melsa') => {
         const welcome = persona === 'melsa' 
@@ -82,20 +100,27 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         setIsLoading(true);
 
         try {
-            // RAG CONTEXT INJECTION
+            // RAG CONTEXT INJECTION LOGIC
             let noteContext = "";
-            if (isVaultSynced) {
+            if (isVaultSynced && isVaultConfigEnabled) {
                 // Limit context size to avoid token overflow
                 const relevantNotes = notes.slice(0, 50); 
-                const contextList = relevantNotes.map(n => `- [${n.id.slice(0,4)}] ${n.title}: ${n.content.slice(0, 200)}...`).join('\n');
+                const contextList = relevantNotes.map(n => {
+                    const taskInfo = n.tasks && n.tasks.length > 0 
+                        ? `[Pending Tasks: ${n.tasks.filter(t => !t.isCompleted).length}]` 
+                        : '';
+                    return `- [${n.id.slice(0,4)}] ${n.title} ${taskInfo}: ${n.content.slice(0, 200)}...`;
+                }).join('\n');
                 noteContext = `[VAULT_DATABASE_ACTIVE]\nBerikut adalah cuplikan catatan user:\n${contextList}\n[END_VAULT]`;
             } else {
-                noteContext = "🚫 [[VAULT_ACCESS_LOCKED]] (You cannot see user notes)";
+                noteContext = isVaultConfigEnabled 
+                    ? "🚫 [[VAULT_ACCESS_LOCKED]] (User has not authenticated via PIN)" 
+                    : "🚫 [[VAULT_SYSTEM_OFFLINE]] (Module disabled in System Configuration)";
             }
 
             const kernel = personaMode === 'melsa' ? MELSA_KERNEL : STOIC_KERNEL;
             
-            // Execute Stream
+            // Execute Stream - Kernel will handle routing logic and errors internally
             const stream = kernel.streamExecute(userMsg, activeThread.model_id, noteContext);
             
             let accumulatedText = "";
@@ -105,7 +130,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 if (chunk.text) accumulatedText += chunk.text;
                 if (chunk.functionCall) currentFunctionCall = chunk.functionCall;
 
-                // Update UI Stream
+                // Update UI Stream in real-time
                 setThreads(prev => prev.map(t => t.id === activeThreadId ? {
                     ...t,
                     messages: t.messages.map(m => m.id === modelMessageId ? {
@@ -113,25 +138,35 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                         text: accumulatedText,
                         metadata: { 
                             ...m.metadata, 
+                            // If kernel sends metadata update (e.g. provider switch), apply it
+                            ...(chunk.metadata ? chunk.metadata : {}),
                             groundingChunks: chunk.groundingChunks || m.metadata?.groundingChunks 
                         }
                     } : m)
                 } : t));
             }
 
-            // Text-to-Speech Trigger
+            // Text-to-Speech Trigger (Only if pure text, not function call)
             if (isAutoSpeak && accumulatedText && !currentFunctionCall) {
                 speakWithMelsa(accumulatedText.replace(/[*#_`]/g, ''), personaMode === 'melsa' ? 'Melsa' : 'Fenrir');
             }
 
-            // Handle Function Calling
+            // Handle Function Calling with SECURE CHECKS
             if (currentFunctionCall) {
-                // Pass latest state via setNotes to ensure tools act on fresh data
-                const toolResult = (currentFunctionCall.name === 'manage_note' && !isVaultSynced)
-                    ? "❌ BLOCKED: Vault Access is Locked. Ask user to unlock it."
-                    : await executeNeuralTool(currentFunctionCall, notes, setNotes);
+                let toolResult = "";
+                
+                if (currentFunctionCall.name === 'manage_note') {
+                    if (!isVaultConfigEnabled) {
+                        toolResult = "❌ SYSTEM_ERROR: Vault Module is disabled in Settings.";
+                    } else if (!isVaultSynced) {
+                        toolResult = "❌ ACCESS_DENIED: Vault Access is Locked. User must click 'Authenticate' in the UI.";
+                    } else {
+                        toolResult = await executeNeuralTool(currentFunctionCall, notes, setNotes);
+                    }
+                } else {
+                    toolResult = await executeNeuralTool(currentFunctionCall, notes, setNotes);
+                }
 
-                // Send tool result back to model for final response
                 const followUpPrompt = `Tool "${currentFunctionCall.name}" Result: ${toolResult}. \nBerdasarkan hasil ini, berikan konfirmasi ramah kepada user.`;
                 const followUpStream = kernel.streamExecute(followUpPrompt, activeThread.model_id, noteContext);
                 
@@ -146,10 +181,11 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 }
             }
         } catch (err: any) {
+             // Fallback for catastrophic kernel failure (should rarely happen due to Kernel's internal try-catch loop)
              setThreads(prev => prev.map(t => t.id === activeThreadId ? { 
                 ...t, 
                 messages: t.messages.map(m => m.id === modelMessageId ? {
-                    ...m, text: `Kernel Crash: ${err.message}`, metadata: { status: 'error' }
+                    ...m, text: `⚠️ **CRITICAL KERNEL FAILURE**: Sistem tidak dapat memulihkan koneksi.\n\n_Manual Reboot Required._`, metadata: { status: 'error' }
                 } : m)
             } : t));
         } finally {
@@ -161,6 +197,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         threads, setThreads,
         activeThread, activeThreadId, setActiveThreadId,
         isVaultSynced, setIsVaultSynced,
+        isVaultConfigEnabled, // Exported for UI
         isAutoSpeak, setIsAutoSpeak, 
         input, setInput,
         isLoading,

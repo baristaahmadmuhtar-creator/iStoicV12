@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, memo } from 'react';
-import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, ArrowUp, Sparkles, Command, Activity } from 'lucide-react';
+import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, ArrowUp, Sparkles, Command, Activity, Lock } from 'lucide-react';
 
 interface ChatInputProps {
   input: string;
@@ -12,6 +12,8 @@ interface ChatInputProps {
   aiName: string;
   isVaultSynced?: boolean;
   onToggleVaultSync?: () => void;
+  personaMode?: 'melsa' | 'stoic';
+  isVaultEnabled?: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = memo(({
@@ -23,7 +25,9 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   onFocusChange,
   aiName,
   isVaultSynced = true,
-  onToggleVaultSync
+  onToggleVaultSync,
+  personaMode = 'melsa',
+  isVaultEnabled = true
 }) => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [isDictating, setIsDictating] = useState(false);
@@ -89,6 +93,20 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
     }
   };
 
+  // Determine Persona Colors
+  const isMelsa = personaMode === 'melsa';
+  const focusRingStyle = isMelsa 
+      ? 'ring-2 ring-orange-500/40 border-orange-500/50 shadow-[0_12px_40px_rgba(249,115,22,0.15)] bg-orange-500/[0.02]' 
+      : 'ring-2 ring-cyan-500/40 border-cyan-500/50 shadow-[0_12px_40px_rgba(6,182,212,0.15)] bg-cyan-500/[0.02]';
+  
+  const hoverBorderStyle = isMelsa
+      ? 'hover:border-orange-500/30 dark:hover:border-orange-500/30'
+      : 'hover:border-cyan-500/30 dark:hover:border-cyan-500/30';
+
+  const sendButtonStyle = isMelsa
+      ? 'bg-orange-600 shadow-orange-500/25'
+      : 'bg-cyan-600 shadow-cyan-500/25';
+
   return (
     <div className="w-full relative group">
       {/* Visual Feedback for Dictation */}
@@ -105,7 +123,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
         border border-black/10 dark:border-white/10
         rounded-[32px] p-2 pl-4 flex items-end gap-3
         shadow-[0_8px_32px_rgba(0,0,0,0.12)]
-        ${isFocused ? 'ring-2 ring-accent/50 border-accent/30 shadow-[0_12px_40px_rgba(var(--accent-rgb),0.15)] scale-[1.01]' : 'hover:border-black/20 dark:hover:border-white/20'}
+        ${isFocused ? `${focusRingStyle} scale-[1.01]` : `${hoverBorderStyle}`}
         ${isDictating ? 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : ''}
       `}>
         
@@ -120,10 +138,17 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
           </button>
            <button 
             onClick={onToggleVaultSync}
-            className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${isVaultSynced ? 'text-accent bg-accent/10' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5'}`}
-            title={isVaultSynced ? "Vault Active" : "Vault Offline"}
+            disabled={!isVaultEnabled}
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${
+                !isVaultEnabled 
+                ? 'text-neutral-300 dark:text-neutral-600 cursor-not-allowed opacity-50' 
+                : isVaultSynced 
+                    ? (isMelsa ? 'text-orange-500 bg-orange-500/10' : 'text-cyan-500 bg-cyan-500/10') 
+                    : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5'
+            }`}
+            title={!isVaultEnabled ? "Vault Disabled in Settings" : (isVaultSynced ? "Vault Active" : "Vault Offline")}
           >
-            {isVaultSynced ? <DatabaseZap size={16} /> : <Database size={16} />}
+            {!isVaultEnabled ? <Lock size={14} /> : (isVaultSynced ? <DatabaseZap size={16} /> : <Database size={16} />)}
           </button>
         </div>
 
@@ -159,7 +184,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
             className={`
               h-11 px-6 rounded-full flex items-center gap-2 font-black uppercase text-[10px] tracking-widest transition-all
               ${input.trim() && !isLoading 
-                ? 'bg-accent text-on-accent shadow-lg shadow-accent/25 hover:scale-105 active:scale-95' 
+                ? `${sendButtonStyle} text-white shadow-lg hover:scale-105 active:scale-95` 
                 : 'bg-black/5 dark:bg-white/5 text-neutral-400 cursor-not-allowed'}
             `}
           >

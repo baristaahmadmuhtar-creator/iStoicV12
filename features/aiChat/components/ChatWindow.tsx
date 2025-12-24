@@ -62,7 +62,7 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
                           <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:-0.15s]"></span>
                           <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce"></span>
                         </div>
-                        <span className="text-[9px] tech-mono font-black uppercase tracking-[0.3em] text-neutral-400 animate-pulse">THINKING...</span>
+                        <span className="text-[9px] tech-mono font-black uppercase tracking-[0.3em] text-neutral-400 animate-pulse">PROCESSING...</span>
                       </div>
                     )}
 

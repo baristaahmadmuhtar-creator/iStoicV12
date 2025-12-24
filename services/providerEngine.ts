@@ -47,7 +47,8 @@ export async function* streamOpenAICompatible(
                 if (content) yield { text: content };
             }
         } catch (error: any) {
-             yield { text: `\n⚠️ **Groq Error**: ${error.message}` };
+             // Rethrow to allow kernel fallback logic to trigger
+             throw error; 
         }
         return;
     }
@@ -69,7 +70,7 @@ export async function* streamOpenAICompatible(
                 if (typeof content === 'string') yield { text: content };
             }
         } catch (error: any) {
-            yield { text: `\n⚠️ **Mistral Error**: ${error.message}` };
+            throw error;
         }
         return;
     }
@@ -106,7 +107,7 @@ export async function* streamOpenAICompatible(
                 if (content) yield { text: content };
             }
         } catch (error: any) {
-            yield { text: `\n⚠️ **${provider} Error**: ${error.message}` };
+            throw error;
         }
         return;
     }
@@ -122,6 +123,7 @@ export async function analyzeMultiModalMedia(provider: string, modelId: string, 
             model: modelId || 'gemini-3-pro-preview',
             contents: { parts: [{ inlineData: { data, mimeType } }, { text: prompt }] }
         });
+        KEY_MANAGER.reportSuccess('GEMINI');
         return response.text || "No response.";
     }
     return "Vision not supported for this provider yet.";
@@ -139,7 +141,10 @@ export async function generateMultiModalImage(provider: string, modelId: string,
             config: { imageConfig: options }
         });
         for (const part of response.candidates?.[0]?.content?.parts || []) {
-            if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+            if (part.inlineData) {
+                KEY_MANAGER.reportSuccess('GEMINI');
+                return `data:image/png;base64,${part.inlineData.data}`;
+            }
         }
     }
     throw new Error(`Provider ${provider} not supported for Image Generation.`);

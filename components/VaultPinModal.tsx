@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Shield, Lock, Unlock, X, AlertCircle, Fingerprint } from 'lucide-react';
+import { verifyPin } from '../utils/crypto';
 
 interface VaultPinModalProps {
     isOpen: boolean;
@@ -12,15 +13,14 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({ isOpen, onClose, o
     const [pin, setPin] = useState('');
     const [error, setError] = useState(false);
     const [shake, setShake] = useState(false);
-    // Fix: Declaring inputRef constant
+    const [verifying, setVerifying] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Get PIN from env, NO SAFE FALLBACK for production integrity
-    // Fix: Explicitly casting import.meta to any to resolve property access error in TypeScript.
-    const SYSTEM_PIN = (
-        (process.env as any).VITE_VAULT_PIN || 
-        (import.meta as any).env?.VITE_VAULT_PIN || 
-        'SET_PIN_IN_VERCEL'
+    // Get PIN HASH from env
+    const SYSTEM_HASH = (
+        (process.env as any).VITE_VAULT_PIN_HASH || 
+        (import.meta as any).env?.VITE_VAULT_PIN_HASH || 
+        ''
     );
 
     useEffect(() => {
@@ -31,10 +31,13 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({ isOpen, onClose, o
         }
     }, [isOpen]);
 
-    const handleSubmit = (e?: React.FormEvent) => {
+    const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
+        setVerifying(true);
         
-        if (pin === SYSTEM_PIN && SYSTEM_PIN !== 'SET_PIN_IN_VERCEL') {
+        const isValid = await verifyPin(pin, SYSTEM_HASH);
+
+        if (isValid) {
             onSuccess();
             onClose();
         } else {
@@ -43,6 +46,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({ isOpen, onClose, o
             setPin('');
             setTimeout(() => setShake(false), 500);
         }
+        setVerifying(false);
     };
 
     if (!isOpen) return null;
@@ -81,15 +85,17 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({ isOpen, onClose, o
                         placeholder="••••••"
                         maxLength={10}
                         autoComplete="off"
+                        disabled={verifying}
                     />
                     <Fingerprint className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" size={20} />
                 </form>
 
                 <button 
                     onClick={() => handleSubmit()}
-                    className="w-full py-4 bg-white text-black hover:bg-accent hover:text-black transition-all rounded-xl font-black uppercase text-[11px] tracking-[0.3em] flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-95"
+                    disabled={verifying}
+                    className="w-full py-4 bg-white text-black hover:bg-accent hover:text-black transition-all rounded-xl font-black uppercase text-[11px] tracking-[0.3em] flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50"
                 >
-                    {error ? <Lock size={14} /> : <Unlock size={14} />} {error ? 'RETRY AUTH' : 'AUTHENTICATE'}
+                    {error ? <Lock size={14} /> : <Unlock size={14} />} {verifying ? 'VERIFYING...' : (error ? 'RETRY AUTH' : 'AUTHENTICATE')}
                 </button>
 
                 <p className="text-[8px] text-neutral-600 font-mono text-center">

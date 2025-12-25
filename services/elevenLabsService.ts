@@ -4,7 +4,7 @@ import { debugService } from './debugService';
 
 // --- VOICE MAPPING SYSTEM ---
 export const VOICE_MAPPING: Record<string, string> = {
-    'Melsa': 'JBFqnCBsd6RMkjVDRZzb', 
+    'Hanisah': 'JBFqnCBsd6RMkjVDRZzb', // Reusing Melsa voice ID for Hanisah
     'Zephyr': '21m00Tcm4TlvDq8ikWAM',
     'Kore': 'EXAVITQu4vr4xnSDxMaL',  
     'Fenrir': 'TxGEqnHWrfWFTfGW9XjX',
@@ -16,24 +16,24 @@ export const VOICE_MAPPING: Record<string, string> = {
  * Production-ready TTS Service
  * Menggunakan Native Fetch untuk kompatibilitas maksimal di browser/Vercel
  */
-export async function speakWithMelsa(text: string, voiceNameOverride?: string): Promise<void> {
+export async function speakWithHanisah(text: string, voiceNameOverride?: string): Promise<void> {
     const apiKey = KEY_MANAGER.getKey('ELEVENLABS');
 
     if (!apiKey) {
-        debugService.log('WARN', 'MELSA_VOICE', 'NO_KEY', 'ElevenLabs API Key is missing.');
+        debugService.log('WARN', 'HANISAH_VOICE', 'NO_KEY', 'ElevenLabs API Key is missing.');
         return;
     }
 
     try {
         let selectedName = voiceNameOverride;
         if (!selectedName) {
-            const storedVoice = localStorage.getItem('melsa_voice');
-            selectedName = storedVoice ? JSON.parse(storedVoice) : 'Melsa';
+            const storedVoice = localStorage.getItem('hanisah_voice');
+            selectedName = storedVoice ? JSON.parse(storedVoice) : 'Hanisah';
         }
 
-        const voiceId = VOICE_MAPPING[selectedName || 'Melsa'] || VOICE_MAPPING['Melsa'];
+        const voiceId = VOICE_MAPPING[selectedName || 'Hanisah'] || VOICE_MAPPING['Hanisah'];
         
-        debugService.log('INFO', 'MELSA_VOICE', 'INIT', `Synthesizing via API: ${selectedName}`);
+        debugService.log('INFO', 'HANISAH_VOICE', 'INIT', `Synthesizing via API: ${selectedName}`);
 
         // Direct API Call (Lebih stabil untuk Production Browser Environment)
         const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
@@ -55,11 +55,11 @@ export async function speakWithMelsa(text: string, voiceNameOverride?: string): 
         const url = URL.createObjectURL(audioBlob);
         const audio = new Audio(url);
         
-        debugService.log('INFO', 'MELSA_VOICE', 'PLAY', 'Audio stream synchronized.');
+        debugService.log('INFO', 'HANISAH_VOICE', 'PLAY', 'Audio stream synchronized.');
         await audio.play();
 
     } catch (error: any) {
-        debugService.log('ERROR', 'MELSA_VOICE', 'FAIL', error.message);
+        debugService.log('ERROR', 'HANISAH_VOICE', 'FAIL', error.message);
         console.error("ElevenLabs Critical Fail:", error);
     }
 }

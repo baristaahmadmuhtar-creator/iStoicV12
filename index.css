@@ -16,4 +16,104 @@ body {
   padding: 0;
   overflow: hidden; /* App-like feel */
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none; /* Prevent pull-to-refresh on mobile */
+}
+
+/* GLOBAL SELECTION */
+::selection {
+  background-color: rgba(var(--accent-rgb), 0.3);
+  color: inherit;
+}
+
+/* GLOBAL NOISE TEXTURE */
+.bg-noise {
+  position: relative;
+}
+.bg-noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("https://grainy-gradients.vercel.app/noise.svg");
+  opacity: 0.04; /* Slightly increased for texture */
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: overlay;
+}
+
+/* CUSTOM SCROLLBAR REFINEMENT */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.2);
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.4);
+  background-clip: border-box;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* UTILITY CLASSES */
+.text-glow {
+  text-shadow: 0 0 20px rgba(var(--accent-rgb), 0.6);
+}
+
+.border-glass {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* TERMINAL AESTHETICS (NEW) */
+.bg-terminal-void {
+  background-color: #030304;
+  position: relative;
+}
+
+.terminal-scanlines::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 10;
+  background-size: 100% 2px, 3px 100%;
+  pointer-events: none;
+  opacity: 0.15;
+}
+
+.text-terminal-glow {
+  text-shadow: 0 0 5px currentColor;
+}
+
+/* ANIMATED GRADIENT TEXT */
+@keyframes gradient-x {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-gradient-text {
+  background-size: 200% 200%;
+  animation: gradient-x 4s ease infinite;
+}
+
+/* SAFE AREA UTILITIES */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
 }

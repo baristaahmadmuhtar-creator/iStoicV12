@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Loader2, Fingerprint, Terminal, AlertTriangle, Lock } from 'lucide-react';
+import { ArrowRight, Loader2, Fingerprint, Terminal, AlertTriangle, Lock, ShieldAlert } from 'lucide-react';
 import { verifyPin } from '../../utils/crypto';
 
 interface AuthViewProps {
@@ -14,11 +14,10 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
     const inputRef = useRef<HTMLInputElement>(null);
 
     // SECURITY: We now fetch the HASH, not the PIN itself.
-    // Casting import.meta to any to avoid TS errors
     const SYSTEM_HASH = (
         (process.env as any).VITE_VAULT_PIN_HASH || 
         (import.meta as any).env?.VITE_VAULT_PIN_HASH || 
-        '' // No default hardcoded PIN allowed. Must be set in Env.
+        '' 
     );
 
     useEffect(() => {
@@ -63,7 +62,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                         <Fingerprint size={48} className="text-accent relative z-10" strokeWidth={1.5} />
                     </div>
                     <h1 className="text-5xl font-black text-white italic tracking-tighter uppercase mb-2 leading-none">
-                        IStoic<span className="text-accent">AI</span>
+                        ISTOIC<span className="text-accent">AI</span>
                     </h1>
                     <div className="flex items-center justify-center gap-2 text-neutral-500">
                         <Terminal size={12} />
@@ -84,10 +83,14 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                     )}
 
                     {!SYSTEM_HASH ? (
-                         <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-6">
-                            <p className="text-[10px] text-amber-500 font-bold leading-relaxed">
-                                SETUP REQUIRED: Please set `VITE_VAULT_PIN_HASH` in your .env file.
-                            </p>
+                         <div className="p-6 bg-red-950/20 border border-red-500/20 rounded-2xl flex flex-col items-center text-center gap-4 animate-pulse">
+                            <ShieldAlert size={32} className="text-red-500" />
+                            <div>
+                                <h3 className="text-xs font-black text-red-500 uppercase tracking-widest mb-1">CONFIGURATION ERROR</h3>
+                                <p className="text-[10px] text-red-400 font-mono leading-relaxed">
+                                    VITE_VAULT_PIN_HASH is missing from environment. <br/> System functionality locked.
+                                </p>
+                            </div>
                          </div>
                     ) : (
                         <form onSubmit={handleLogin} className="space-y-6">

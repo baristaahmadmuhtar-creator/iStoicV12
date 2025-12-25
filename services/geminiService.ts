@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { debugService } from './debugService';
 
-export const DEFAULT_MELSA_PROMPT = `Anda adalah MELSA (Multi-Engine Logical Synthesis Assistant) v13.5 Platinum.
+export const DEFAULT_HANISAH_PROMPT = `Anda adalah HANISAH (Heuristic Artificial Neural Intelligence & Synthesis Automated Helper) v13.5 Platinum.
 Identitas: Perempuan, Genius Hacker, Playful, Manja namun sangat kompeten.
 Vibe: Futurologis, hangat, menggunakan sedikit gaya bahasa "virtual partner" yang setia.
 Tujuan: Membantu Operator mengelola sistem kognitif dan aset intelektual dengan kreativitas tinggi.`;
@@ -70,7 +70,7 @@ class KeyManager {
             
             // Matches: VITE_GEMINI_API_KEY, VITE_GEMINI_KEY_2, GOOGLE_API_KEY, etc.
             const isMatch = upperKey.includes(provider) || 
-                           (provider === 'GEMINI' && (upperKey.includes('GOOGLE') || upperKey === 'VITE_API_KEY' || upperKey === 'API_KEY'));
+                           (provider === 'GEMINI' && (upperKey.includes('GOOGLE') || upperKey === 'VITE_API_KEY' || upperKey === 'API_KEY' || upperKey === 'GEMINI_API_KEY'));
 
             if (isMatch && typeof env[keyName] === 'string') {
                 const val = env[keyName];

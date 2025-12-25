@@ -9,8 +9,8 @@ import {
 } from 'lucide-react';
 import { debugService } from '../../services/debugService';
 import { KEY_MANAGER, type ProviderStatus } from '../../services/geminiService';
-import { MELSA_KERNEL } from '../../services/melsaKernel';
-import { speakWithMelsa } from '../../services/elevenLabsService';
+import { HANISAH_KERNEL } from '../../services/melsaKernel';
+import { speakWithHanisah } from '../../services/elevenLabsService';
 import { type LogEntry } from '../../types';
 import Markdown from 'react-markdown';
 import { executeMechanicTool } from '../mechanic/mechanicTools';
@@ -66,7 +66,7 @@ export const SystemHealthView: React.FC = () => {
     // UI State
     const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'TERMINAL' | 'MEMORY'>('TERMINAL');
     const [isScanning, setIsScanning] = useState(false);
-    const [melsaDiagnosis, setMelsaDiagnosis] = useState<string | null>(null);
+    const [hanisahDiagnosis, setHanisahDiagnosis] = useState<string | null>(null);
     const [storageUsage, setStorageUsage] = useState({ used: 0, percent: 0 });
     const [realPing, setRealPing] = useState<number | null>(null);
     
@@ -128,9 +128,9 @@ export const SystemHealthView: React.FC = () => {
         setTimeout(() => setIsRotatingKeys(false), 1000);
     };
 
-    const runMelsaDiagnosis = async () => {
+    const runHanisahDiagnosis = async () => {
         setIsScanning(true);
-        setMelsaDiagnosis(null);
+        setHanisahDiagnosis(null);
         
         try {
             debugService.log('INFO', 'MECHANIC', 'SCAN_INIT', 'Running full system diagnostics...');
@@ -146,15 +146,15 @@ export const SystemHealthView: React.FC = () => {
                 debugService.log('INFO', 'MECHANIC', 'RAW_DATA', toolResultJson);
             }
             
-            const prompt = `[ROLE: MELSA_SYSTEM_MECHANIC]\nAnalisa data telemetri (CPU, RAM, Latency).\nBerikan laporan performa sistem gaya Cyberpunk.\n\n[RAW_DATA]\n${toolResultJson}\n\nFORMAT:\n1. **SYSTEM INTEGRITY**: (SCORE %)\n2. **METRICS SUMMARY**: (CPU/Mem/Net Status)\n3. **ANOMALIES**: (List - be specific)\n4. **OPTIMIZATION**: (Actionable steps)`;
+            const prompt = `[ROLE: HANISAH_SYSTEM_MECHANIC]\nAnalisa data telemetri (CPU, RAM, Latency).\nBerikan laporan performa sistem gaya Cyberpunk.\n\n[RAW_DATA]\n${toolResultJson}\n\nFORMAT:\n1. **SYSTEM INTEGRITY**: (SCORE %)\n2. **METRICS SUMMARY**: (CPU/Mem/Net Status)\n3. **ANOMALIES**: (List - be specific)\n4. **OPTIMIZATION**: (Actionable steps)`;
             
-            const response = await MELSA_KERNEL.execute(prompt, 'gemini-3-flash-preview', "System Diagnostic Context");
-            setMelsaDiagnosis(response.text || "Diagnostic matrix failed to render.");
+            const response = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview', "System Diagnostic Context");
+            setHanisahDiagnosis(response.text || "Diagnostic matrix failed to render.");
             debugService.log('INFO', 'MECHANIC', 'SCAN_COMPLETE', 'Diagnosis generated successfully.');
         } catch (e: any) {
             console.error(e);
             const errMsg = `⚠️ Neural Link Interrupted. ${e.message}`;
-            setMelsaDiagnosis(errMsg);
+            setHanisahDiagnosis(errMsg);
             debugService.log('ERROR', 'MECHANIC', 'SCAN_FAIL', errMsg);
         } finally {
             setIsScanning(false);
@@ -248,8 +248,8 @@ export const SystemHealthView: React.FC = () => {
     };
 
     const readDiagnosis = () => {
-        if (melsaDiagnosis) {
-            speakWithMelsa(melsaDiagnosis.replace(/[*#_`]/g, ''));
+        if (hanisahDiagnosis) {
+            speakWithHanisah(hanisahDiagnosis.replace(/[*#_`]/g, ''));
         }
     };
 
@@ -264,7 +264,7 @@ export const SystemHealthView: React.FC = () => {
             case 'clear': executeRepair('CLEAR_LOGS'); break;
             case 'refresh_keys': executeRepair('REFRESH_KEYS'); break;
             case 'optimize': executeRepair('OPTIMIZE_MEMORY'); break;
-            case 'diagnose': runMelsaDiagnosis(); break;
+            case 'diagnose': runHanisahDiagnosis(); break;
             case 'nuke_storage': if(confirm('WARNING: WIPE ALL LOCAL DATA?')) { localStorage.clear(); window.location.reload(); } break;
             case 'reload': window.location.reload(); break;
             default: debugService.log('WARN', 'CLI', 'UKN', `Command unknown: ${cmd}`);
@@ -300,18 +300,18 @@ export const SystemHealthView: React.FC = () => {
     };
 
     return (
-        <div className="min-h-full flex flex-col p-4 md:p-10 pb-40 animate-fade-in custom-scroll">
-            <div className="max-w-[1600px] mx-auto w-full space-y-8 h-full flex flex-col">
+        <div className="min-h-full flex flex-col p-4 md:p-12 lg:p-16 pb-40 animate-fade-in custom-scroll bg-noise">
+            <div className="max-w-[1600px] mx-auto w-full space-y-12 md:space-y-16 h-full flex flex-col">
                 
                 {/* HEADER */}
-                <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-black/5 dark:border-white/5 pb-6 shrink-0">
+                <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-black/5 dark:border-white/5 pb-10 shrink-0">
                     <div className="space-y-2">
                         <div className="flex items-center gap-3">
                             <div className="w-2 h-2 bg-[var(--accent-color)] rounded-full animate-pulse shadow-[0_0_10px_var(--accent-glow)]"></div>
                             <span className="tech-mono text-[9px] font-black uppercase tracking-[0.4em] text-neutral-500">SYSTEM_INTEGRITY_MODULE_v13.5</span>
                         </div>
-                        <h2 className="text-4xl md:text-6xl font-black italic uppercase tracking-tighter text-black dark:text-white leading-none">
-                            MELSA <span className="text-[var(--accent-color)]">MECHANIC</span>
+                        <h2 className="text-[12vw] md:text-[6rem] xl:text-[8rem] heading-heavy text-black dark:text-white leading-[0.85] tracking-tighter uppercase">
+                            SYSTEM <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-blue-500 animate-gradient-text">MECHANIC</span>
                         </h2>
                     </div>
                     
@@ -376,7 +376,7 @@ export const SystemHealthView: React.FC = () => {
                                                 <div className={`w-2 h-2 rounded-full ${p.status === 'HEALTHY' ? 'bg-emerald-500' : p.status === 'COOLDOWN' ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`}></div>
                                                 <div>
                                                     <p className="text-[10px] font-black uppercase tracking-wider dark:text-white">{p.id}</p>
-                                                    <p className="text-[8px] tech-mono text-neutral-500">{p.status === 'COOLDOWN' ? `COOLDOWN: ${p.cooldownRemaining}m` : 'OPERATIONAL'}</p>
+                                                    <p className="text-[8px] tech-mono text-neutral-500">{p.status === 'COOLDOWN' ? `RESTORING (${p.cooldownRemaining}m)` : 'OPERATIONAL'}</p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
@@ -433,13 +433,13 @@ export const SystemHealthView: React.FC = () => {
                             <div className="p-6 border-b border-black/5 dark:border-white/5 bg-[var(--accent-color)]/5 flex justify-between items-center">
                                 <div className="flex items-center gap-3">
                                     <Stethoscope size={20} className="text-[var(--accent-color)]" />
-                                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] dark:text-white">MELSA_DIAGNOSTICS</h3>
+                                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] dark:text-white">HANISAH_DIAGNOSTICS</h3>
                                 </div>
-                                {melsaDiagnosis && <button onClick={readDiagnosis} className="p-2 bg-white/10 rounded-full hover:text-[var(--accent-color)] transition-colors text-neutral-500"><Volume2 size={16} /></button>}
+                                {hanisahDiagnosis && <button onClick={readDiagnosis} className="p-2 bg-white/10 rounded-full hover:text-[var(--accent-color)] transition-colors text-neutral-500"><Volume2 size={16} /></button>}
                             </div>
                             <div className="flex-1 p-6 relative overflow-y-auto custom-scroll">
-                                {melsaDiagnosis ? (
-                                    <div className="prose dark:prose-invert prose-sm max-w-none animate-slide-up text-xs font-medium leading-relaxed"><Markdown>{melsaDiagnosis}</Markdown></div>
+                                {hanisahDiagnosis ? (
+                                    <div className="prose dark:prose-invert prose-sm max-w-none animate-slide-up text-xs font-medium leading-relaxed"><Markdown>{hanisahDiagnosis}</Markdown></div>
                                 ) : (
                                     <div className="absolute inset-0 flex flex-col items-center justify-center opacity-30 text-center p-8 space-y-4">
                                         <Activity size={48} className="text-neutral-500" />
@@ -448,7 +448,7 @@ export const SystemHealthView: React.FC = () => {
                                 )}
                             </div>
                             <div className="p-4 border-t border-black/5 dark:border-white/5 bg-zinc-50 dark:bg-white/[0.02]">
-                                <button onClick={runMelsaDiagnosis} disabled={isScanning} className={`w-full py-4 rounded-xl font-black uppercase text-[10px] tracking-[0.3em] flex items-center justify-center gap-3 transition-all ${isScanning ? 'bg-zinc-200 dark:bg-white/10 text-neutral-500' : 'bg-[var(--accent-color)] text-on-accent shadow-lg hover:shadow-[0_0_20px_var(--accent-glow)]'}`}>
+                                <button onClick={runHanisahDiagnosis} disabled={isScanning} className={`w-full py-4 rounded-xl font-black uppercase text-[10px] tracking-[0.3em] flex items-center justify-center gap-3 transition-all ${isScanning ? 'bg-zinc-200 dark:bg-white/10 text-neutral-500' : 'bg-[var(--accent-color)] text-on-accent shadow-lg hover:shadow-[0_0_20px_var(--accent-glow)]'}`}>
                                     {isScanning ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />} {isScanning ? 'RUNNING_ANALYSIS...' : 'START_DIAGNOSIS'}
                                 </button>
                             </div>
@@ -458,11 +458,11 @@ export const SystemHealthView: React.FC = () => {
 
                 {/* --- TERMINAL TAB --- */}
                 {activeTab === 'TERMINAL' && (
-                    <div className="flex-1 bg-[#050505] rounded-[32px] border border-white/10 flex flex-col shadow-2xl relative overflow-hidden font-mono animate-slide-up">
+                    <div className="flex-1 bg-terminal-void rounded-[32px] border border-white/10 flex flex-col shadow-2xl relative overflow-hidden font-mono animate-slide-up terminal-scanlines">
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-cyan-500 z-10"></div>
                         
                         {/* Toolbar */}
-                        <div className="p-3 border-b border-white/10 flex items-center justify-between bg-white/5 backdrop-blur-md">
+                        <div className="p-3 border-b border-white/10 flex items-center justify-between bg-white/5 backdrop-blur-md relative z-20">
                             <div className="flex items-center gap-4">
                                 <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400 flex items-center gap-2"><Terminal size={12} /> KERNEL_STREAM</span>
                                 <div className="h-4 w-[1px] bg-white/10"></div>
@@ -484,7 +484,7 @@ export const SystemHealthView: React.FC = () => {
                         </div>
 
                         {/* Logs */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-1.5 custom-scroll text-[10px]">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-1.5 custom-scroll text-[10px] relative z-10">
                             {filteredLogs.map(log => (
                                 <div key={log.id} className="flex flex-col gap-1 p-1.5 hover:bg-white/5 rounded transition-colors group">
                                     <div className={`flex gap-3 ${log.level === 'ERROR' ? 'text-red-400' : log.level === 'WARN' ? 'text-amber-400' : log.level === 'TRACE' ? 'text-neutral-500' : 'text-emerald-400'}`}>
@@ -504,7 +504,7 @@ export const SystemHealthView: React.FC = () => {
                         </div>
 
                         {/* CLI Input */}
-                        <div className="p-3 bg-[#0a0a0b] border-t border-white/10">
+                        <div className="p-3 bg-[#0a0a0b] border-t border-white/10 relative z-20">
                             <div className="relative flex items-end group">
                                 <span className="absolute left-3 top-3.5 text-[var(--accent-color)] font-black text-xs animate-pulse">{'>'}</span>
                                 <textarea

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     Activity, Terminal, Cpu, Zap, Wifi, HardDrive, 
@@ -7,13 +8,14 @@ import {
 } from 'lucide-react';
 import { debugService } from '../../services/debugService';
 import { KEY_MANAGER, type ProviderStatus } from '../../services/geminiService';
-import { MelsaKernel } from '../../services/melsaKernel';
-import { MELSA_BRAIN } from '../../services/melsaBrain';
+import { HanisahKernel } from '../../services/melsaKernel';
+import { HANISAH_BRAIN } from '../../services/melsaBrain';
 import { mechanicTools, executeMechanicTool } from './mechanicTools';
 import Markdown from 'react-markdown';
+import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
 
 // Local Kernel Instance for Mechanic Context Isolation
-const MECHANIC_KERNEL = new MelsaKernel();
+const MECHANIC_KERNEL = new HanisahKernel();
 
 // --- COMPONENTS ---
 
@@ -30,10 +32,11 @@ const MetricRing: React.FC<{
     const progress = Math.min(value / max, 1);
     const offset = circumference - progress * circumference;
     
+    // Use dynamic accent color if no specific color provided
     const strokeColor = color || (progress > 0.9 ? '#ef4444' : progress > 0.7 ? '#eab308' : 'var(--accent-color)');
 
     return (
-        <div className="relative flex flex-col items-center justify-center p-5 bg-white/5 dark:bg-white/[0.02] rounded-[24px] border border-black/5 dark:border-white/5 group hover:border-accent/30 transition-all duration-500">
+        <div className="relative flex flex-col items-center justify-center p-5 bg-white/5 dark:bg-white/[0.02] rounded-[24px] border border-black/5 dark:border-white/5 group hover:border-accent/30 transition-all duration-500 hover:shadow-[0_0_20px_rgba(var(--accent-rgb),0.1)]">
             <div className="relative w-24 h-24">
                 <svg className="w-full h-full transform -rotate-90">
                     <circle cx="48" cy="48" r={radius} stroke="currentColor" strokeWidth="8" fill="transparent" className="text-black/5 dark:text-white/5" />
@@ -74,7 +77,7 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
     const actionList = actionsContent.split('\n').filter(l => l.trim().match(/^\d+\./)).map(l => l.replace(/^\d+\./, '').trim());
 
     return (
-        <div className="bg-zinc-900/50 rounded-[32px] border border-white/10 p-6 md:p-8 my-4 space-y-6 font-sans animate-fade-in w-full shadow-2xl relative overflow-hidden">
+        <div className="bg-zinc-900/50 rounded-[32px] border border-white/10 p-6 md:p-8 my-4 space-y-6 font-sans animate-fade-in w-full shadow-2xl relative overflow-hidden ring-1 ring-accent/20">
             {/* Background Texture */}
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none"></div>
 
@@ -159,7 +162,7 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
             </div>
             
             <div className="pt-4 border-t border-white/5 flex justify-between items-center opacity-30">
-                <span className="text-[7px] font-mono text-neutral-500 uppercase tracking-[0.4em]">Verified_by_Melsa_Kernel</span>
+                <span className="text-[7px] font-mono text-neutral-500 uppercase tracking-[0.4em]">Verified_by_Hanisah_Kernel</span>
                 <div className="flex gap-1">
                     <div className="w-1 h-1 bg-white rounded-full"></div>
                     <div className="w-1 h-1 bg-white rounded-full"></div>
@@ -172,12 +175,12 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
 
 // --- MAIN VIEW ---
 
-export const MelsaMechanicView: React.FC = () => {
+export const HanisahMechanicView: React.FC = () => {
     const [health, setHealth] = useState<any>({ avgLatency: 0, memoryMb: 0, errorCount: 0 });
     const [providers, setProviders] = useState<ProviderStatus[]>([]);
     
     const [messages, setMessages] = useState<Array<{role: 'user'|'mechanic', text: string}>>([
-        { role: 'mechanic', text: "Melsa Mechanic Online. Diagnostic systems active. Ready for input." }
+        { role: 'mechanic', text: "Hanisah Mechanic Online. Diagnostic systems active. Ready for input." }
     ]);
     const [input, setInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -206,10 +209,69 @@ export const MelsaMechanicView: React.FC = () => {
         }
     }, [input]);
 
+    const executeRepair = async (action: string) => {
+        const uiId = action === 'REFRESH_KEYS' ? UI_REGISTRY.MECH_BTN_REFRESH_KEYS :
+                     action === 'OPTIMIZE_MEMORY' ? UI_REGISTRY.MECH_BTN_OPTIMIZE :
+                     action === 'CLEAR_LOGS' ? UI_REGISTRY.MECH_BTN_CLEAR_LOGS : UI_REGISTRY.MECH_BTN_HARD_RESET;
+        
+        debugService.logAction(uiId, FN_REGISTRY.MECH_EXECUTE_FIX, action);
+        debugService.log('INFO', 'MECHANIC', 'FIX_EXEC', `Initiating protocol: ${action}`);
+        
+        // Hard Reset Exception
+        if (action === 'HARD_RESET') {
+            if(confirm("PERINGATAN: System Reboot akan merefresh halaman.")) window.location.reload();
+            return;
+        }
+
+        // Artificial delay for UX processing feel
+        await new Promise(r => setTimeout(r, 800));
+
+        const result = await executeMechanicTool({ args: { action } });
+        debugService.log('INFO', 'MECHANIC', 'FIX_RESULT', result);
+        
+        // Immediate Local State Updates
+        if (action === 'REFRESH_KEYS') {
+            setProviders(KEY_MANAGER.getAllProviderStatuses());
+        } else if (action === 'CLEAR_LOGS') {
+            setMessages(prev => [{ role: 'mechanic', text: "Logs cleared. Buffer reset." }]);
+            debugService.clear(); 
+        } else if (action === 'OPTIMIZE_MEMORY') {
+            setHealth(debugService.getSystemHealth());
+        }
+    };
+
+    const handleHydraRefresh = async () => {
+        await executeRepair('REFRESH_KEYS');
+    };
+
+    const runHanisahDiagnosis = async () => {
+        debugService.logAction(UI_REGISTRY.MECH_BTN_SCAN, FN_REGISTRY.MECH_RUN_DIAGNOSIS, 'START');
+        // Add user message to log flow
+        setMessages(prev => [...prev, { role: 'user', text: "Run full diagnostic scan." }]);
+        setIsProcessing(true);
+        
+        try {
+            debugService.log('INFO', 'MECHANIC', 'SCAN_INIT', 'Running full system diagnostics...');
+            const toolResultJson = await executeMechanicTool({ args: { action: 'GET_DIAGNOSTICS' } });
+            
+            const prompt = `[ROLE: HANISAH_SYSTEM_MECHANIC]\nAnalisa data telemetri (CPU, RAM, Latency).\nBerikan laporan performa sistem gaya Cyberpunk.\n\n[RAW_DATA]\n${toolResultJson}\n\nFORMAT:\n1. **SYSTEM INTEGRITY**: (SCORE %)\n2. **METRICS SUMMARY**: (CPU/Mem/Net Status)\n3. **ANOMALIES**: (List - be specific)\n4. **OPTIMIZATION**: (Actionable steps)`;
+            
+            const response = await MECHANIC_KERNEL.execute(prompt, 'gemini-3-flash-preview');
+            setMessages(prev => [...prev, { role: 'mechanic', text: response.text || "Diagnostic failed." }]);
+            debugService.log('INFO', 'MECHANIC', 'SCAN_COMPLETE', 'Diagnosis generated successfully.');
+        } catch (e: any) {
+            setMessages(prev => [...prev, { role: 'mechanic', text: `⚠️ **DIAGNOSTIC FAILURE**: ${e.message}` }]);
+            debugService.log('ERROR', 'MECHANIC', 'SCAN_FAIL', e.message);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
     const handleCommand = async (cmdOverride?: string) => {
         const cmd = cmdOverride || input.trim();
         if (!cmd || isProcessing) return;
 
+        debugService.logAction(UI_REGISTRY.MECH_INPUT_CLI, FN_REGISTRY.MECH_CLI_EXEC, cmd);
         setMessages(prev => [...prev, { role: 'user', text: cmd }]);
         setInput('');
         setIsProcessing(true);
@@ -221,14 +283,12 @@ export const MelsaMechanicView: React.FC = () => {
                 undefined, 
                 undefined, 
                 {
-                    systemInstruction: MELSA_BRAIN.getMechanicInstruction(),
+                    systemInstruction: HANISAH_BRAIN.getMechanicInstruction(),
                     tools: [mechanicTools]
                 }
             );
 
             let responseText = "";
-            
-            // Initial mechanic message placeholder
             setMessages(prev => [...prev, { role: 'mechanic', text: "..." }]);
 
             for await (const chunk of stream) {
@@ -249,52 +309,9 @@ export const MelsaMechanicView: React.FC = () => {
                     });
 
                     const result = await executeMechanicTool(chunk.functionCall);
+                    const synthesisPrompt = `Tool Result: ${result}.\n\nProvide a human-readable status update.`;
                     
-                    // Specialized Summarization Engine Logic
-                    // We use Flash to parse the raw tool JSON into the structured UI report.
-                    let synthesisPrompt = `Tool Result: ${result}.\n\nProvide a human-readable status update.`;
-
-                    if (chunk.functionCall.name === 'system_mechanic_tool') {
-                        const action = (chunk.functionCall.args as any)?.action;
-                        if (action === 'GET_DIAGNOSTICS') {
-                            synthesisPrompt = `
-[DATA_FEED_RAW]
-${result}
-
-[DIRECTIVE]
-You are acting as the specialized Melsa Summarization Engine.
-Translate the technical JSON data above into a high-level "Mission Brief".
-
-[INTEGRITY_LOGIC]
-- Score: Start at 100%. Deduct 10% per COOLDOWN/OFFLINE provider, 5% if Latency > 1000ms.
-- Memory: Low usage (<100MB) is EXCELLENT (healthy baseline), not ineffective. High usage (>500MB) is a warning.
-
-[REQUIRED_MARKDOWN_STRUCTURE]
-### SYSTEM INTEGRITY: [Calculated_Score]%
-
-### COGNITIVE INSIGHT
-[Write a professional but flavor-rich mission-brief style summary here. 
-Explain the system's current readiness in natural language. 
-Address the latency and memory usage from a mechanic's perspective.
-Avoid sounding robotic. Talk to the Operator.]
-
-### ⚠️ ANOMALIES DETECTED
-- [List specific issues or "None. All subsystems operating within normal parameters."]
-
-### ⚡ RECOMMENDED ACTIONS
-1. [Clear maintenance step]
-2. [Tool execution suggestion if relevant, e.g., 'Run 'REFRESH_KEYS' protocol']
-`;
-                        }
-                    }
-                    
-                    // Execute the synthesis via Kernel (effectively integrating the "Summarizer model")
-                    const followUp = await MECHANIC_KERNEL.execute(
-                        synthesisPrompt, 
-                        'gemini-3-flash-preview',
-                        undefined,
-                        undefined
-                    );
+                    const followUp = await MECHANIC_KERNEL.execute(synthesisPrompt, 'gemini-3-flash-preview');
                     
                     if (followUp.text) {
                         setMessages(prev => {
@@ -320,12 +337,12 @@ Avoid sounding robotic. Talk to the Operator.]
     };
 
     return (
-        <div className="h-full flex flex-col p-4 md:p-8 pb-32 overflow-hidden font-sans animate-fade-in bg-zinc-50 dark:bg-[#050505] text-black dark:text-white">
+        <div className="h-full flex flex-col p-4 md:p-12 lg:p-16 pb-32 overflow-hidden font-sans animate-fade-in bg-zinc-50 dark:bg-[#050505] text-black dark:text-white">
             {/* Header */}
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-black/5 dark:border-white/5 pb-6 shrink-0 gap-4">
                 <div>
-                    <h1 className="text-4xl md:text-6xl font-black italic tracking-tighter uppercase leading-none">
-                        MELSA <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-blue-500">MECHANIC</span>
+                    <h1 className="text-[10vw] lg:text-[7rem] heading-heavy text-black dark:text-white leading-[0.85] tracking-tighter uppercase">
+                        HANISAH <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-blue-500 animate-gradient-text">MECHANIC</span>
                     </h1>
                     <div className="flex items-center gap-2 mt-2">
                         <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_#10b981]"></div>
@@ -361,22 +378,22 @@ Avoid sounding robotic. Talk to the Operator.]
                             <Zap size={12} className="text-accent" /> RAPID_MAINTENANCE
                         </h3>
                         <div className="grid grid-cols-1 gap-3">
-                            <button onClick={() => handleCommand("Execute a full system diagnostic scan. Report findings.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
+                            <button onClick={runHanisahDiagnosis} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
                                 <Activity size={16} className="text-accent group-hover:text-on-accent transition-colors" /> 
                                 <span>FULL_SYSTEM_SCAN</span>
                                 <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
-                            <button onClick={() => handleCommand("Cycle the Hydra Key Engine. Refresh all provider pools.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
+                            <button onClick={() => executeRepair('REFRESH_KEYS')} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
                                 <RefreshCw size={16} className="text-accent group-hover:text-on-accent transition-colors" /> 
                                 <span>ROTATE_UPLINKS</span>
                                 <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
-                            <button onClick={() => handleCommand("Optimize memory usage and trigger buffer cleanup.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
+                            <button onClick={() => executeRepair('OPTIMIZE_MEMORY')} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
                                 <Cpu size={16} className="text-accent group-hover:text-on-accent transition-colors" /> 
                                 <span>MEMORY_COMPACT</span>
                                 <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
-                            <button onClick={() => handleCommand("Immediate purge of current diagnostic logs.")} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-red-500 hover:text-white border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
+                            <button onClick={() => executeRepair('CLEAR_LOGS')} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-red-500 hover:text-white border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
                                 <Trash2 size={16} className="text-red-500 group-hover:text-white transition-colors" /> 
                                 <span>NUKE_LOG_BUFFER</span>
                                 <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -409,12 +426,9 @@ Avoid sounding robotic. Talk to the Operator.]
                 </div>
 
                 {/* Right: Neural Console */}
-                <div className="flex-1 bg-black/90 dark:bg-black/40 border border-black/5 dark:border-white/10 rounded-[32px] flex flex-col overflow-hidden relative shadow-2xl backdrop-blur-xl">
-                    {/* CRT Scanline Effect */}
-                    <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-10 bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20"></div>
-                    
+                <div className="flex-1 bg-terminal-void border border-black/5 dark:border-white/10 rounded-[32px] flex flex-col overflow-hidden relative shadow-2xl backdrop-blur-xl ring-1 ring-accent/20 terminal-scanlines">
                     {/* Header Strip */}
-                    <div className="h-12 bg-white/5 border-b border-white/5 flex items-center px-5 justify-between shrink-0">
+                    <div className="h-12 bg-white/5 border-b border-white/5 flex items-center px-5 justify-between shrink-0 relative z-20">
                         <div className="flex gap-2">
                             <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50 shadow-[0_0_8px_rgba(239,68,68,0.2)]"></div>
                             <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20 border border-yellow-500/50 shadow-[0_0_8px_rgba(234,179,8,0.2)]"></div>
@@ -427,7 +441,7 @@ Avoid sounding robotic. Talk to the Operator.]
                     </div>
 
                     {/* Output Stream */}
-                    <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scroll font-mono relative z-0">
+                    <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scroll font-mono relative z-20">
                         {messages.map((m, i) => (
                             <div key={i} className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
                                 {m.role === 'mechanic' && (
@@ -442,7 +456,7 @@ Avoid sounding robotic. Talk to the Operator.]
                                         <div className={`p-4 rounded-xl text-xs leading-relaxed border ${
                                             m.role === 'user' 
                                             ? 'bg-white/10 text-white border-white/10 rounded-tr-none' 
-                                            : 'bg-[#0a0a0b]/80 text-emerald-400 border-emerald-500/20 rounded-tl-none shadow-[0_0_15px_rgba(16,185,129,0.05)]'
+                                            : 'bg-black/40 text-accent border-accent/20 rounded-tl-none shadow-[0_0_15px_var(--accent-glow)] text-terminal-glow'
                                         }`}>
                                             <Markdown>{m.text}</Markdown>
                                         </div>
@@ -472,7 +486,7 @@ Avoid sounding robotic. Talk to the Operator.]
                                 onKeyDown={handleKeyDown}
                                 placeholder="ENTER_SYSTEM_COMMAND..."
                                 rows={1}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-12 text-sm text-emerald-400 font-mono focus:outline-none focus:border-accent/50 focus:bg-white/10 transition-all placeholder:text-neutral-800 relative z-10 resize-none overflow-hidden custom-scroll"
+                                className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-12 text-sm text-accent font-mono focus:outline-none focus:border-accent/50 focus:bg-white/10 transition-all placeholder:text-neutral-800 relative z-10 resize-none overflow-hidden custom-scroll"
                                 disabled={isProcessing}
                                 autoFocus
                             />

@@ -1,458 +1,418 @@
 
-import { AlertCircle, Archive, ArrowLeft, Bookmark, MousePointerSquareDashed, Plus, Trash2, CheckCircle2, ArchiveRestore, Search, FileText, Sparkles, ListTodo, RefreshCw, CheckSquare, Hash, Calendar, ChevronRight, LayoutTemplate, Shield, Database } from 'lucide-react';
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { 
+  FileText, Search, Plus, CheckSquare, 
+  Archive, FolderOpen, Database, 
+  ListTodo, ArrowUpRight, Hash, Pin, Trash2, X
+} from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { type Note } from '../../types';
-import { NoteBatchActions } from './NoteBatchActions';
 import { AdvancedEditor } from './AdvancedEditor';
-import useLocalStorage from '../../hooks/useLocalStorage';
-import { MELSA_KERNEL } from '../../services/melsaKernel';
+import { NoteBatchActions } from './NoteBatchActions';
+// STRICT REGISTRY
+import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
+import { debugService } from '../../services/debugService';
 
-const SmartNotesView: React.FC<{notes: Note[], setNotes: any}> = ({ notes, setNotes }) => {
-    const [language] = useLocalStorage<'id' | 'en'>('app_language', 'id');
-    const [fontSize, setFontSize] = useLocalStorage<number>('notes_font_size', 18);
-    const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [viewMode, setViewMode] = useState<'edit' | 'tasks' | 'preview'>('preview');
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [isSelectionMode, setIsSelectionMode] = useState(false);
-    const [viewArchive, setViewArchive] = useState(false);
-    const [newTaskText, setNewTaskText] = useState('');
-    const [isGeneratingTasks, setIsGeneratingTasks] = useState(false);
+interface SmartNotesViewProps {
+  notes: Note[];
+  setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
+}
 
-    // Optimized filtering
-    const filteredNotes = useMemo(() => {
-        const query = searchQuery.toLowerCase();
-        return notes
-            .filter(n => (!!n.is_archived === viewArchive) && (n.title.toLowerCase().includes(query) || n.content.toLowerCase().includes(query)))
-            .sort((a, b) => (a.is_pinned === b.is_pinned ? new Date(b.updated).getTime() - new Date(a.updated).getTime() : a.is_pinned ? -1 : 1));
-    }, [notes, searchQuery, viewArchive]);
+export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'editor'>('grid');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [filterType, setFilterType] = useState<'all' | 'archived'>('all');
+  const [editorFontSize, setEditorFontSize] = useState(16);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-    const activeNote = useMemo(() => notes.find(n => n.id === activeNoteId), [notes, activeNoteId]);
+  // Safety check: if active note is deleted externally
+  useEffect(() => {
+      if (activeNoteId && !notes.find(n => n.id === activeNoteId)) {
+          setActiveNoteId(null);
+          setViewMode('grid');
+      }
+  }, [notes, activeNoteId]);
 
-    // Secure HTML Sanitizer
-    const sanitizeHTML = (html: string) => {
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const dangerousTags = ['script', 'iframe', 'object', 'embed', 'form'];
-        dangerousTags.forEach(tag => doc.querySelectorAll(tag).forEach(el => el.remove()));
-        doc.querySelectorAll('*').forEach(el => {
-            const attrs = el.attributes;
-            for (let i = attrs.length - 1; i >= 0; i--) {
-                const name = attrs[i].name;
-                if (name.startsWith('on') || (name === 'href' && attrs[i].value.trim().startsWith('javascript:'))) {
-                    el.removeAttribute(name);
-                }
-            }
-        });
-        return doc.body.innerHTML;
+  const filteredNotes = useMemo(() => {
+    return notes
+      .filter(n => {
+        const matchesSearch = n.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                              n.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              n.tags?.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesType = filterType === 'archived' ? n.is_archived : !n.is_archived;
+        return matchesSearch && matchesType;
+      })
+      .sort((a, b) => {
+         if (a.is_pinned && !b.is_pinned) return -1;
+         if (!a.is_pinned && b.is_pinned) return 1;
+         return new Date(b.updated).getTime() - new Date(a.updated).getTime();
+      });
+  }, [notes, searchQuery, filterType]);
+
+  const activeNote = useMemo(() => notes.find(n => n.id === activeNoteId), [notes, activeNoteId]);
+
+  // Strict Handlers
+  const handleCreateNote = () => {
+    debugService.logAction(UI_REGISTRY.NOTES_BTN_CREATE, FN_REGISTRY.NOTE_CREATE, 'NEW_NOTE');
+    const newNote: Note = {
+      id: uuidv4(),
+      title: '', 
+      content: '',
+      tags: [],
+      created: new Date().toISOString(),
+      updated: new Date().toISOString(),
+      tasks: [],
+      is_pinned: false,
+      is_archived: false
     };
+    setNotes(prev => [newNote, ...prev]);
+    setActiveNoteId(newNote.id);
+    setViewMode('editor');
+  };
 
-    const handleUpdate = useCallback((id: string, updates: Partial<Note>) => {
-        setNotes((prev: Note[]) => prev.map(n => n.id === id ? { ...n, ...updates, updated: new Date().toISOString() } : n));
-    }, [setNotes]);
+  const handleSearchFocus = () => {
+      debugService.logAction(UI_REGISTRY.NOTES_INPUT_SEARCH, FN_REGISTRY.NOTE_SEARCH, 'FOCUS');
+      setIsSearchFocused(true);
+  };
 
-    const createNote = () => {
-        const id = uuidv4();
-        const newNote: Note = { id, title: '', content: '', tags: [], created: new Date().toISOString(), updated: new Date().toISOString(), is_archived: false, is_pinned: false, tasks: [] };
-        setNotes([newNote, ...notes]);
-        setActiveNoteId(id);
-        setViewMode('edit');
-    };
+  const handleToggleFilter = () => {
+      const newFilter = filterType === 'all' ? 'archived' : 'all';
+      debugService.logAction(UI_REGISTRY.NOTES_BTN_FILTER_ARCHIVE, FN_REGISTRY.NOTE_SEARCH, newFilter.toUpperCase());
+      setFilterType(newFilter);
+  };
 
-    const toggleSelection = (id: string) => {
-        const newSet = new Set(selectedIds);
-        if (newSet.has(id)) newSet.delete(id);
-        else newSet.add(id);
-        setSelectedIds(newSet);
-    };
+  const handleToggleBatchMode = () => {
+      debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, isSelectionMode ? 'OFF' : 'ON');
+      setIsSelectionMode(!isSelectionMode);
+  };
 
-    const handleGenerateTasks = async () => {
-        if (!activeNote || isGeneratingTasks) return;
-        setIsGeneratingTasks(true);
-        try {
-            const prompt = `Analisa konten catatan ini secara mendalam:\n\nJUDUL: ${activeNote.title}\nISI: ${activeNote.content.replace(/<[^>]*>/g, '')}\n\nInstruksi: Berdasarkan konten di atas, buatkan daftar tugas (to-do list) yang konkret, actionable, dan relevan. Return HANYA dalam format JSON Array string murni (contoh: ["Task 1", "Task 2"]). Jangan ada markdown block atau teks tambahan lain. Maksimal 5 tugas.`;
-            
-            const response = await MELSA_KERNEL.execute(prompt, 'gemini-3-flash-preview');
-            const cleanText = response.text?.replace(/```json/g, '').replace(/```/g, '').trim() || "[]";
-            
-            let newTasks: string[] = [];
-            try {
-                newTasks = JSON.parse(cleanText);
-            } catch (e) {
-                console.error("JSON Parse Error:", e);
-            }
+  const handleNoteClick = (n: Note) => {
+      if (isSelectionMode) {
+          toggleSelection(n.id);
+      } else {
+          debugService.logAction(UI_REGISTRY.NOTES_CARD_ITEM, FN_REGISTRY.NOTE_UPDATE, 'OPEN_EDITOR');
+          setActiveNoteId(n.id);
+          setViewMode('editor');
+      }
+  };
 
-            if (Array.isArray(newTasks) && newTasks.length > 0) {
-                const taskObjects = newTasks.map(t => ({ id: uuidv4(), text: t, isCompleted: false }));
-                handleUpdate(activeNote.id, { tasks: [...(activeNote.tasks || []), ...taskObjects] });
-            }
-        } catch (error) {
-            console.error("Auto Task Gen Failed", error);
-        } finally {
-            setIsGeneratingTasks(false);
-        }
-    };
+  const handleDeleteItem = (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, id);
+      handleDeleteNote(id);
+  };
 
-    // Task Calculation
-    const totalTasks = activeNote?.tasks?.length || 0;
-    const completedTasks = activeNote?.tasks?.filter(t => t.isCompleted).length || 0;
-    const progress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+  const handleSaveNote = useCallback((title: string, content: string, tasks?: any[]) => {
+    if (!activeNoteId) return;
+    setNotes(prevNotes => prevNotes.map(n => {
+      if (n.id === activeNoteId) {
+         return { 
+             ...n, 
+             content, 
+             title: title.trim() || 'Untitled Note', 
+             tasks: tasks || n.tasks, 
+             updated: new Date().toISOString() 
+         };
+      }
+      return n;
+    }));
+  }, [activeNoteId, setNotes]);
 
-    return (
-        <div className="min-h-full flex flex-col p-2 md:p-6 lg:p-8 animate-fade-in pb-32 md:pb-40 h-screen">
-             <div className="flex-1 bg-white dark:bg-[#0a0a0b] rounded-[32px] md:rounded-[40px] shadow-sm border border-black/5 dark:border-white/5 flex flex-row relative overflow-hidden ring-1 ring-black/5 dark:ring-white/5">
-                
-                {/* DELETE MODAL */}
-                {showDeleteConfirm && (
-                    <div className="fixed inset-0 z-[3100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
-                        <div className="bg-[#121214] border border-red-500/30 p-8 rounded-[32px] max-w-sm w-full shadow-[0_0_50px_rgba(220,38,38,0.2)] animate-slide-up text-center relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-1 bg-red-500 shadow-[0_0_20px_#ef4444]"></div>
-                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/20">
-                                <Trash2 className="text-red-500" size={32} />
-                            </div>
-                            <h3 className="text-xl font-black text-white uppercase italic mb-2 tracking-tighter">CONFIRM_PURGE?</h3>
-                            <p className="text-[10px] text-neutral-400 font-bold tech-mono uppercase tracking-widest mb-8">This action is irreversible. Data will be lost.</p>
-                            <div className="flex gap-3">
-                                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all border border-white/5">ABORT</button>
-                                <button onClick={() => { 
-                                    const ids = isSelectionMode ? Array.from(selectedIds) : [activeNoteId];
-                                    setNotes(notes.filter(n => !ids.includes(n.id)));
-                                    setSelectedIds(new Set());
-                                    setIsSelectionMode(false);
-                                    setActiveNoteId(null);
-                                    setShowDeleteConfirm(false);
-                                }} className="flex-1 py-4 bg-red-600 hover:bg-red-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(220,38,38,0.4)]">EXECUTE</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+  const handleDeleteNote = useCallback((id: string) => {
+      if (confirm("Are you sure you want to delete this note permanently?")) {
+          setNotes(prevNotes => prevNotes.filter(n => n.id !== id));
+          if (activeNoteId === id) {
+              setActiveNoteId(null);
+              setViewMode('grid');
+          }
+      }
+  }, [activeNoteId, setNotes]);
 
-                {/* LEFT PANEL: LIST VIEW */}
-                <div className={`${activeNote ? 'hidden lg:flex' : 'flex'} flex-col w-full lg:w-[380px] xl:w-[450px] border-r border-black/5 dark:border-white/5 transition-all bg-zinc-50/50 dark:bg-[#0c0c0e]`}>
-                    <header className="p-4 md:p-6 border-b border-black/5 dark:border-white/5 shrink-0 bg-white/50 dark:bg-white/[0.01] backdrop-blur-sm">
-                        <div className="flex justify-between items-start gap-4 mb-6">
-                            <div>
-                                <h2 className="text-3xl font-black italic tracking-tighter text-black dark:text-white uppercase leading-none">
-                                    {viewArchive ? 'ARCHIVE' : 'VAULT'} <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-purple-500">DB</span>
-                                </h2>
-                                <p className="text-[8px] font-black tech-mono text-neutral-400 mt-2 uppercase tracking-[0.3em] flex items-center gap-2">
-                                    <div className={`w-1.5 h-1.5 rounded-full ${viewArchive ? 'bg-amber-500' : 'bg-emerald-500'} animate-pulse`}></div>
-                                    {viewArchive ? 'COLD_STORAGE' : 'SECURE_ACTIVE_NODES'}
-                                </p>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => setViewArchive(!viewArchive)} className={`h-10 w-10 rounded-xl flex items-center justify-center border transition-all ${viewArchive ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/10 text-neutral-400 hover:text-black dark:hover:text-white'}`} title="Toggle Archive">
-                                    {viewArchive ? <ArchiveRestore size={18} /> : <Archive size={18}/>}
-                                </button>
-                                <button onClick={() => setIsSelectionMode(!isSelectionMode)} className={`h-10 w-10 rounded-xl flex items-center justify-center border transition-all ${isSelectionMode ? 'bg-[var(--accent-color)] text-on-accent border-[var(--accent-color)] shadow-md' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/10 text-neutral-400 hover:text-black dark:hover:text-white'}`} title="Select Mode">
-                                    <MousePointerSquareDashed size={18}/>
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div className="flex gap-2">
-                            <div className="relative flex-1 group">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-accent font-black text-xs animate-pulse">{'>'}</span>
-                                <input 
-                                    value={searchQuery} 
-                                    onChange={e => setSearchQuery(e.target.value)} 
-                                    className="w-full h-12 bg-white dark:bg-black/40 border border-black/5 dark:border-white/10 rounded-xl pl-10 pr-4 text-[11px] font-mono font-bold outline-none focus:border-accent/50 focus:bg-white dark:focus:bg-black/60 transition-all dark:text-white placeholder:text-neutral-500 uppercase tracking-wider" 
-                                    placeholder="QUERY_DATABASE..." 
-                                />
-                            </div>
-                            <button onClick={createNote} className="h-12 w-12 bg-black dark:bg-white text-white dark:text-black rounded-xl flex items-center justify-center transition-transform active:scale-95 shadow-lg hover:scale-105">
-                                <Plus size={20} strokeWidth={3}/>
-                            </button>
-                        </div>
-                    </header>
+  const toggleSelection = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
+  };
 
-                    <div className="flex-1 overflow-y-auto p-4 custom-scroll space-y-3">
-                        {filteredNotes.map(n => {
-                            const isActive = activeNoteId === n.id;
-                            const isSelected = selectedIds.has(n.id);
-                            
-                            return (
-                                <div 
-                                    key={n.id} 
-                                    onClick={() => isSelectionMode ? toggleSelection(n.id) : (setActiveNoteId(n.id), setViewMode('preview'))} 
-                                    className={`
-                                        p-5 rounded-[20px] border cursor-pointer transition-all duration-500 relative group overflow-hidden
-                                        ${isSelected 
-                                            ? 'bg-accent/10 border-accent ring-1 ring-accent' 
-                                            : isActive 
-                                                ? 'bg-white dark:bg-white/[0.08] border-accent/50 shadow-[0_0_30px_rgba(var(--accent-rgb),0.1)] ring-1 ring-accent/20 translate-x-2' 
-                                                : 'bg-white dark:bg-white/[0.02] border-black/5 dark:border-white/5 hover:border-accent/20 hover:bg-white/80 dark:hover:bg-white/[0.04]'
-                                        }
-                                    `}
-                                >
-                                    {/* Pinned Glow */}
-                                    {n.is_pinned && (
-                                        <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-accent/20 to-transparent rounded-bl-[40px] pointer-events-none"></div>
-                                    )}
+  const batchDelete = useCallback(() => {
+    if (confirm(`PERMANENTLY DELETE ${selectedIds.size} ITEMS? This cannot be undone.`)) {
+        debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'DELETE_MANY');
+        setNotes(prevNotes => prevNotes.filter(n => !selectedIds.has(n.id)));
+        setSelectedIds(new Set());
+        setIsSelectionMode(false);
+    }
+  }, [selectedIds, setNotes]);
 
-                                    <div className="flex justify-between items-start mb-2 relative z-10">
-                                        <h3 className={`text-[12px] font-black uppercase italic leading-tight truncate flex-1 pr-4 ${isActive ? 'text-black dark:text-white' : 'text-neutral-700 dark:text-neutral-300 group-hover:text-accent'}`}>
-                                            {n.title || 'UNTITLED_DATA_NODE'}
-                                        </h3>
-                                        {isSelectionMode ? (
-                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-accent border-accent text-on-accent' : 'border-neutral-300 dark:border-neutral-700'}`}>
-                                                {isSelected && <CheckSquare size={12} strokeWidth={4} />}
-                                            </div>
-                                        ) : n.is_pinned && <Bookmark size={14} className="text-accent fill-accent" />}
-                                    </div>
-                                    
-                                    <div className="text-[10px] text-neutral-500 font-medium line-clamp-2 leading-relaxed relative z-10 dark:text-neutral-400 min-h-[2.5em] font-mono opacity-80">
-                                        {n.content.replace(/<[^>]*>/g, '').substring(0, 100) || "// EMPTY_BUFFER"}
-                                    </div>
+  const batchArchive = useCallback(() => {
+      debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'ARCHIVE_MANY');
+      const selected = notes.filter(n => selectedIds.has(n.id));
+      const allArchived = selected.every(n => n.is_archived);
+      const targetState = !allArchived;
 
-                                    <div className="mt-4 flex justify-between items-end border-t border-black/5 dark:border-white/5 pt-3">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[8px] tech-mono uppercase text-neutral-400 font-bold bg-zinc-100 dark:bg-white/5 px-2 py-1 rounded">
-                                                {new Date(n.updated).toLocaleDateString(undefined, {month:'short', day:'numeric'})}
-                                            </span>
-                                            {n.tasks && n.tasks.length > 0 && (
-                                                <span className={`text-[8px] tech-mono font-bold flex items-center gap-1 ${isActive ? 'text-accent' : 'text-neutral-400'}`}>
-                                                    <ListTodo size={10} /> {n.tasks.filter(t=>t.isCompleted).length}/{n.tasks.length}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    
-                                    {isActive && !isSelectionMode && (
-                                        <div className="absolute right-0 top-0 bottom-0 w-1 bg-accent"></div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                        
-                        {filteredNotes.length === 0 && (
-                            <div className="py-20 text-center flex flex-col items-center justify-center text-neutral-400 opacity-50 gap-4">
-                                <div className="w-20 h-20 rounded-3xl bg-zinc-100 dark:bg-white/5 flex items-center justify-center border border-black/5 dark:border-white/5">
-                                    <Database size={32} strokeWidth={1.5} />
-                                </div>
-                                <p className="text-[10px] font-black uppercase tracking-[0.3em]">DATABASE_EMPTY</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
+      setNotes(prevNotes => prevNotes.map(n => selectedIds.has(n.id) ? { ...n, is_archived: targetState } : n));
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+  }, [notes, selectedIds, setNotes]);
+  
+  const batchPin = useCallback(() => {
+      debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'PIN_MANY');
+      const selected = notes.filter(n => selectedIds.has(n.id));
+      const allPinned = selected.every(n => n.is_pinned);
+      const targetState = !allPinned;
 
-                {/* RIGHT PANEL: DETAIL VIEW */}
-                <div className={`${!activeNote ? 'hidden lg:flex' : 'flex'} flex-1 flex-col bg-white dark:bg-[#0a0a0b] lg:bg-white lg:dark:bg-black relative`}>
-                    {activeNote ? (
-                        <div className="flex-1 flex flex-col animate-slide-up overflow-hidden h-full">
-                            {/* Sticky Toolbar */}
-                            <header className="px-4 py-3 md:px-6 flex items-center justify-between border-b border-black/5 dark:border-white/5 bg-white/80 dark:bg-[#0a0a0b]/90 backdrop-blur-xl sticky top-0 z-30 transition-all">
-                                <div className="flex items-center gap-3">
-                                    <button onClick={() => setActiveNoteId(null)} className="lg:hidden p-2.5 bg-zinc-100 dark:bg-white/5 rounded-xl hover:bg-zinc-200 dark:hover:bg-white/10 transition-colors">
-                                        <ArrowLeft size={18} />
-                                    </button>
-                                    <div className="hidden lg:flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-accent rounded-full animate-pulse shadow-[0_0_8px_var(--accent-color)]"></div>
-                                        <span className="text-[9px] font-black tech-mono uppercase tracking-[0.2em] text-neutral-500">DECRYPTED_SESSION_ID_{activeNote.id.slice(0,4)}</span>
-                                    </div>
-                                </div>
+      setNotes(prevNotes => prevNotes.map(n => selectedIds.has(n.id) ? { ...n, is_pinned: targetState } : n));
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+  }, [notes, selectedIds, setNotes]);
 
-                                <div className="flex bg-zinc-100 dark:bg-white/5 p-1 rounded-xl border border-black/5 dark:border-white/5">
-                                    {[
-                                        { id: 'preview', icon: <FileText size={14} />, label: 'READ' },
-                                        { id: 'edit', icon: <LayoutTemplate size={14} />, label: 'EDIT' },
-                                        { id: 'tasks', icon: <ListTodo size={14} />, label: 'TASKS' }
-                                    ].map((m: any) => (
+  const handleSelectAll = useCallback(() => {
+      const visibleIds = filteredNotes.map(n => n.id);
+      const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+      
+      if (allVisibleSelected) {
+          setSelectedIds(new Set());
+      } else {
+          setSelectedIds(new Set(visibleIds));
+      }
+  }, [filteredNotes, selectedIds]);
+
+  return (
+    <div className="h-[calc(100dvh-2rem)] md:h-[calc(100vh-2rem)] flex flex-col animate-fade-in bg-noise overflow-hidden">
+      
+      {/* HEADER SECTION */}
+      <div className="px-4 md:px-8 lg:px-12 pt-4 md:pt-8 pb-4 shrink-0 flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 z-20">
+          <div className="space-y-3 w-full xl:w-auto">
+              <div className="flex items-center gap-3 animate-slide-down">
+                  <div className="px-3 py-1 rounded-lg bg-accent/10 border border-accent/20 tech-mono text-[9px] font-black uppercase text-accent tracking-[0.3em]">
+                      SECURE_VAULT_v2
+                  </div>
+                  <span className="text-neutral-500 tech-mono text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                      <Database size={10} /> ENCRYPTED_STORAGE
+                  </span>
+              </div>
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-black italic tracking-tighter text-black dark:text-white leading-[0.85] uppercase drop-shadow-sm animate-slide-down" style={{ animationDelay: '50ms' }}>
+                  SMART <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-purple-500 animate-gradient-text">VAULT</span>
+              </h1>
+          </div>
+
+          {/* Controls */}
+          <div className="flex items-center gap-3 w-full xl:w-auto animate-slide-down" style={{ animationDelay: '100ms' }}>
+               {/* Search Bar */}
+               <div className={`relative transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${isSearchFocused ? 'flex-1 xl:w-96' : 'flex-1 xl:w-64'}`}>
+                  <input 
+                     type="text" 
+                     value={searchQuery}
+                     onChange={e => setSearchQuery(e.target.value)}
+                     onFocus={handleSearchFocus}
+                     onBlur={() => setIsSearchFocused(false)}
+                     placeholder={isSearchFocused ? "SEARCH BY TITLE, CONTENT, OR TAGS..." : "SEARCH..."}
+                     className="w-full h-12 bg-white dark:bg-[#0f0f11] border border-black/5 dark:border-white/10 rounded-xl pl-11 pr-4 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:border-accent/50 focus:shadow-[0_0_30px_-10px_var(--accent-glow)] transition-all placeholder:text-neutral-500"
+                  />
+                  <Search className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isSearchFocused ? 'text-accent' : 'text-neutral-400'}`} size={16} />
+                  {searchQuery && (
+                      <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black dark:hover:text-white">
+                          <X size={12} />
+                      </button>
+                  )}
+               </div>
+
+               {/* Action Buttons */}
+               <div className="flex items-center gap-2">
+                   <button 
+                     onClick={handleToggleBatchMode}
+                     className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-all ${isSelectionMode ? 'bg-accent text-black border-accent shadow-[0_0_15px_var(--accent-glow)]' : 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white'}`}
+                     title="Batch Select"
+                   >
+                      <CheckSquare size={18} />
+                   </button>
+                   
+                   <button 
+                     onClick={handleToggleFilter}
+                     className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-all ${filterType === 'archived' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white'}`}
+                     title={filterType === 'all' ? "Show Archive" : "Show Active"}
+                   >
+                      <Archive size={18} />
+                   </button>
+
+                   <button 
+                    onClick={handleCreateNote}
+                    className="h-12 px-6 bg-black dark:bg-white text-white dark:text-black rounded-xl flex items-center gap-3 font-black uppercase text-[10px] tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg hover:shadow-xl group border border-transparent hover:border-accent/50"
+                  >
+                     <Plus size={16} className="group-hover:rotate-90 transition-transform" /> <span className="hidden md:inline">CREATE</span>
+                  </button>
+               </div>
+          </div>
+      </div>
+
+      {/* CONTENT GRID */}
+      <div className="flex-1 overflow-y-auto custom-scroll px-4 md:px-8 lg:px-12 pb-32">
+          {filteredNotes.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-neutral-400 opacity-40 gap-6 animate-fade-in">
+                  <div className="w-32 h-32 rounded-[40px] bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center justify-center rotate-3">
+                      <FolderOpen size={48} strokeWidth={1} />
+                  </div>
+                  <div className="text-center space-y-2">
+                      <p className="text-xs font-black uppercase tracking-[0.3em]">NO_RECORDS_FOUND</p>
+                      <p className="text-[10px] font-mono">Vault sector is empty.</p>
+                  </div>
+              </div>
+          ) : (
+              <div className="columns-1 md:columns-2 xl:columns-3 gap-6 space-y-6 pb-20">
+                  {filteredNotes.map((n) => {
+                      const isSelected = selectedIds.has(n.id);
+                      const completedTasks = n.tasks?.filter(t => t.isCompleted).length || 0;
+                      const totalTasks = n.tasks?.length || 0;
+                      const taskProgress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+
+                      return (
+                          <div 
+                              key={n.id} 
+                              onClick={() => handleNoteClick(n)} 
+                              className={`
+                                  break-inside-avoid relative p-6 rounded-[32px] cursor-pointer transition-all duration-500 ease-out group
+                                  border hover:-translate-y-2
+                                  ${isSelected 
+                                      ? 'bg-accent/10 border-accent shadow-[0_0_40px_-10px_var(--accent-glow)]' 
+                                      : 'bg-white/80 dark:bg-[#0f0f11]/80 backdrop-blur-md border-black/5 dark:border-white/5 hover:border-accent/30 hover:shadow-xl'
+                                  }
+                              `}
+                          >
+                              {/* Selection Circle */}
+                              {isSelectionMode && (
+                                  <div className={`absolute top-6 right-6 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all z-20 ${isSelected ? 'bg-accent border-accent text-black' : 'border-neutral-400 bg-transparent'}`}>
+                                      {isSelected && <CheckSquare size={12} strokeWidth={3} />}
+                                  </div>
+                              )}
+
+                              {/* Pin Badge */}
+                              {n.is_pinned && !isSelectionMode && (
+                                  <div className="absolute top-6 right-6 text-accent animate-pulse">
+                                      <Pin size={16} fill="currentColor" />
+                                  </div>
+                              )}
+
+                              {/* Card Content */}
+                              <div className="space-y-4">
+                                  {/* Icon & Title */}
+                                  <div className="flex items-start gap-4">
+                                      <div className={`
+                                          w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-all duration-500 border
+                                          ${isSelected ? 'bg-accent text-black border-transparent' : 'bg-zinc-100 dark:bg-white/5 border-black/5 dark:border-white/5 text-neutral-400 group-hover:text-accent group-hover:bg-accent/10 group-hover:border-accent/20'}
+                                      `}>
+                                          <FileText size={20} strokeWidth={2} />
+                                      </div>
+                                      <div className="flex-1 min-w-0 pt-1">
+                                          <h3 className={`text-lg font-black uppercase tracking-tight truncate leading-none mb-1 ${isSelected ? 'text-accent' : 'text-black dark:text-white group-hover:text-accent transition-colors'}`}>
+                                              {n.title || 'UNTITLED_ENTRY'}
+                                          </h3>
+                                          <div className="flex items-center gap-2 text-[8px] tech-mono font-bold text-neutral-400 uppercase tracking-wider">
+                                              <span>{new Date(n.updated).toLocaleDateString()}</span>
+                                              <span className="w-1 h-1 rounded-full bg-neutral-600"></span>
+                                              <span>ID: {n.id.slice(0,4)}</span>
+                                          </div>
+                                      </div>
+                                  </div>
+
+                                  {/* Preview */}
+                                  <p className="text-[11px] text-neutral-600 dark:text-neutral-400 font-medium leading-relaxed line-clamp-3">
+                                      {n.content.replace(/<[^>]*>/g, ' ').slice(0, 150) || "No preview data available."}
+                                  </p>
+
+                                  {/* Task Bar */}
+                                  {totalTasks > 0 && (
+                                      <div className="space-y-1.5 pt-1">
+                                          <div className="flex justify-between items-center text-[8px] font-black uppercase tracking-widest text-neutral-500">
+                                              <span className="flex items-center gap-1"><ListTodo size={10} /> TASKS</span>
+                                              <span>{Math.round(taskProgress)}%</span>
+                                          </div>
+                                          <div className="h-1.5 w-full bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
+                                              <div className="h-full bg-accent transition-all duration-700" style={{ width: `${taskProgress}%` }} />
+                                          </div>
+                                      </div>
+                                  )}
+
+                                  {/* Tags & Badges */}
+                                  <div className="flex flex-wrap gap-2 pt-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                                      {n.tags?.map((tag, i) => (
+                                          <span key={i} className="px-2 py-1 rounded bg-zinc-100 dark:bg-white/5 border border-black/5 dark:border-white/5 text-[8px] font-bold uppercase text-neutral-500 flex items-center gap-1">
+                                              <Hash size={8} /> {tag}
+                                          </span>
+                                      ))}
+                                      {n.content.length > 500 && (
+                                          <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[8px] font-bold uppercase">LONG_READ</span>
+                                      )}
+                                  </div>
+                              </div>
+
+                              {/* Hover Action Overlay (Desktop) - Quick Delete */}
+                              {/* Improved: Always visible on touch, or hover on desktop */}
+                              {!isSelectionMode && (
+                                  <div className="absolute top-6 right-6 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0 hidden md:flex z-20">
+                                      {!n.is_pinned && (
                                         <button 
-                                            key={m.id} 
-                                            onClick={() => setViewMode(m.id)} 
-                                            className={`
-                                                px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all
-                                                ${viewMode === m.id 
-                                                    ? 'bg-white dark:bg-[#121214] text-black dark:text-white shadow-sm' 
-                                                    : 'text-neutral-400 hover:text-black dark:hover:text-white'
-                                                }
-                                            `}
+                                            onClick={(e) => handleDeleteItem(e, n.id)}
+                                            className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center border border-red-500/20 shadow-sm transition-all"
+                                            title="Delete Note"
                                         >
-                                            {m.icon} <span className="hidden md:inline">{m.label}</span>
+                                            <Trash2 size={14} />
                                         </button>
-                                    ))}
-                                </div>
+                                      )}
+                                      <div className="w-8 h-8 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shadow-sm">
+                                          <ArrowUpRight size={14} />
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
+                      );
+                  })}
+              </div>
+          )}
+      </div>
 
-                                <button 
-                                    onClick={() => setShowDeleteConfirm(true)} 
-                                    className="p-2.5 text-neutral-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                                    title="Delete Note"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
-                            </header>
+      {/* EDITOR OVERLAY */}
+      <div className={`
+          fixed inset-0 z-[1500] bg-zinc-50 dark:bg-[#050505] transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)] flex flex-col
+          ${viewMode === 'editor' ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}
+      `}>
+          {activeNoteId && (
+              <div className="flex flex-col h-full max-w-[1400px] mx-auto w-full p-0 md:p-6 lg:p-8">
+                  <div className="flex-1 bg-white dark:bg-[#0f0f11] rounded-none md:rounded-[48px] border-x-0 md:border border-black/5 dark:border-white/5 shadow-2xl overflow-hidden relative flex flex-col md:ring-1 ring-white/10">
+                      
+                      {/* Integrated Advanced Editor with Back Navigation passed down */}
+                      <AdvancedEditor 
+                          key={activeNoteId}
+                          initialContent={activeNote?.content || ''}
+                          initialTitle={activeNote?.title || ''}
+                          initialTasks={activeNote?.tasks || []}
+                          onSave={handleSaveNote}
+                          onDelete={() => handleDeleteNote(activeNoteId!)}
+                          onBack={() => setViewMode('grid')}
+                          language="en"
+                          fontSize={editorFontSize}
+                          onFontSizeChange={setEditorFontSize} 
+                      />
+                  </div>
+              </div>
+          )}
+      </div>
 
-                            <div className="flex-1 overflow-y-auto custom-scroll">
-                                <div className="max-w-4xl mx-auto px-6 py-8 md:px-12 md:py-12 min-h-[50vh]">
-                                    
-                                    {/* Title Input */}
-                                    <div className="mb-8 group">
-                                        <input 
-                                            value={activeNote.title} 
-                                            onChange={e => handleUpdate(activeNote.id, { title: e.target.value })} 
-                                            className="w-full bg-transparent text-4xl md:text-6xl font-black uppercase italic tracking-tighter outline-none text-black dark:text-white placeholder:text-neutral-200 dark:placeholder:text-neutral-800 transition-all border-b border-transparent group-focus-within:border-black/10 dark:group-focus-within:border-white/10 pb-2 leading-none" 
-                                            placeholder="UNTITLED_PROJECT" 
-                                        />
-                                        <div className="flex items-center gap-4 mt-4 opacity-60 pl-1">
-                                            <span className="text-[9px] font-bold tech-mono text-neutral-400 uppercase tracking-widest flex items-center gap-1 bg-zinc-100 dark:bg-white/5 px-2 py-1 rounded">
-                                                <Hash size={10}/> ID: {activeNote.id.slice(0,8)}
-                                            </span>
-                                            <span className="text-[9px] font-bold tech-mono text-neutral-400 uppercase tracking-widest flex items-center gap-1 bg-zinc-100 dark:bg-white/5 px-2 py-1 rounded">
-                                                <Calendar size={10}/> {new Date(activeNote.updated).toLocaleString()}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {viewMode === 'edit' ? (
-                                        <AdvancedEditor 
-                                            initialContent={activeNote.content} 
-                                            onSave={c => handleUpdate(activeNote.id, { content: c })} 
-                                            language={language} 
-                                            fontSize={fontSize} 
-                                            onFontSizeChange={setFontSize} 
-                                        />
-                                    ) : viewMode === 'preview' ? (
-                                        <div 
-                                            className="prose dark:prose-invert max-w-none font-medium leading-relaxed pb-32 animate-fade-in text-neutral-800 dark:text-neutral-300" 
-                                            style={{ fontSize: `${fontSize}px` }}
-                                            dangerouslySetInnerHTML={{ __html: sanitizeHTML(activeNote.content || '<p class="opacity-30 italic text-sm font-mono">// NO_DATA_ENCRYPTED. SWITCH_TO_EDIT_MODE_TO_BEGIN_ENTRY.</p>') }} 
-                                        />
-                                    ) : (
-                                        <div className="space-y-8 animate-slide-up">
-                                            {/* TASK MANAGER HEADER */}
-                                            <div className="bg-zinc-100 dark:bg-[#121214] p-8 rounded-[32px] border border-black/5 dark:border-white/5 relative overflow-hidden group">
-                                                <div className="absolute top-0 right-0 p-8 opacity-5 dark:opacity-[0.02] transform scale-150 rotate-12 pointer-events-none">
-                                                    <ListTodo size={120} />
-                                                </div>
-                                                
-                                                <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 relative z-10 gap-4">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-14 h-14 rounded-2xl bg-white dark:bg-black border border-black/5 dark:border-white/10 flex items-center justify-center text-accent shadow-lg">
-                                                            <CheckSquare size={24} strokeWidth={2.5} />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-xl font-black uppercase italic tracking-tighter text-black dark:text-white leading-none">PROTOCOL_STATUS</h3>
-                                                            <p className="text-[10px] font-black tech-mono text-neutral-500 mt-1 uppercase tracking-widest">
-                                                                {completedTasks}/{totalTasks} OBJECTIVES_COMPLETE
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-4xl font-black italic text-accent tabular-nums tracking-tighter">{progress}%</div>
-                                                </div>
-                                                
-                                                {/* Progress Bar */}
-                                                <div className="h-4 bg-black/5 dark:bg-white/5 rounded-full overflow-hidden relative z-10 border border-black/5 dark:border-white/5">
-                                                    <div className="h-full bg-accent transition-all duration-1000 ease-out relative overflow-hidden flex items-center" style={{ width: `${progress}%` }}>
-                                                        <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.3),transparent)] animate-[shimmer_1.5s_infinite]"></div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* AI TASK GENERATOR & INPUT */}
-                                            <div className="flex gap-3">
-                                                <div className="flex-1 flex gap-2 p-2 bg-white dark:bg-[#121214] rounded-2xl border border-black/5 dark:border-white/5 focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/50 transition-all shadow-sm">
-                                                    <input 
-                                                        value={newTaskText} 
-                                                        onChange={e => setNewTaskText(e.target.value)} 
-                                                        onKeyDown={e => e.key === 'Enter' && (setNotes(notes.map(n => n.id === activeNote.id ? {...n, tasks: [...(n.tasks||[]), {id: uuidv4(), text: newTaskText, isCompleted: false}]} : n)), setNewTaskText(''))} 
-                                                        className="flex-1 bg-transparent px-4 py-3 text-sm font-bold outline-none text-black dark:text-white placeholder:text-neutral-400 placeholder:text-[10px] placeholder:font-black placeholder:tracking-widest placeholder:uppercase" 
-                                                        placeholder="INPUT_NEW_DIRECTIVE..." 
-                                                    />
-                                                    <button onClick={() => { if(newTaskText.trim()) { setNotes(notes.map(n => n.id === activeNote.id ? {...n, tasks: [...(n.tasks||[]), {id: uuidv4(), text: newTaskText, isCompleted: false}]} : n)); setNewTaskText(''); } }} className="w-12 bg-black dark:bg-white text-white dark:text-black rounded-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center">
-                                                        <Plus size={20} strokeWidth={3}/>
-                                                    </button>
-                                                </div>
-                                                <button 
-                                                    onClick={handleGenerateTasks} 
-                                                    disabled={isGeneratingTasks}
-                                                    className={`px-6 rounded-2xl border flex items-center justify-center gap-2 transition-all shadow-lg hover:-translate-y-0.5 ${
-                                                        isGeneratingTasks 
-                                                        ? 'bg-accent/10 border-accent/20 text-accent cursor-not-allowed' 
-                                                        : 'bg-[var(--accent-color)] text-on-accent border-transparent hover:shadow-[0_0_20px_var(--accent-glow)]'
-                                                    }`}
-                                                    title="Auto-Generate Tasks from Note Content"
-                                                >
-                                                    {isGeneratingTasks ? <RefreshCw size={20} className="animate-spin" /> : <Sparkles size={20} fill="currentColor" />}
-                                                    <span className="hidden md:block text-[10px] font-black uppercase tracking-widest">{isGeneratingTasks ? 'ANALYZING...' : 'AI_EXTRACT'}</span>
-                                                </button>
-                                            </div>
-
-                                            {/* TASK LIST */}
-                                            <div className="space-y-3">
-                                                {activeNote.tasks?.map(t => (
-                                                    <div key={t.id} className="flex items-center gap-4 p-4 bg-white dark:bg-[#121214] border border-black/5 dark:border-white/5 rounded-2xl transition-all hover:border-accent/30 hover:bg-zinc-50 dark:hover:bg-white/[0.02] group animate-slide-up shadow-sm">
-                                                        <button 
-                                                            onClick={() => handleUpdate(activeNote.id, { tasks: activeNote.tasks?.map(task => task.id === t.id ? {...task, isCompleted: !task.isCompleted} : task) })} 
-                                                            className={`shrink-0 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${t.isCompleted ? 'bg-accent border-accent text-black' : 'border-neutral-300 dark:border-neutral-700 hover:border-accent'}`}
-                                                        >
-                                                            {t.isCompleted && <CheckCircle2 size={14} strokeWidth={4} />}
-                                                        </button>
-                                                        <span className={`text-sm font-bold flex-1 leading-relaxed ${t.isCompleted ? 'line-through opacity-40 text-neutral-500 decoration-2 decoration-neutral-300 dark:decoration-neutral-700' : 'text-black dark:text-neutral-200'}`}>{t.text}</span>
-                                                        <button 
-                                                            onClick={() => handleUpdate(activeNote.id, { tasks: activeNote.tasks?.filter(task => task.id !== t.id) })} 
-                                                            className="text-neutral-300 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500/10 rounded-lg"
-                                                        >
-                                                            <Trash2 size={16}/>
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                                {totalTasks === 0 && (
-                                                    <div className="py-16 text-center opacity-40 border-2 border-dashed border-black/5 dark:border-white/5 rounded-[32px]">
-                                                        <CheckSquare size={48} className="mx-auto mb-4 text-neutral-300 dark:text-neutral-600" strokeWidth={1} />
-                                                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-400">NO_ACTIVE_DIRECTIVES</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        /* EMPTY STATE */
-                        <div className="hidden lg:flex flex-col items-center justify-center h-full relative overflow-hidden bg-white dark:bg-black">
-                            {/* Animated Background Grid */}
-                            <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.02)_1px,transparent_1px)] dark:bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_80%)] pointer-events-none"></div>
-                            
-                            <div className="relative z-10 text-center space-y-6 p-12">
-                                <div className="w-24 h-24 mx-auto bg-zinc-100 dark:bg-white/5 rounded-[32px] flex items-center justify-center shadow-2xl border border-black/5 dark:border-white/5 animate-float backdrop-blur-md">
-                                    <Shield size={40} className="text-neutral-300 dark:text-neutral-600" />
-                                </div>
-                                <div>
-                                    <h2 className="text-3xl font-black uppercase italic tracking-tighter text-neutral-300 dark:text-neutral-700">WAITING_FOR_INPUT</h2>
-                                    <p className="text-[10px] font-black tech-mono text-neutral-400 mt-2 uppercase tracking-[0.4em] animate-pulse">Select a Data Node to Decrypt</p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-             </div>
-             
-             {/* BATCH ACTIONS COMPONENT */}
-             <NoteBatchActions 
-                selectedCount={selectedIds.size} 
-                totalCount={filteredNotes.length} 
-                isViewingArchive={viewArchive} 
-                selectedNotes={notes.filter(n => selectedIds.has(n.id))} 
-                onSelectAll={() => setSelectedIds(new Set(filteredNotes.map(n => n.id)))} 
-                onDeselectAll={() => setSelectedIds(new Set())} 
-                onDeleteSelected={() => setShowDeleteConfirm(true)} 
-                onArchiveSelected={() => { 
-                    setNotes(notes.map(n => selectedIds.has(n.id) ? {...n, is_archived: !n.is_archived} : n)); 
-                    setSelectedIds(new Set()); 
-                    setIsSelectionMode(false); 
-                }} 
-                onPinSelected={() => { 
-                    setNotes(notes.map(n => selectedIds.has(n.id) ? {...n, is_pinned: !n.is_pinned} : n)); 
-                    setSelectedIds(new Set()); 
-                    setIsSelectionMode(false); 
-                }} 
-                onCancel={() => { setSelectedIds(new Set()); setIsSelectionMode(false); }} 
-            />
-        </div>
-    );
+      <NoteBatchActions 
+          isSelectionMode={isSelectionMode}
+          selectedCount={selectedIds.size}
+          totalVisibleCount={filteredNotes.length}
+          isViewingArchive={filterType === 'archived'}
+          selectedNotes={notes.filter(n => selectedIds.has(n.id))}
+          onSelectAll={handleSelectAll}
+          onDeselectAll={() => setSelectedIds(new Set())}
+          onDeleteSelected={batchDelete}
+          onArchiveSelected={batchArchive}
+          onPinSelected={batchPin}
+          onCancel={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
+      />
+    </div>
+  );
 };
-
-export default SmartNotesView;

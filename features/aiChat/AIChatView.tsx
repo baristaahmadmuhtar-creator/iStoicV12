@@ -1,11 +1,12 @@
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { type Note, type ChatThread } from '../../types';
+import React, { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react';
+import { type Note } from '../../types';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { 
-  Radio, ChevronDown, History, Sparkles, Zap, 
-  Flame, Brain, Activity, Fingerprint, GripHorizontal,
-  Volume2, VolumeX, AlertTriangle, ArrowDown
+  Radio, ChevronDown, Sparkles, Zap, 
+  Flame, Brain, Activity, Fingerprint, Layers, Command,
+  ArrowRight, Search, Palette, Code, GraduationCap, Lightbulb, Music,
+  History, Settings2, LayoutTemplate, ArrowDown
 } from 'lucide-react';
 
 // Hooks & Logic
@@ -18,10 +19,56 @@ import { ChatWindow } from './components/ChatWindow';
 import { VaultPinModal } from '../../components/VaultPinModal';
 import { useNavigationIntelligence } from '../../hooks/useNavigationIntelligence';
 import { useAIProvider } from '../../hooks/useAIProvider'; 
+// STRICT REGISTRY
+import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
+import { debugService } from '../../services/debugService';
 
 interface AIChatViewProps {
     chatLogic: any;
 }
+
+// BENTO GRID CARD COMPONENT - ANIMATED & RESPONSIVE
+const SuggestionCard: React.FC<{ 
+    icon: React.ReactNode, 
+    label: string, 
+    desc: string, 
+    onClick: () => void, 
+    className?: string, 
+    delay: number,
+    accent?: string 
+}> = ({ icon, label, desc, onClick, className, delay, accent = "text-neutral-400 group-hover:text-accent" }) => (
+    <button 
+        onClick={onClick}
+        style={{ animationDelay: `${delay}ms` }}
+        className={`
+            relative overflow-hidden group 
+            bg-white dark:bg-[#0f0f11] 
+            border border-black/5 dark:border-white/5 
+            rounded-[24px] p-6 text-left 
+            transition-all duration-500 ease-out
+            hover:border-accent/40 hover:shadow-[0_10px_40px_-10px_rgba(var(--accent-rgb),0.1)] hover:-translate-y-1
+            animate-slide-up flex flex-col justify-between h-full min-h-[140px]
+            ${className}
+        `}
+    >
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none mix-blend-overlay"></div>
+        <div className="absolute top-0 right-0 p-5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-x-2 group-hover:translate-x-0">
+            <ArrowRight size={16} className="text-accent" />
+        </div>
+        
+        <div className="relative z-10 w-full">
+            <div className="mb-4">
+                <div className={`w-12 h-12 rounded-2xl bg-zinc-50 dark:bg-white/5 flex items-center justify-center transition-all duration-300 group-hover:scale-110 ${accent} group-hover:bg-accent/10 border border-black/5 dark:border-white/5`}>
+                    {icon}
+                </div>
+            </div>
+            <div>
+                <h4 className="text-[11px] font-black uppercase tracking-widest text-black dark:text-white mb-2 group-hover:text-accent transition-colors">{label}</h4>
+                <p className="text-[11px] text-neutral-500 font-medium leading-relaxed line-clamp-2 group-hover:text-neutral-400 transition-colors">{desc}</p>
+            </div>
+        </div>
+    </button>
+);
 
 const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const [notes, setNotes] = useLocalStorage<Note[]>('notes', []);
@@ -33,7 +80,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     
     // Mobile Intelligence
     const { isInputFocused, shouldShowNav } = useNavigationIntelligence();
-    const isMobileNavVisible = shouldShowNav && !isInputFocused;
+    const isMobileNavVisible = shouldShowNav && (!isInputFocused || window.innerWidth > 768);
     
     const {
         threads, setThreads,
@@ -45,6 +92,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         handleNewChat,
         sendMessage,
         togglePinThread,
+        renameThread,
         isVaultSynced,
         setIsVaultSynced,
         isVaultConfigEnabled, 
@@ -52,10 +100,22 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         setIsAutoSpeak
     } = chatLogic;
 
-    // Use centralized provider health hook
-    const { status: providerStatus } = useAIProvider(activeModel?.provider || 'GEMINI');
+    // Strict Handlers
+    const handleModelPickerOpen = () => {
+        debugService.logAction(UI_REGISTRY.CHAT_BTN_MODEL_PICKER, FN_REGISTRY.CHAT_SELECT_MODEL, 'OPEN');
+        setShowModelPicker(true);
+    };
 
-    // Secure Vault Toggle with Anti-Spam
+    const handleHistoryOpen = () => {
+        debugService.logAction(UI_REGISTRY.CHAT_BTN_HISTORY, FN_REGISTRY.CHAT_LOAD_HISTORY, 'OPEN');
+        setShowHistoryDrawer(true);
+    };
+
+    const handleLiveToggle = () => {
+        debugService.logAction(UI_REGISTRY.CHAT_BTN_LIVE_TOGGLE, FN_REGISTRY.CHAT_TOGGLE_LIVE, isLiveMode ? 'STOP' : 'START');
+        toggleLiveMode();
+    };
+
     const handleVaultToggle = useCallback(() => {
         if (!isVaultConfigEnabled || isTransitioning) return;
         if (isVaultSynced) {
@@ -68,7 +128,8 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const {
         isLiveMode,
         liveStatus,
-        liveTranscript,
+        transcriptHistory,
+        interimTranscript,
         toggleLiveMode,
         analyser
     } = useNeuralLinkSession(personaMode, notes, setNotes);
@@ -76,7 +137,24 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const isAutoScrolling = useRef(true);
 
-    // Scroll Intelligence: Track if user is at bottom
+    const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior, block: 'end' });
+            isAutoScrolling.current = true;
+            setShowScrollBtn(false);
+        }
+    }, []);
+
+    const handleScrollBtnClick = () => {
+        debugService.logAction(UI_REGISTRY.CHAT_BTN_SCROLL_DOWN, FN_REGISTRY.CHAT_LOAD_HISTORY, 'SCROLL_BOTTOM');
+        scrollToBottom();
+    };
+
+    const handleSuggestionClick = (prompt: string, type: string) => {
+        debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, type);
+        setInput(prompt);
+    };
+
     useEffect(() => {
         const container = document.getElementById('main-scroll-container');
         if (!container) return;
@@ -84,9 +162,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         const handleScroll = () => {
             const { scrollTop, scrollHeight, clientHeight } = container;
             const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-            
-            // Logic: if user scrolls UP (distance > 200), disable auto-scroll and show button
-            if (distanceToBottom > 200) {
+            if (distanceToBottom > 150) {
                 isAutoScrolling.current = false;
                 setShowScrollBtn(true);
             } else {
@@ -99,47 +175,37 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         return () => container.removeEventListener('scroll', handleScroll);
     }, []);
 
-    // Auto-scroll logic for Streaming & New Messages
     useEffect(() => {
         if (!messagesEndRef.current) return;
-
-        // Force scroll if we are actively "sticking" to bottom
         if (isAutoScrolling.current) {
             requestAnimationFrame(() => {
-                messagesEndRef.current?.scrollIntoView({ 
-                    behavior: isLoading ? 'auto' : 'smooth', 
-                    block: 'end' 
-                });
+                scrollToBottom(isLoading ? 'auto' : 'smooth');
             });
         }
-    }, [activeThread?.messages, isLoading]);
+    }, [activeThread?.messages, isLoading, scrollToBottom]);
 
-    // Force scroll to bottom on thread switch
-    useEffect(() => {
-        if (messagesEndRef.current) {
-            requestAnimationFrame(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
-                isAutoScrolling.current = true;
-                setShowScrollBtn(false);
-            });
+    useLayoutEffect(() => {
+        if (messagesEndRef.current && activeThread) {
+            scrollToBottom('auto');
         }
-    }, [activeThreadId]);
+    }, [activeThreadId, activeThread?.messages.length, scrollToBottom]);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        isAutoScrolling.current = true;
-        // Button will hide via scroll listener
-    };
-
-    const changePersona = async (target: 'melsa' | 'stoic') => {
+    const changePersona = async (target: 'hanisah' | 'stoic') => {
         if (personaMode === target || isTransitioning) return;
         setIsTransitioning(true);
         await handleNewChat(target);
         setTimeout(() => setIsTransitioning(false), 500);
     };
 
+    const togglePersona = () => {
+        const target = personaMode === 'stoic' ? 'hanisah' : 'stoic';
+        changePersona(target);
+    };
+
+    const showEmptyState = !activeThread || activeThread.messages.length <= 1;
+
     return (
-        <div className="min-h-full flex flex-col relative w-full">
+        <div className="min-h-full flex flex-col relative w-full bg-noise animate-fade-in">
             <VaultPinModal 
                 isOpen={showPinModal} 
                 onClose={() => setShowPinModal(false)} 
@@ -147,154 +213,235 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
             />
 
             {/* MAIN CONTENT CONTAINER */}
-            <div className="flex-1 flex flex-col relative z-10 w-full max-w-[1200px] mx-auto px-4 md:px-8 lg:px-12 pb-[180px]">
+            <div className={`flex-1 flex flex-col relative z-10 w-full max-w-[1000px] mx-auto px-4 md:px-6 transition-all duration-500 ${isMobileNavVisible ? 'pb-36' : 'pb-28'}`}>
                 
-                {/* 
-                    STICKY HEADER 
-                    - Removed top margin/padding from container and moved to header 
-                    - Added sticky, z-index, and backdrop-blur 
-                    - Used negative margin on X-axis to span full width while keeping content aligned
-                */}
-                <header className="sticky top-0 z-40 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 border-b border-black/5 dark:border-white/5 py-4 mb-6 bg-zinc-50/95 dark:bg-black/95 backdrop-blur-xl -mx-4 md:-mx-8 lg:-mx-12 px-4 md:px-8 lg:px-12 shadow-sm transition-all duration-300">
-                    <div className="space-y-1 w-full xl:w-auto">
-                        <div className="flex items-center gap-3">
-                            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-ping"></div>
-                            <span className="text-neutral-500 tech-mono text-[9px] font-black uppercase tracking-[0.4em]">NEURAL_UPLINK_v13.5</span>
-                        </div>
-                        <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
-                            <h2 className="text-3xl md:text-4xl heading-heavy text-black dark:text-white leading-[0.9] italic uppercase tracking-tighter hidden md:block">
-                                {personaMode === 'melsa' ? 'MELSA' : 'STOIC'} <span className="text-accent">LINK</span>
-                            </h2>
-                            
-                            {/* PERSONA TOGGLE - Compact on Scroll */}
-                            <div className="bg-zinc-100 dark:bg-white/5 backdrop-blur-xl p-1 rounded-[14px] flex items-center border border-black/5 dark:border-white/10 shadow-inner w-full md:w-auto">
-                                <button 
-                                    onClick={() => changePersona('stoic')} 
-                                    className={`flex-1 md:flex-none px-4 py-2 rounded-[10px] text-[9px] font-black tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${personaMode === 'stoic' ? 'bg-white dark:bg-white/10 text-cyan-500 shadow-sm scale-100' : 'text-neutral-500 opacity-60 hover:opacity-100'}`}
-                                >
-                                    <Brain size={12} /> STOIC
-                                </button>
-                                <button 
-                                    onClick={() => changePersona('melsa')} 
-                                    className={`flex-1 md:flex-none px-4 py-2 rounded-[10px] text-[9px] font-black tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${personaMode === 'melsa' ? 'bg-white dark:bg-white/10 text-orange-500 shadow-sm scale-100' : 'text-neutral-500 opacity-60 hover:opacity-100'}`}
-                                >
-                                    <Flame size={12} /> MELSA
-                                </button>
+                {/* 1. FLOATING HEADER */}
+                <header className="sticky top-6 z-40 mb-6 transition-all duration-300 ease-out flex justify-center">
+                    <div className="bg-white/80 dark:bg-[#0f0f11]/80 backdrop-blur-xl border border-black/5 dark:border-white/10 rounded-full p-2 pl-4 pr-2 shadow-[0_8px_32px_rgba(0,0,0,0.08)] flex items-center justify-between gap-6 ring-1 ring-white/20">
+                        
+                        {/* Model & Persona Info */}
+                        <div className="flex items-center gap-3 cursor-pointer group" onClick={handleModelPickerOpen}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${personaMode === 'hanisah' ? 'bg-orange-500/10 text-orange-500' : 'bg-cyan-500/10 text-cyan-500'} border border-black/5 dark:border-white/5`}>
+                                {personaMode === 'hanisah' ? <Flame size={14} fill="currentColor" /> : <Brain size={14} fill="currentColor" />}
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[7px] font-black uppercase tracking-[0.2em] text-neutral-400 group-hover:text-accent transition-colors">
+                                    {personaMode.toUpperCase()} // SYSTEM
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-bold text-black dark:text-white uppercase leading-none max-w-[120px] truncate tracking-wide">
+                                        {activeModel?.name || 'GEMINI PRO'}
+                                    </span>
+                                    <ChevronDown size={10} className="text-neutral-400" />
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* ACTIONS TOOLBAR */}
-                    <div className="flex flex-row items-center gap-2 w-full xl:w-auto overflow-x-auto no-scrollbar pb-1 xl:pb-0">
-                        <button 
-                            onClick={() => setShowModelPicker(true)}
-                            className={`min-h-[40px] px-4 bg-white dark:bg-white/5 border rounded-xl flex items-center gap-2 tech-mono text-[9px] font-black uppercase tracking-widest transition-all hover:border-accent/40 shrink-0 shadow-sm ${
-                                providerStatus !== 'HEALTHY' ? 'border-amber-500/50 text-amber-500 bg-amber-500/5' : 'border-black/5 dark:border-white/10 text-neutral-500'
-                            }`}
-                        >
-                            {providerStatus === 'HEALTHY' ? <Sparkles size={14} className="text-accent" /> : <AlertTriangle size={14} className="animate-pulse" />}
-                            <span className="truncate max-w-[100px] md:max-w-none">{activeModel.name.toUpperCase()}</span>
-                            <ChevronDown size={10} />
-                        </button>
+                        {/* Divider */}
+                        <div className="h-6 w-[1px] bg-black/10 dark:bg-white/10 hidden sm:block"></div>
 
-                        <button 
-                            onClick={() => setIsAutoSpeak(!isAutoSpeak)} 
-                            className={`min-h-[40px] min-w-[40px] rounded-xl transition-all border flex items-center justify-center ${isAutoSpeak ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/10 text-neutral-500'}`}
-                            title="Auto Speak Reply"
-                        >
-                            {isAutoSpeak ? <Volume2 size={16}/> : <VolumeX size={16}/>}
-                        </button>
-                        
-                        <button 
-                            onClick={toggleLiveMode} 
-                            className={`min-h-[40px] px-4 rounded-xl transition-all border flex items-center gap-2 font-black uppercase text-[9px] tracking-[0.2em] shrink-0 ${isLiveMode ? 'bg-red-500 border-red-400 text-white animate-pulse' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/10 text-neutral-500'}`}
-                        >
-                            <Radio size={16}/> <span className="hidden sm:inline">LIVE_LINK</span>
-                        </button>
+                        {/* Actions */}
+                        <div className="flex items-center gap-1">
+                            <button 
+                                onClick={handleHistoryOpen}
+                                className="w-9 h-9 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-neutral-500 hover:text-black dark:hover:text-white transition-all flex items-center justify-center active:scale-95"
+                                title="History Log"
+                            >
+                                <History size={16} strokeWidth={2} />
+                            </button>
 
-                        <button 
-                            onClick={() => setShowHistoryDrawer(true)} 
-                            className="min-h-[40px] min-w-[40px] bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl flex items-center justify-center text-neutral-500 transition-all shadow-sm"
-                        >
-                            <History size={18}/>
-                        </button>
+                            <button 
+                                onClick={handleLiveToggle}
+                                className={`w-9 h-9 rounded-full transition-all flex items-center justify-center active:scale-95 ${
+                                    isLiveMode 
+                                    ? 'bg-red-500 text-white shadow-lg animate-pulse' 
+                                    : 'text-neutral-500 hover:text-red-500 hover:bg-red-500/10'
+                                }`}
+                                title="Initialize Neural Link"
+                            >
+                                <Radio size={16} strokeWidth={2} />
+                            </button>
+                        </div>
                     </div>
                 </header>
 
-                {/* MESSAGES AREA - USING CHAT WINDOW COMPONENT */}
-                <div className="flex-1">
-                    <ChatWindow 
-                        messages={activeThread?.messages || []} 
-                        personaMode={personaMode} 
-                        isLoading={isLoading} 
-                        messagesEndRef={messagesEndRef}
-                    />
+                {/* 2. CHAT AREA */}
+                <div className="flex-1 w-full relative min-h-0">
+                    {showEmptyState ? (
+                        <div className="flex flex-col h-full justify-center max-w-4xl mx-auto w-full pb-20 pt-4">
+                            
+                            {/* Hero Section */}
+                            <div className="flex flex-col items-center text-center mb-16 animate-fade-in px-4 relative">
+                                <div className={`relative w-28 h-28 mb-8 flex items-center justify-center group`}>
+                                    <div className={`absolute inset-0 rounded-full bg-gradient-to-br opacity-20 blur-2xl group-hover:opacity-30 transition-opacity ${personaMode === 'hanisah' ? 'from-orange-500 to-pink-500' : 'from-cyan-500 to-blue-500'}`}></div>
+                                    <div className={`relative w-28 h-28 rounded-[40px] flex items-center justify-center shadow-2xl border border-white/10 bg-gradient-to-br transition-transform duration-500 group-hover:scale-105 ${personaMode === 'hanisah' ? 'from-orange-500/10 to-pink-500/10 text-orange-500' : 'from-cyan-500/10 to-blue-500/10 text-cyan-500'}`}>
+                                        {personaMode === 'hanisah' ? <Flame size={48} strokeWidth={1} /> : <Brain size={48} strokeWidth={1} />}
+                                    </div>
+                                    {/* Orbit Ring */}
+                                    <div className="absolute inset-[-10px] rounded-full border border-dashed border-black/5 dark:border-white/5 animate-spin-slow pointer-events-none"></div>
+                                </div>
+
+                                <h2 className="text-5xl md:text-7xl font-black italic tracking-tighter text-black dark:text-white mb-4 uppercase leading-none drop-shadow-sm">
+                                    {personaMode === 'hanisah' ? 'HANISAH' : 'STOIC'} <span className="text-transparent bg-clip-text bg-gradient-to-r from-neutral-400 to-neutral-600">OS</span>
+                                </h2>
+                                <div className="flex items-center gap-3">
+                                    <div className="h-[1px] w-8 bg-accent/50"></div>
+                                    <p className="text-[10px] tech-mono font-bold text-accent uppercase tracking-[0.3em]">
+                                        NEURAL INTERFACE READY
+                                    </p>
+                                    <div className="h-[1px] w-8 bg-accent/50"></div>
+                                </div>
+                            </div>
+
+                            {/* Bento Grid Suggestions */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full px-2">
+                                {personaMode === 'hanisah' ? (
+                                    <>
+                                        <SuggestionCard 
+                                            icon={<Palette size={22} />} 
+                                            label="GENERATE_VISUAL" 
+                                            desc="Create high-fidelity images with Imagen 3." 
+                                            onClick={() => handleSuggestionClick("Generate a futuristic cyberpunk city with neon lights, 8k resolution.", 'GEN_IMG')} 
+                                            delay={100}
+                                            className="col-span-1 sm:col-span-2 md:col-span-1"
+                                            accent="text-pink-500"
+                                        />
+                                        <SuggestionCard 
+                                            icon={<Code size={22} />} 
+                                            label="CODE_AUDIT" 
+                                            desc="Debug and optimize complex algorithms." 
+                                            onClick={() => handleSuggestionClick("Review this code for performance bottlenecks and suggest optimizations.", 'CODE_AUDIT')} 
+                                            delay={150}
+                                            className="col-span-1 sm:col-span-2 md:col-span-2"
+                                            accent="text-emerald-500"
+                                        />
+                                        <SuggestionCard 
+                                            icon={<Layers size={22} />} 
+                                            label="VAULT_SYNC" 
+                                            desc="Analyze connected notes." 
+                                            onClick={() => handleSuggestionClick("Analyze my recent notes about 'Project X' and summarize key insights.", 'VAULT_SYNC')} 
+                                            delay={200}
+                                            className="col-span-1 md:col-span-1"
+                                            accent="text-blue-500"
+                                        />
+                                    </>
+                                ) : (
+                                    <>
+                                        <SuggestionCard 
+                                            icon={<GraduationCap size={22} />} 
+                                            label="STOIC_AUDIT" 
+                                            desc="Analyze a dilemma via Marcus Aurelius." 
+                                            onClick={() => handleSuggestionClick("I'm feeling overwhelmed by work. How would a Stoic approach this?", 'STOIC_AUDIT')} 
+                                            delay={100}
+                                            className="col-span-1 sm:col-span-2 md:col-span-2"
+                                            accent="text-amber-500"
+                                        />
+                                        <SuggestionCard 
+                                            icon={<Lightbulb size={22} />} 
+                                            label="LOGIC_BREAKDOWN" 
+                                            desc="Deconstruct complex problems." 
+                                            onClick={() => handleSuggestionClick("Help me deconstruct this problem using first principles thinking.", 'LOGIC_BREAKDOWN')} 
+                                            delay={150}
+                                            className="col-span-1"
+                                            accent="text-cyan-500"
+                                        />
+                                        <SuggestionCard 
+                                            icon={<Brain size={22} />} 
+                                            label="BIAS_CHECK" 
+                                            desc="Identify logical fallacies." 
+                                            onClick={() => handleSuggestionClick("Identify potential biases in this argument: [Insert Text]", 'BIAS_CHECK')} 
+                                            delay={200}
+                                            className="col-span-1"
+                                            accent="text-purple-500"
+                                        />
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <ChatWindow 
+                            messages={activeThread?.messages || []}
+                            personaMode={personaMode}
+                            isLoading={isLoading}
+                            messagesEndRef={messagesEndRef}
+                        />
+                    )}
                 </div>
+
+                {/* 3. INPUT CAPSULE */}
+                <div className={`
+                    fixed bottom-6 left-4 right-4 md:left-[80px] z-[100] 
+                    pointer-events-none transition-all duration-500 ease-out
+                    flex justify-center
+                    ${isMobileNavVisible ? 'mb-16 md:mb-0' : 'mb-2'}
+                `}>
+                    <div className="w-full max-w-[1000px] pointer-events-auto relative">
+                        {/* Scroll To Bottom Button */}
+                        {showScrollBtn && (
+                            <button 
+                                onClick={handleScrollBtnClick}
+                                className="absolute -top-14 right-0 z-20 w-10 h-10 rounded-full bg-white dark:bg-[#0a0a0b] shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center text-accent hover:scale-110 active:scale-95 transition-all animate-bounce"
+                            >
+                                <ArrowDown size={20} strokeWidth={2.5} />
+                            </button>
+                        )}
+
+                        <ChatInput 
+                            input={input}
+                            setInput={setInput}
+                            isLoading={isLoading}
+                            onSubmit={sendMessage}
+                            onNewChat={() => handleNewChat(personaMode)}
+                            onFocusChange={() => {}}
+                            aiName={personaMode.toUpperCase()}
+                            isVaultSynced={isVaultSynced}
+                            onToggleVaultSync={handleVaultToggle}
+                            personaMode={personaMode}
+                            isVaultEnabled={isVaultConfigEnabled}
+                            onTogglePersona={() => changePersona(personaMode === 'hanisah' ? 'stoic' : 'hanisah')}
+                        />
+                    </div>
+                </div>
+
             </div>
 
-            {/* INPUT DOCK (FIXED POSITIONING) */}
-            <div className={`
-                fixed bottom-0 right-0 z-[400] 
-                w-full md:pl-[80px] /* Crucial: Offset for Desktop Sidebar */
-                transition-all duration-500 ease-[cubic-bezier(0.2,0,0,1)]
-                ${isMobileNavVisible ? 'pb-[88px] md:pb-0' : 'pb-0'}
-            `}>
-                
-                {/* Scroll Down Button (Floating) */}
-                <div className={`absolute -top-16 left-1/2 -translate-x-1/2 transition-all duration-300 ${showScrollBtn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-                    <button 
-                        onClick={scrollToBottom}
-                        className="w-10 h-10 rounded-full bg-white dark:bg-zinc-800 border border-black/10 dark:border-white/10 shadow-xl flex items-center justify-center text-neutral-500 hover:text-accent hover:scale-110 transition-all"
-                    >
-                        <ArrowDown size={20} />
-                    </button>
-                </div>
-
-                {/* Gradient Fade for seamless scroll */}
-                <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-zinc-50 dark:from-black via-zinc-50/80 dark:via-black/80 to-transparent pointer-events-none"></div>
-
-                {/* The Actual Dock Container */}
-                <div className={`relative w-full max-w-[1000px] mx-auto px-4 md:px-8 pb-4 md:pb-8 transition-all duration-300 ${isInputFocused ? 'pb-2' : ''}`}>
-                    <ChatInput 
-                        input={input}
-                        setInput={setInput}
-                        isLoading={isLoading}
-                        onSubmit={(e, attachment) => { 
-                            sendMessage(e, attachment); 
-                            isAutoScrolling.current = true; 
-                        }} 
-                        onNewChat={() => handleNewChat(personaMode)}
-                        onFocusChange={() => {}} // Global nav hook handles focus detection
-                        aiName={activeModel.name}
-                        isVaultSynced={isVaultSynced}
-                        onToggleVaultSync={handleVaultToggle}
-                        personaMode={personaMode}
-                        isVaultEnabled={isVaultConfigEnabled} 
-                    />
-                </div>
-            </div>
-
+            {/* OVERLAYS */}
             <ModelPicker 
                 isOpen={showModelPicker} 
-                onClose={() => setShowModelPicker(false)} 
-                activeModelId={activeThread?.model_id || 'gemini-3-pro-preview'} 
-                onSelectModel={(model_id) => {
-                    setThreads(threads.map((t:any) => t.id === activeThreadId ? { ...t, model_id, updated: new Date().toISOString() } : t));
+                onClose={() => setShowModelPicker(false)}
+                activeModelId={activeModel?.id || ''}
+                onSelectModel={(id) => {
+                    debugService.logAction(UI_REGISTRY.CHAT_BTN_MODEL_PICKER, FN_REGISTRY.CHAT_SELECT_MODEL, id);
+                    if (activeThreadId) {
+                        setThreads(prev => prev.map(t => t.id === activeThreadId ? { ...t, model_id: id } : t));
+                    }
                     setShowModelPicker(false);
-                }} 
+                }}
             />
 
-            <NeuralLinkOverlay isOpen={isLiveMode} status={liveStatus} personaMode={personaMode} transcript={liveTranscript} onTerminate={toggleLiveMode} analyser={analyser} />
             <ChatHistory 
-                isOpen={showHistoryDrawer} 
-                onClose={() => setShowHistoryDrawer(false)} 
-                threads={threads} 
-                activeThreadId={activeThreadId} 
-                onSelectThread={setActiveThreadId} 
-                onDeleteThread={(id) => { const upd = threads.filter((t: any) => t.id !== id); setThreads(upd); if (activeThreadId === id) setActiveThreadId(upd[0]?.id || null); }} 
-                onRenameThread={(id, title) => setThreads(threads.map((t:any) => t.id === id ? {...t, title, updated: new Date().toISOString()} : t))} 
+                isOpen={showHistoryDrawer}
+                onClose={() => setShowHistoryDrawer(false)}
+                threads={threads}
+                activeThreadId={activeThreadId}
+                onSelectThread={setActiveThreadId}
+                onDeleteThread={(id) => {
+                    setThreads(prev => prev.filter(t => t.id !== id));
+                    if (activeThreadId === id) setActiveThreadId(null);
+                }}
+                onRenameThread={renameThread}
                 onTogglePin={togglePinThread}
-                onNewChat={() => handleNewChat(personaMode)} 
+                onNewChat={() => handleNewChat(personaMode)}
+            />
+
+            <NeuralLinkOverlay 
+                isOpen={isLiveMode}
+                status={liveStatus}
+                personaMode={personaMode}
+                transcriptHistory={transcriptHistory}
+                interimTranscript={interimTranscript}
+                onTerminate={handleLiveToggle}
+                analyser={analyser}
             />
         </div>
     );

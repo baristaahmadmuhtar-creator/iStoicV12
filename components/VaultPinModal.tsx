@@ -52,13 +52,13 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({ isOpen, onClose, o
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
             <div className={`
-                relative w-full max-w-sm bg-[#0a0a0b] border border-white/10 rounded-[32px] p-8 
-                shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col items-center gap-6
+                relative w-full max-w-sm bg-white dark:bg-[#0a0a0b] border border-black/5 dark:border-white/10 rounded-[32px] p-8 
+                shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex flex-col items-center gap-6
                 ${shake ? 'animate-[shake_0.5s_cubic-bezier(.36,.07,.19,.97)_both]' : ''}
             `}>
-                <button onClick={onClose} className="absolute top-6 right-6 text-neutral-500 hover:text-white transition-colors">
+                <button onClick={onClose} className="absolute top-6 right-6 text-neutral-400 hover:text-black dark:hover:text-white transition-colors">
                     <X size={20} />
                 </button>
 
@@ -67,7 +67,7 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({ isOpen, onClose, o
                 </div>
 
                 <div className="text-center space-y-2">
-                    <h3 className="text-xl font-black text-white uppercase italic tracking-tighter">
+                    <h3 className="text-xl font-black text-black dark:text-white uppercase italic tracking-tighter">
                         {error ? 'ACCESS DENIED' : 'SECURITY CLEARANCE'}
                     </h3>
                     <p className="text-[10px] tech-mono font-bold text-neutral-500 uppercase tracking-widest">
@@ -81,24 +81,24 @@ export const VaultPinModal: React.FC<VaultPinModalProps> = ({ isOpen, onClose, o
                         type="password" 
                         value={pin}
                         onChange={(e) => { setPin(e.target.value); setError(false); }}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-center text-2xl font-black text-white tracking-[0.5em] focus:outline-none focus:border-accent/50 focus:bg-white/10 transition-all placeholder:text-white/10"
+                        className="w-full bg-zinc-100 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl px-4 py-4 text-center text-2xl font-black text-black dark:text-white tracking-[0.5em] focus:outline-none focus:border-accent/50 focus:bg-white dark:focus:bg-white/10 transition-all placeholder:text-neutral-300 dark:placeholder:text-white/10"
                         placeholder="••••••"
                         maxLength={10}
                         autoComplete="off"
                         disabled={verifying}
                     />
-                    <Fingerprint className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" size={20} />
+                    <Fingerprint className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-300 dark:text-white/20 pointer-events-none" size={20} />
                 </form>
 
                 <button 
                     onClick={() => handleSubmit()}
                     disabled={verifying}
-                    className="w-full py-4 bg-white text-black hover:bg-accent hover:text-black transition-all rounded-xl font-black uppercase text-[11px] tracking-[0.3em] flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+                    className="w-full py-4 bg-black dark:bg-white text-white dark:text-black hover:bg-accent dark:hover:bg-accent hover:text-black dark:hover:text-black transition-all rounded-xl font-black uppercase text-[11px] tracking-[0.3em] flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50"
                 >
                     {error ? <Lock size={14} /> : <Unlock size={14} />} {verifying ? 'VERIFYING...' : (error ? 'RETRY AUTH' : 'AUTHENTICATE')}
                 </button>
 
-                <p className="text-[8px] text-neutral-600 font-mono text-center">
+                <p className="text-[8px] text-neutral-400 font-mono text-center">
                     SECURE_ENCLAVE_V13.5 // HARDWARE_ENCRYPTION_ACTIVE
                 </p>
             </div>

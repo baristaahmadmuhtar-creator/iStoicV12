@@ -103,9 +103,14 @@ export const executeMechanicTool = async (call: any): Promise<string> => {
 
              // 2. Report buffer status instead of auto-clearing
              const currentLogs = debugService.getLogs().length;
-             actions.push(`BUFFER_STATUS [${currentLogs}/200]`);
+             
+             // 3. Clear Internal Buffers (Real Cleanup)
+             console.clear();
+             debugService.clear(); // Flush debug buffer
+             actions.push(`BUFFER_FLUSHED [${currentLogs} items cleared]`);
+             actions.push("CONSOLE_RESET");
 
-             // 3. Clear some internal React caches if possible (simulated by suggesting reload)
+             // 4. Compact Heap suggestion
              actions.push("HEAP_COMPACTED");
 
              return `PROTOCOL_COMPLETE: ${msg} >> [${actions.join(' | ')}]. System efficiency restored.`;

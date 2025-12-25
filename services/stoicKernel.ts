@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 import { noteTools, searchTools, visualTools, KEY_MANAGER } from "./geminiService";
 import { debugService } from "./debugService";
 import { MODEL_CATALOG, type StreamChunk } from "./melsaKernel";
-import { MELSA_BRAIN } from "./melsaBrain";
+import { HANISAH_BRAIN } from "./melsaBrain";
 
 class StoicLogicKernel {
   private history: any[] = [];
@@ -24,7 +24,7 @@ class StoicLogicKernel {
   }
 
   async *streamExecute(msg: string, modelId: string, context?: string): AsyncGenerator<StreamChunk> {
-    const systemPrompt = MELSA_BRAIN.getSystemInstruction('stoic', context);
+    const systemPrompt = HANISAH_BRAIN.getSystemInstruction('stoic', context);
     
     // Stoic Retry Logic: Try requested model (Pro), then fallback to Flash
     const plan = [modelId, 'gemini-3-flash-preview'];
@@ -109,7 +109,7 @@ class StoicLogicKernel {
   async execute(msg: string, modelId: string, context?: string): Promise<any> {
     const startTime = Date.now();
     let selectedModel = MODEL_CATALOG.find(m => m.id === modelId) || MODEL_CATALOG[0];
-    const systemPrompt = MELSA_BRAIN.getSystemInstruction('stoic', context);
+    const systemPrompt = HANISAH_BRAIN.getSystemInstruction('stoic', context);
     const key = KEY_MANAGER.getKey(selectedModel.provider);
 
     try {

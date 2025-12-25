@@ -6,7 +6,7 @@ interface VaultContextType {
     isVaultUnlocked: boolean;
     unlockVault: () => void;
     lockVault: () => void;
-    isVaultConfigEnabled: (persona: 'melsa' | 'stoic') => boolean;
+    isVaultConfigEnabled: (persona: 'hanisah' | 'stoic') => boolean;
 }
 
 const VaultContext = createContext<VaultContextType | undefined>(undefined);
@@ -16,24 +16,24 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [isVaultUnlocked, setIsVaultUnlocked] = useState(false);
 
     // Persistent Configs
-    const [melsaConfig] = useLocalStorage('melsa_tools_config', { search: true, vault: true, visual: true });
+    const [hanisahConfig] = useLocalStorage('hanisah_tools_config', { search: true, vault: true, visual: true });
     const [stoicConfig] = useLocalStorage('stoic_tools_config', { search: true, vault: true, visual: false });
 
     const unlockVault = useCallback(() => setIsVaultUnlocked(true), []);
     const lockVault = useCallback(() => setIsVaultUnlocked(false), []);
 
-    const isVaultConfigEnabled = useCallback((persona: 'melsa' | 'stoic') => {
-        return persona === 'melsa' ? melsaConfig.vault : stoicConfig.vault;
-    }, [melsaConfig, stoicConfig]);
+    const isVaultConfigEnabled = useCallback((persona: 'hanisah' | 'stoic') => {
+        return persona === 'hanisah' ? hanisahConfig.vault : stoicConfig.vault;
+    }, [hanisahConfig, stoicConfig]);
 
     // SECURITY: Auto-lock if the active configuration disables the vault
     useEffect(() => {
         // We check both. If user disables vault globally in settings, we lock immediately.
-        if (!melsaConfig.vault && !stoicConfig.vault && isVaultUnlocked) {
+        if (!hanisahConfig.vault && !stoicConfig.vault && isVaultUnlocked) {
             console.warn("[SECURITY] Vault disabled in settings. Locking session.");
             setIsVaultUnlocked(false);
         }
-    }, [melsaConfig, stoicConfig, isVaultUnlocked]);
+    }, [hanisahConfig, stoicConfig, isVaultUnlocked]);
 
     return (
         <VaultContext.Provider value={{ isVaultUnlocked, unlockVault, lockVault, isVaultConfigEnabled }}>

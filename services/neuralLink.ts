@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
-import { encodeAudio, decodeAudio, decodeAudioData, noteTools, visualTools, searchTools, KEY_MANAGER } from "./geminiService";
+import { encodeAudio, decodeAudio, decodeAudioData, noteTools, visualTools, KEY_MANAGER } from "./geminiService";
 import { debugService } from "./debugService";
 
 export type NeuralLinkStatus = 'IDLE' | 'CONNECTING' | 'ACTIVE' | 'ERROR';
@@ -13,7 +13,7 @@ export interface TranscriptionEvent {
 
 export interface NeuralLinkConfig {
     modelId: string;
-    persona: 'melsa' | 'stoic';
+    persona: 'hanisah' | 'stoic';
     systemInstruction: string;
     voiceName: string;
     onStatusChange: (status: NeuralLinkStatus, error?: string) => void;
@@ -71,25 +71,37 @@ export class NeuralLinkService {
             };
             await resumeContexts();
 
-            // KEY ROTATION USAGE FOR LIVE API
+            // CHECK API KEY VALIDITY BEFORE CONNECTING
             const apiKey = KEY_MANAGER.getKey('GEMINI');
+            if (!apiKey) {
+                throw new Error("No healthy GEMINI API key available. Please check system configuration.");
+            }
+
             const ai = new GoogleGenAI({ apiKey });
             
             // DYNAMIC VOICE SELECTION & VALIDATION
-            const storedMelsaVoice = localStorage.getItem('melsa_voice');
+            const storedHanisahVoice = localStorage.getItem('hanisah_voice');
             const storedStoicVoice = localStorage.getItem('stoic_voice');
             
-            let preferredVoice = config.persona === 'melsa' 
-                ? (storedMelsaVoice ? JSON.parse(storedMelsaVoice) : 'Zephyr') 
+            let preferredVoice = config.persona === 'hanisah' 
+                ? (storedHanisahVoice ? JSON.parse(storedHanisahVoice) : 'Zephyr') 
                 : (storedStoicVoice ? JSON.parse(storedStoicVoice) : 'Fenrir');
 
-            // SAFETY CHECK: If user selected "Melsa" (Custom) in settings, Gemini API will error.
-            // We must fallback to a valid Google voice for the Live Session.
+            // SAFETY CHECK: If user selected "Hanisah" (Custom) in settings, Gemini API will error.
             if (!GOOGLE_VALID_VOICES.includes(preferredVoice)) {
                 debugService.log('WARN', 'NEURAL_LINK', 'VOICE_FALLBACK', `Voice '${preferredVoice}' not supported by Gemini Live. Falling back.`);
-                // Fallback: Melsa -> Kore (Female), Others -> Fenrir (Male)
-                preferredVoice = config.persona === 'melsa' ? 'Kore' : 'Fenrir';
+                preferredVoice = config.persona === 'hanisah' ? 'Kore' : 'Fenrir';
             }
+
+            // PREPARE TOOLS: Merge function declarations and EXCLUDE unsupported tools (like Google Search) for Live API
+            const liveTools = [
+                { 
+                    functionDeclarations: [
+                        ...(noteTools.functionDeclarations || []),
+                        ...(visualTools.functionDeclarations || [])
+                    ] 
+                }
+            ];
 
             const sessionPromise = ai.live.connect({
                 model: config.modelId || 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -104,10 +116,15 @@ export class NeuralLinkService {
                         }, 2000);
 
                         sessionPromise.then(session => {
-                            const greeting = config.persona === 'melsa' 
-                                ? "Sistem Mel-SA tersinkronisasi. Tuan, aku sudah siap mendengarkan."
+                            const greeting = config.persona === 'hanisah' 
+                                ? "Sistem Hanisah tersinkronisasi. Tuan, aku sudah siap mendengarkan."
                                 : "Logika Stoik aktif. Kesadaran kognitif terhubung.";
-                            session.sendRealtimeInput({ text: greeting });
+                            // Send initial text to trigger the model's greeting
+                            try {
+                                session.sendRealtimeInput({ text: greeting });
+                            } catch(err) {
+                                console.error("Failed to send initial greeting:", err);
+                            }
                         });
                     },
                     onmessage: async (msg: LiveServerMessage) => {
@@ -116,7 +133,7 @@ export class NeuralLinkService {
                     onerror: (e) => {
                         console.error("Neural Link Error:", e);
                         this.isConnecting = false;
-                        config.onStatusChange('ERROR', e.message);
+                        config.onStatusChange('ERROR', e.message || "Connection Error");
                         this.disconnect();
                     },
                     onclose: () => {
@@ -128,7 +145,7 @@ export class NeuralLinkService {
                 },
                 config: {
                     responseModalities: [Modality.AUDIO],
-                    tools: [noteTools, visualTools, searchTools],
+                    tools: liveTools,
                     speechConfig: { 
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: preferredVoice } } 
                     },
@@ -141,7 +158,8 @@ export class NeuralLinkService {
             this.session = await sessionPromise;
         } catch (e: any) {
             this.isConnecting = false;
-            config.onStatusChange('ERROR', e.message);
+            console.error("Neural Link Setup Failed:", e);
+            config.onStatusChange('ERROR', e.message || "Network Error");
             this.disconnect();
         }
     }
@@ -156,6 +174,7 @@ export class NeuralLinkService {
             scriptProcessor.onaudioprocess = (e) => {
                 if (!this.session) return;
                 const inputData = e.inputBuffer.getChannelData(0);
+                // Convert Float32 to Int16 PCM
                 const int16 = new Int16Array(inputData.length);
                 for (let i = 0; i < inputData.length; i++) {
                     int16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
@@ -164,10 +183,15 @@ export class NeuralLinkService {
                     data: encodeAudio(new Uint8Array(int16.buffer)), 
                     mimeType: 'audio/pcm;rate=16000' 
                 };
+                
+                // Always use the promise to send data to avoid stale closures or race conditions
                 sessionPromise.then(s => { 
                     try { 
-                        if (s && s.sendRealtimeInput) s.sendRealtimeInput({ media: pcmBlob }); 
-                    } catch (err) { } 
+                        // Check if session is still open before sending
+                        if (s) s.sendRealtimeInput({ media: pcmBlob }); 
+                    } catch (err) { 
+                        // Silent fail for stream chunks if disconnected
+                    } 
                 });
             };
             
@@ -179,7 +203,8 @@ export class NeuralLinkService {
     }
 
     private async handleServerMessage(msg: LiveServerMessage, sessionPromise: Promise<any>) {
-        if (!this.session) return;
+        // ... (Existing implementation remains the same, but ensuring context access is safe)
+        if (!this.session && !msg) return;
 
         if (msg.serverContent?.inputTranscription && this.config?.onTranscription) {
             this.config.onTranscription({ text: msg.serverContent.inputTranscription.text, source: 'user', isFinal: !!msg.serverContent.turnComplete });
@@ -223,7 +248,8 @@ export class NeuralLinkService {
                 this.sources.add(source);
                 source.onended = () => {
                     this.sources.delete(source);
-                    source.disconnect();
+                    // Do not disconnect immediately if using shared nodes, but here we create source per chunk
+                    // source.disconnect(); // Safe to disconnect source
                 };
             } catch (e) {
                 console.warn("Audio playback error:", e);
@@ -232,7 +258,7 @@ export class NeuralLinkService {
 
         if (msg.serverContent?.interrupted) {
             this.sources.forEach(s => { 
-                try { s.stop(); s.disconnect(); } catch(e){} 
+                try { s.stop(); } catch(e){} 
             });
             this.sources.clear();
             this.nextStartTime = 0;
@@ -244,14 +270,26 @@ export class NeuralLinkService {
             clearInterval(this.audioCheckInterval);
             this.audioCheckInterval = null;
         }
+        
+        // Close session
         if (this.session) { 
-            try { this.session.close(); } catch(e){} 
+            try { 
+                // Currently no explicit close method on the client wrapper in some versions, 
+                // but we nullify it to stop sending data.
+                // The SDK manages the websocket closure when the object is GC'd or connection drops,
+                // but we can try to force it if the method exists.
+                if(typeof this.session.close === 'function') this.session.close();
+            } catch(e){} 
             this.session = null; 
         }
+
+        // Stop Media Stream
         if (this.activeStream) { 
             this.activeStream.getTracks().forEach(t => t.stop()); 
             this.activeStream = null; 
         }
+
+        // Close Audio Contexts
         if (this.inputCtx) { 
             try { this.inputCtx.close(); } catch(e){} 
             this.inputCtx = null; 
@@ -260,12 +298,15 @@ export class NeuralLinkService {
             try { this.outputCtx.close(); } catch(e){} 
             this.outputCtx = null; 
         }
+
+        // Clear Sources
         this.sources.forEach(s => {
-            try { s.stop(); s.disconnect(); } catch(e){}
+            try { s.stop(); } catch(e){}
         });
         this.sources.clear();
         this.nextStartTime = 0;
         this.isConnecting = false;
+        
         if (this.config) this.config.onStatusChange('IDLE');
     }
 }

@@ -1,7 +1,7 @@
 
 import React, { memo } from 'react';
 import { type FeatureID, FEATURES } from '../constants';
-import { Settings, MoreHorizontal } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { useNavigationIntelligence } from '../hooks/useNavigationIntelligence';
 
 interface MobileNavProps {
@@ -20,7 +20,7 @@ export const MobileNav: React.FC<MobileNavProps> = memo(({ activeFeature, setAct
       className={`
         md:hidden fixed left-1/2 -translate-x-1/2 z-[900] 
         transition-all cubic-bezier(0.2, 0.8, 0.2, 1) 
-        will-change-transform w-auto max-w-[95vw]
+        will-change-transform w-auto max-w-[calc(100vw-32px)]
         ${isVisible 
           ? 'bottom-6 opacity-100 translate-y-0 scale-100 duration-500 delay-100' 
           : 'bottom-0 opacity-0 translate-y-10 scale-90 pointer-events-none duration-300' 
@@ -28,12 +28,12 @@ export const MobileNav: React.FC<MobileNavProps> = memo(({ activeFeature, setAct
       `}
     >
       <nav className="
-        flex items-center gap-1 p-1.5
-        bg-[#050505]/85 backdrop-blur-2xl 
-        border border-white/10 
-        rounded-[24px] 
-        shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)]
-        ring-1 ring-white/5
+        flex items-center gap-1 p-2
+        bg-white/80 dark:bg-[#050505]/80 backdrop-blur-2xl 
+        border border-black/5 dark:border-white/10 
+        rounded-[28px] 
+        shadow-[0_20px_40px_-10px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_40px_-10px_rgba(0,0,0,0.8)]
+        ring-1 ring-black/5 dark:ring-white/5
       ">
         
         {FEATURES.map((f) => {
@@ -43,30 +43,35 @@ export const MobileNav: React.FC<MobileNavProps> = memo(({ activeFeature, setAct
               key={f.id}
               onClick={() => setActiveFeature(f.id as FeatureID)}
               className={`
-                relative w-12 h-12 flex items-center justify-center rounded-[18px] 
-                transition-all duration-300
+                relative w-12 h-12 flex items-center justify-center rounded-[20px] 
+                transition-all duration-300 group
                 ${isActive 
-                  ? 'bg-[var(--accent-color)] text-black shadow-[0_0_20px_rgba(var(--accent-rgb),0.4)] scale-105 z-10' 
-                  : 'text-neutral-500 hover:text-white hover:bg-white/5'}
+                  ? 'bg-accent/10 text-accent border border-accent/20 shadow-[0_0_20px_var(--accent-glow)]' 
+                  : 'text-neutral-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'}
               `}
             >
-              <div className={`transition-transform duration-300 ${isActive ? 'scale-110' : ''}`}>
-                {React.cloneElement(f.icon as React.ReactElement<any>, { size: 20 })}
+              {/* Active Glow Dot */}
+              {isActive && (
+                  <div className="absolute -bottom-1 w-1 h-1 rounded-full bg-accent shadow-[0_0_5px_var(--accent-color)]" />
+              )}
+
+              <div className={`transition-transform duration-300 ${isActive ? 'scale-110 -translate-y-0.5' : 'group-active:scale-95'}`}>
+                {React.cloneElement(f.icon as React.ReactElement<any>, { size: 20, strokeWidth: isActive ? 2.5 : 2 })}
               </div>
             </button>
           );
         })}
 
-        <div className="w-[1px] h-6 bg-white/10 mx-1"></div>
+        <div className="w-[1px] h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
 
         <div className="flex items-center gap-1">
             <button 
                 onClick={() => setActiveFeature('settings')} 
                 className={`
-                    w-12 h-12 flex items-center justify-center rounded-[18px] transition-all
+                    w-12 h-12 flex items-center justify-center rounded-[20px] transition-all
                     ${activeFeature === 'settings' 
-                        ? 'bg-white text-black shadow-lg scale-105' 
-                        : 'text-neutral-500 hover:text-white hover:bg-white/5'}
+                        ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg scale-105' 
+                        : 'text-neutral-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}
                 `}
             >
                 <Settings size={20} className={activeFeature === 'settings' ? 'animate-spin-slow' : ''} />

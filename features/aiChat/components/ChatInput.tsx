@@ -1,6 +1,7 @@
 
 import React, { useRef, useEffect, useState, memo } from 'react';
-import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, ArrowUp, Sparkles, Command, Activity, Lock, Paperclip, X, Image as ImageIcon } from 'lucide-react';
+import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, Paperclip, X, Image as ImageIcon, Flame, Brain, CornerDownLeft, Clipboard, ShieldCheck, FileText } from 'lucide-react';
+import { TRANSLATIONS, getLang } from '../../../services/i18n';
 
 interface ChatInputProps {
   input: string;
@@ -12,9 +13,12 @@ interface ChatInputProps {
   aiName: string;
   isVaultSynced?: boolean;
   onToggleVaultSync?: () => void;
-  personaMode?: 'melsa' | 'stoic';
+  personaMode?: 'hanisah' | 'stoic';
   isVaultEnabled?: boolean;
+  onTogglePersona?: () => void;
 }
+
+const MAX_CHARS = 4000;
 
 export const ChatInput: React.FC<ChatInputProps> = memo(({
   input,
@@ -26,8 +30,9 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   aiName,
   isVaultSynced = true,
   onToggleVaultSync,
-  personaMode = 'melsa',
-  isVaultEnabled = true
+  personaMode = 'hanisah',
+  isVaultEnabled = true,
+  onTogglePersona
 }) => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -35,16 +40,36 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   const [isFocused, setIsFocused] = useState(false);
   const [attachment, setAttachment] = useState<{ file: File, preview: string, base64: string } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [pasteFlash, setPasteFlash] = useState(false);
+  
   const recognitionRef = useRef<any>(null);
+  const currentLang = getLang();
+  const t = TRANSLATIONS[currentLang].chat;
 
   // Auto-resize textarea
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
       const newHeight = Math.min(inputRef.current.scrollHeight, 150);
-      inputRef.current.style.height = `${newHeight}px`;
+      inputRef.current.style.height = `${Math.max(24, newHeight)}px`;
     }
-  }, [input, attachment]); // Also resize if attachment changes space
+  }, [input, attachment]);
+
+  // Cleanup dictation on unmount
+  useEffect(() => {
+      return () => {
+          if (recognitionRef.current) recognitionRef.current.stop();
+      };
+  }, []);
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+      e.preventDefault();
+      const text = e.clipboardData.getData('text/plain');
+      document.execCommand('insertText', false, text);
+      
+      setPasteFlash(true);
+      setTimeout(() => setPasteFlash(false), 500);
+  };
 
   const toggleDictation = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,17 +81,23 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Browser Anda tidak mendukung fitur Dictation. Gunakan Chrome/Safari.");
+      alert("Browser does not support Speech Recognition.");
       return;
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'id-ID';
+    recognition.lang = TRANSLATIONS[currentLang].meta.code;
     recognition.continuous = true;
-    recognition.interimResults = true;
+    recognition.interimResults = true; 
 
-    recognition.onstart = () => setIsDictating(true);
-    recognition.onend = () => setIsDictating(false);
+    recognition.onstart = () => {
+        setIsDictating(true);
+        if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback
+    };
+    
+    recognition.onend = () => {
+        setIsDictating(false);
+    };
     
     recognition.onresult = (event: any) => {
       let interimTranscript = '';
@@ -79,10 +110,18 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
           interimTranscript += event.results[i][0].transcript;
         }
       }
-      
+
       if (finalTranscript) {
-          setInput((prev) => prev + (prev ? ' ' : '') + finalTranscript);
+          setInput((prev) => {
+              const needsSpace = prev.length > 0 && !prev.endsWith(' ');
+              return prev + (needsSpace ? ' ' : '') + finalTranscript;
+          });
       }
+    };
+
+    recognition.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error);
+        setIsDictating(false);
     };
 
     recognitionRef.current = recognition;
@@ -98,185 +137,208 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
 
   const processFile = (file: File) => {
       if (!file.type.startsWith('image/')) {
-          alert("Currently only images are supported for visual analysis.");
+          alert("Only images supported.");
           return;
       }
       
       const reader = new FileReader();
       reader.onload = (e) => {
           const result = e.target?.result as string;
-          // result is like "data:image/jpeg;base64,..."
           const base64 = result.split(',')[1];
-          setAttachment({
-              file,
-              preview: result,
-              base64: base64
-          });
+          setAttachment({ file, preview: result, base64 });
       };
       reader.readAsDataURL(file);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files?.[0]) {
-          processFile(e.target.files[0]);
-      }
-      // Reset input value to allow re-selecting same file
+      if (e.target.files?.[0]) processFile(e.target.files[0]);
       e.target.value = '';
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragOver(false);
-      if (e.dataTransfer.files?.[0]) {
-          processFile(e.dataTransfer.files[0]);
-      }
-  };
-
   const handleSubmit = () => {
+      if (isDictating) {
+          recognitionRef.current?.stop();
+          setIsDictating(false);
+      }
       if ((!input.trim() && !attachment) || isLoading) return;
-      
+      if (input.length > MAX_CHARS) {
+          alert(`Character limit exceeded (${MAX_CHARS}). Please shorten your message.`);
+          return;
+      }
+
       const attachmentPayload = attachment ? { data: attachment.base64, mimeType: attachment.file.type } : undefined;
       onSubmit(undefined, attachmentPayload);
-      setAttachment(null); // Clear attachment after send
+      setAttachment(null);
+      // Reset height
+      if (inputRef.current) inputRef.current.style.height = 'auto';
   };
 
-  // Determine Persona Colors
-  const isMelsa = personaMode === 'melsa';
-  const focusRingStyle = isMelsa 
-      ? 'ring-2 ring-orange-500/40 border-orange-500/50 shadow-[0_12px_40px_rgba(249,115,22,0.15)] bg-orange-500/[0.02]' 
-      : 'ring-2 ring-cyan-500/40 border-cyan-500/50 shadow-[0_12px_40px_rgba(6,182,212,0.15)] bg-cyan-500/[0.02]';
-  
-  const hoverBorderStyle = isMelsa
-      ? 'hover:border-orange-500/30 dark:hover:border-orange-500/30'
-      : 'hover:border-cyan-500/30 dark:hover:border-cyan-500/30';
-
-  const sendButtonStyle = isMelsa
-      ? 'bg-orange-600 shadow-orange-500/25'
-      : 'bg-cyan-600 shadow-cyan-500/25';
+  const charCountColor = input.length > MAX_CHARS * 0.9 
+      ? 'text-red-500' 
+      : input.length > MAX_CHARS * 0.7 
+          ? 'text-amber-500' 
+          : 'text-neutral-400';
 
   return (
     <div className="w-full relative group">
-      {/* Visual Feedback for Dictation */}
+      
+      {/* Dictation Overlay Indicator */}
       {isDictating && (
-          <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-red-500 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-bounce shadow-lg z-10">
-              <Activity size={12} className="animate-pulse" /> Listening...
+          <div className="absolute -top-16 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 animate-fade-in z-20">
+              <div className="bg-red-500 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-3 shadow-[0_0_20px_rgba(239,68,68,0.4)] border border-red-400">
+                  <div className="flex gap-1 items-center h-3">
+                      <div className="w-1 bg-white animate-[music-bar_0.8s_ease-in-out_infinite]"></div>
+                      <div className="w-1 bg-white animate-[music-bar_0.6s_ease-in-out_infinite]"></div>
+                      <div className="w-1 bg-white animate-[music-bar_1.0s_ease-in-out_infinite]"></div>
+                  </div>
+                  {t.listening}
+              </div>
           </div>
       )}
 
-      {/* FLOATING CAPSULE DESIGN */}
+      {/* Paste Flash Indicator */}
+      {pasteFlash && (
+          <div className="absolute -top-8 right-0 text-[9px] font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-lg animate-fade-in flex items-center gap-2">
+              <Clipboard size={12} /> FORMAT_STRIPPED
+          </div>
+      )}
+
+      {/* MAIN CAPSULE */}
       <div 
         className={`
             w-full transition-all duration-300 ease-out
-            bg-white/90 dark:bg-[#1a1a1c]/90 backdrop-blur-xl
-            border border-black/10 dark:border-white/10
-            rounded-[32px] p-2 pl-4 flex flex-col
-            shadow-[0_8px_32px_rgba(0,0,0,0.12)]
-            ${isFocused || isDragOver ? `${focusRingStyle} scale-[1.01]` : `${hoverBorderStyle}`}
-            ${isDictating ? 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : ''}
-            ${isDragOver ? 'border-dashed' : ''}
+            bg-white/95 dark:bg-[#0a0a0b]/95 backdrop-blur-2xl
+            border 
+            rounded-[28px] p-1.5 flex flex-col
+            shadow-[0_8px_40px_-10px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_40px_-10px_rgba(0,0,0,0.6)]
+            ${isDictating 
+                ? 'border-red-500/50 ring-2 ring-red-500/20' 
+                : pasteFlash
+                    ? 'border-emerald-500/50 ring-2 ring-emerald-500/20'
+                    : isFocused || isDragOver 
+                        ? 'border-accent/50 ring-2 ring-accent/20 shadow-[0_0_25px_rgba(var(--accent-rgb),0.15)]' 
+                        : 'border-black/10 dark:border-white/10 hover:border-black/20 dark:hover:border-white/20'
+            }
+            ${isDragOver ? 'scale-[1.02]' : ''}
         `}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
         onDragLeave={() => setIsDragOver(false)}
-        onDrop={handleDrop}
+        onDrop={(e) => { e.preventDefault(); setIsDragOver(false); if(e.dataTransfer.files?.[0]) processFile(e.dataTransfer.files[0]); }}
       >
         
         {/* Attachment Preview Area */}
         {attachment && (
-            <div className="px-1 pt-2 pb-1 flex animate-fade-in">
+            <div className="px-3 pt-3 pb-1 flex animate-slide-up">
                 <div className="relative group/preview inline-block">
                     <img src={attachment.preview} alt="Preview" className="h-16 w-auto rounded-xl border border-black/10 dark:border-white/10 shadow-sm object-cover" />
                     <button 
                         onClick={() => setAttachment(null)}
-                        className="absolute -top-2 -right-2 bg-black text-white rounded-full p-1 opacity-0 group-hover/preview:opacity-100 transition-opacity shadow-md hover:bg-red-500"
+                        className="absolute -top-2 -right-2 bg-black text-white rounded-full p-1 shadow-md hover:bg-red-500 transition-colors border border-white/20"
                     >
-                        <X size={12} />
+                        <X size={10} />
                     </button>
                 </div>
             </div>
         )}
 
-        <div className="flex items-end gap-3 w-full">
-            {/* Left Actions */}
-            <div className="flex gap-1 pb-1.5 hidden xs:flex">
-            <button 
-                onClick={onNewChat}
-                className="w-9 h-9 flex items-center justify-center rounded-full text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all"
-                title="New Chat"
-            >
-                <Plus size={18} />
-            </button>
-            
-            <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="w-9 h-9 flex items-center justify-center rounded-full text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all"
-                title="Attach Image"
-            >
-                <Paperclip size={18} />
-            </button>
-            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} accept="image/*" />
-
-            <button 
-                onClick={onToggleVaultSync}
-                disabled={!isVaultEnabled}
-                className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${
-                    !isVaultEnabled 
-                    ? 'text-neutral-300 dark:text-neutral-600 cursor-not-allowed opacity-50' 
-                    : isVaultSynced 
-                        ? (isMelsa ? 'text-orange-500 bg-orange-500/10' : 'text-cyan-500 bg-cyan-500/10') 
-                        : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5'
-                }`}
-                title={!isVaultEnabled ? "Vault Disabled in Settings" : (isVaultSynced ? "Vault Active" : "Vault Offline")}
-            >
-                {!isVaultEnabled ? <Lock size={14} /> : (isVaultSynced ? <DatabaseZap size={16} /> : <Database size={16} />)}
-            </button>
-            </div>
-
-            {/* Text Area */}
-            <div className="flex-1 py-3 min-w-0">
+        {/* INPUT AREA */}
+        <div className="relative px-3 pt-2 pb-1">
             <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 onFocus={() => { setIsFocused(true); onFocusChange(true); }}
                 onBlur={() => { setIsFocused(false); onFocusChange(false); }}
-                placeholder={isDictating ? "Silakan bicara..." : isDragOver ? "Drop image here..." : `Tulis ${personaMode}...`}
-                className="w-full bg-transparent text-[15px] font-medium text-black dark:text-white placeholder:text-neutral-400/80 resize-none focus:outline-none max-h-40 custom-scroll leading-relaxed pl-1"
+                placeholder={isDictating ? t.listening : t.placeholder}
+                className="w-full bg-transparent text-[15px] font-medium text-black dark:text-white placeholder:text-neutral-400 resize-none focus:outline-none max-h-60 custom-scroll leading-relaxed"
                 rows={1}
-                style={{ minHeight: '24px' }}
+                aria-label="Chat Input"
             />
+        </div>
+
+        {/* TOOLBAR & ACTIONS */}
+        <div className="flex items-center justify-between px-2 pb-1 pt-1 gap-2 border-t border-transparent transition-colors duration-300">
+            
+            {/* Left Tools */}
+            <div className="flex gap-1 items-center">
+                <button 
+                    onClick={onNewChat}
+                    className="w-8 h-8 flex items-center justify-center rounded-xl text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95"
+                    title={t.newChat}
+                >
+                    <Plus size={18} strokeWidth={2} />
+                </button>
+                
+                <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${attachment ? 'text-accent bg-accent/10' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
+                    title="Attach Image"
+                >
+                    <Paperclip size={16} strokeWidth={2} />
+                </button>
+                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} accept="image/*" />
+
+                <div className="w-[1px] h-4 bg-black/10 dark:bg-white/10 mx-1"></div>
+
+                <button 
+                    onClick={onToggleVaultSync}
+                    disabled={!isVaultEnabled}
+                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${!isVaultEnabled ? 'opacity-30' : isVaultSynced ? 'text-accent bg-accent/5' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
+                    title={isVaultEnabled ? "Vault Sync" : "Vault Disabled"}
+                >
+                    {isVaultSynced ? <DatabaseZap size={16} /> : <Database size={16} />}
+                </button>
+
+                <button 
+                    onClick={onTogglePersona}
+                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${personaMode === 'hanisah' ? 'text-orange-500 bg-orange-500/5' : 'text-cyan-500 bg-cyan-500/5'}`}
+                    title="Switch Persona"
+                >
+                    {personaMode === 'hanisah' ? <Flame size={16} /> : <Brain size={16} />}
+                </button>
             </div>
 
-            {/* Right Actions */}
-            <div className="flex items-center gap-2 pb-1.5 pr-1">
-            <button 
-                onClick={toggleDictation}
-                className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${isDictating ? 'bg-red-500 text-white animate-pulse shadow-md shadow-red-500/30' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5'}`}
-                title="Voice Input (Uses ElevenLabs Voice in Reply)"
-            >
-                {isDictating ? <Mic size={18} /> : <MicOff size={18} />}
-            </button>
+            {/* Right Actions & Status */}
+            <div className="flex items-center gap-3">
+                {/* Character Counter */}
+                <div className={`text-[9px] tech-mono font-bold transition-colors ${charCountColor} hidden sm:block`}>
+                    {input.length} <span className="opacity-40">/ {MAX_CHARS}</span>
+                </div>
 
-            <button 
-                onClick={() => handleSubmit()}
-                disabled={(!input.trim() && !attachment) || isLoading}
-                className={`
-                h-11 px-6 rounded-full flex items-center gap-2 font-black uppercase text-[10px] tracking-widest transition-all
-                ${(input.trim() || attachment) && !isLoading 
-                    ? `${sendButtonStyle} text-white shadow-lg hover:scale-105 active:scale-95` 
-                    : 'bg-black/5 dark:bg-white/5 text-neutral-400 cursor-not-allowed'}
-                `}
-            >
-                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={20} strokeWidth={3} />}
-            </button>
+                {/* Dictation */}
+                <button 
+                    onClick={toggleDictation}
+                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${isDictating ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
+                    title="Real-time Dictation"
+                >
+                    {isDictating ? <MicOff size={16} /> : <Mic size={18} strokeWidth={2} />}
+                </button>
+
+                {/* Send Button */}
+                <button 
+                    onClick={() => handleSubmit()}
+                    disabled={(!input.trim() && !attachment) || isLoading || input.length > MAX_CHARS}
+                    className={`
+                        w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300
+                        ${(input.trim() || attachment) && !isLoading && input.length <= MAX_CHARS
+                            ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg hover:scale-105 active:scale-95 hover:shadow-[0_0_20px_var(--accent-glow)]' 
+                            : 'bg-black/5 dark:bg-white/5 text-neutral-400 cursor-not-allowed'}
+                    `}
+                >
+                    {isLoading ? <Loader2 size={18} className="animate-spin" /> : <CornerDownLeft size={20} strokeWidth={2.5} />}
+                </button>
             </div>
         </div>
       </div>
-
-      {/* Helper Text */}
-      <div className={`absolute -top-8 left-0 right-0 text-center text-[9px] tech-mono font-bold text-neutral-400/60 uppercase tracking-widest transition-opacity pointer-events-none hidden md:block ${isFocused ? 'opacity-100' : 'opacity-0'}`}>
-        ENTER TO SEND / SHIFT + ENTER FOR NEW LINE / DRAG & DROP IMAGES
-      </div>
+      
+      <style>{`
+        @keyframes music-bar {
+            0%, 100% { height: 4px; }
+            50% { height: 12px; }
+        }
+      `}</style>
     </div>
   );
 });

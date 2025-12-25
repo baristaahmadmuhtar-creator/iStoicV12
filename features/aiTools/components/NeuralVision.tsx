@@ -2,10 +2,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { editImage } from '../../../services/geminiService';
 import { analyzeMultiModalMedia } from '../../../services/providerEngine';
-import { Camera, Layout, Send, Sparkles, Trash2, Activity, ChevronDown, X, Aperture, Image as ImageIcon, AlertCircle } from 'lucide-react';
+import { Camera, Layout, Trash2, X, Aperture, Image as ImageIcon, AlertCircle, ScanEye } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { ToolGroup } from './ToolGroup';
 import { useAIProvider } from '../../../hooks/useAIProvider';
+import { VisualModelSelector, type ProviderGroup } from './VisualModelSelector';
+import { UI_REGISTRY, FN_REGISTRY } from '../../../constants/registry';
+import { debugService } from '../../../services/debugService';
 
 interface NeuralVisionProps {
     isOpen: boolean;
@@ -20,11 +23,10 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const [editResult, setEditResult] = useState<string | null>(null);
     
-    // Multi-Provider State
+    // Default to Gemini Flash (Free & Good Vision capabilities)
     const [selectedProvider, setSelectedProvider] = useState<string>('GEMINI');
-    const [selectedModel, setSelectedModel] = useState<string>('gemini-3-pro-preview');
+    const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
 
-    // Use provider health hook
     const { isHealthy, status: providerStatus } = useAIProvider(selectedProvider);
 
     // Camera State
@@ -59,25 +61,72 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
         }
     }, [isCameraActive]);
 
-    const providers = [
-        { id: 'GEMINI', name: 'Gemini (Vision)', models: [
-            { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Vision' },
-            { id: 'gemini-2.5-flash-preview', name: 'Gemini 2.5 Flash' }
-        ]},
-        { id: 'GROQ', name: 'Groq (Llama)', models: [
-            { id: 'llama-3.2-90b-vision-preview', name: 'Llama 3.2 Vision' },
-            { id: 'llama-3.2-11b-vision-preview', name: 'Llama 3.2 11B' }
-        ]},
-        { id: 'OPENROUTER', name: 'OpenRouter (Omni)', models: [
-            { id: 'openai/gpt-4o', name: 'GPT-4o' },
-            { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' }
-        ]}
+    const providers: ProviderGroup[] = [
+        { 
+            id: 'GEMINI', 
+            name: 'Google Gemini', 
+            models: [
+                { 
+                    id: 'gemini-2.5-flash', 
+                    name: 'Gemini 2.5 Flash',
+                    description: 'Fast multimodal analysis. Ideal for general recognition.',
+                    tags: ['FREE', 'FAST'],
+                    specs: { speed: 'INSTANT', quality: 'STD' }
+                },
+                { 
+                    id: 'gemini-3-pro-preview', 
+                    name: 'Gemini 3 Pro Vision',
+                    description: 'Complex reasoning over visual inputs.',
+                    tags: ['PRO', 'REASONING'],
+                    specs: { speed: 'FAST', quality: 'ULTRA' }
+                }
+            ]
+        },
+        { 
+            id: 'GROQ', 
+            name: 'Groq (Llama)', 
+            models: [
+                { 
+                    id: 'llama-3.2-90b-vision-preview', 
+                    name: 'Llama 3.2 90B Vision',
+                    description: 'Meta\'s flagship vision model accelerated by Groq LPU.',
+                    tags: ['FAST', 'OPEN'],
+                    specs: { speed: 'INSTANT', quality: 'HD' }
+                },
+                { 
+                    id: 'llama-3.2-11b-vision-preview', 
+                    name: 'Llama 3.2 11B',
+                    description: 'Lightweight efficient vision model.',
+                    tags: ['LITE'],
+                    specs: { speed: 'INSTANT', quality: 'STD' }
+                }
+            ]
+        },
+        { 
+            id: 'OPENROUTER', 
+            name: 'OpenRouter', 
+            models: [
+                { 
+                    id: 'openai/gpt-4o', 
+                    name: 'GPT-4o (Omni)',
+                    description: 'Industry leading multimodal intelligence.',
+                    tags: ['ELITE', 'SMART'],
+                    specs: { speed: 'FAST', quality: 'ULTRA' }
+                },
+                { 
+                    id: 'anthropic/claude-3.5-sonnet', 
+                    name: 'Claude 3.5 Sonnet',
+                    description: 'Exceptional nuanced understanding of images/charts.',
+                    tags: ['ELITE'],
+                    specs: { speed: 'FAST', quality: 'ULTRA' }
+                }
+            ]
+        }
     ];
-    
-    const currentModels = providers.find(p => p.id === selectedProvider)?.models || [];
 
     const startCamera = async (e?: React.MouseEvent) => {
         e?.stopPropagation();
+        debugService.logAction(UI_REGISTRY.TOOLS_VIS_BTN_CAMERA, FN_REGISTRY.TOOL_CAMERA_CAPTURE, 'START');
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: 'environment' } 
@@ -100,6 +149,8 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
 
     const captureFrame = () => {
         if (!videoRef.current) return;
+        debugService.logAction(UI_REGISTRY.TOOLS_VIS_BTN_CAMERA, FN_REGISTRY.TOOL_CAMERA_CAPTURE, 'CAPTURE');
+        
         const canvas = document.createElement('canvas');
         canvas.width = videoRef.current.videoWidth;
         canvas.height = videoRef.current.videoHeight;
@@ -115,6 +166,8 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
     };
 
     const processAnalysis = async (base64: string, mimeType: string) => {
+        debugService.logAction(UI_REGISTRY.TOOLS_VIS_BTN_UPLOAD, FN_REGISTRY.TOOL_ANALYZE_IMAGE, selectedModel);
+        
         if (!isHealthy) {
             setAnalysisResult(`ERROR: Provider ${selectedProvider} is currently ${providerStatus}.`);
             return;
@@ -129,11 +182,11 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
                 selectedModel,
                 base64,
                 mimeType,
-                prompt || "Analyze this visual data in detail."
+                prompt || "Analyze this visual data in detail. Identify objects, text, and context."
             );
             setAnalysisResult(result);
         } catch (err: any) { 
-            setAnalysisResult(`Visual analysis interrupted.`); 
+            setAnalysisResult(`Visual analysis failed: ${err.message}`); 
         } finally { 
             setLoading(null); 
         }
@@ -141,6 +194,12 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
 
     const handleMediaUpload = async (file: File, task: 'ANALYZE' | 'EDIT') => {
         if (!file) return;
+        
+        // Strict Registry
+        const uiId = task === 'ANALYZE' ? UI_REGISTRY.TOOLS_VIS_BTN_UPLOAD : UI_REGISTRY.TOOLS_VIS_BTN_EDIT;
+        const fnId = task === 'ANALYZE' ? FN_REGISTRY.TOOL_ANALYZE_IMAGE : FN_REGISTRY.TOOL_GENERATE_IMAGE;
+        debugService.logAction(uiId, fnId, 'FILE_SELECTED');
+
         if (!isHealthy) {
             setAnalysisResult(`ERROR: Provider ${selectedProvider} is ${providerStatus}.`);
             return;
@@ -157,16 +216,27 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
                 if (task === 'ANALYZE') {
                     await processAnalysis(base64, file.type);
                 } else {
+                    if (selectedProvider !== 'GEMINI') {
+                         setEditResult(null);
+                         setAnalysisResult("Image Editing (In-painting) is currently optimized for Gemini Native only.");
+                         setLoading(null);
+                         return;
+                    }
                     const result = await editImage(base64, file.type, prompt || "Enhance this image.");
                     setEditResult(result);
                     setLoading(null);
                 }
             } catch (err: any) { 
-                setAnalysisResult(`Image processing interrupted.`); 
+                setAnalysisResult(`Processing failed: ${err.message}`); 
                 setLoading(null);
             }
         };
         reader.readAsDataURL(file);
+    };
+
+    const handleToggle = () => {
+        debugService.logAction(UI_REGISTRY.TOOLS_BTN_TAB_VIS, FN_REGISTRY.NAVIGATE_TO_FEATURE, isOpen ? 'CLOSE' : 'OPEN');
+        onToggle();
     };
 
     return (
@@ -175,152 +245,123 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
             icon={icon} 
             subtitle="MULTIMODAL ANALYSIS" 
             isOpen={isOpen} 
-            onToggle={onToggle} 
+            onToggle={handleToggle} 
             isLoading={!!loading} 
             loadingText={statusMsg || ''}
         >
-             <div className="space-y-10 animate-fade-in">
-                
-                {/* Provider Selector */}
-                <div className="flex flex-col sm:flex-row gap-4 mb-6">
+             <div className="space-y-8 animate-fade-in p-4 md:p-6 relative">
+                {/* Internal Close Button */}
+                <button 
+                    onClick={(e) => { e.stopPropagation(); handleToggle(); }}
+                    className="absolute top-2 right-2 md:top-4 md:right-4 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-neutral-400 hover:text-black dark:hover:text-white transition-colors z-20"
+                    title="Minimize Vision"
+                >
+                    <X size={20} />
+                </button>
+
+                {/* SETTINGS HEADER */}
+                <div className="flex flex-col sm:flex-row gap-4 mb-4 bg-white dark:bg-[#0f0f11] border border-black/5 dark:border-white/5 p-5 rounded-[24px] shadow-sm">
                     <div className="flex-1 space-y-2">
-                        <label className="text-[9px] tech-mono font-black uppercase tracking-[0.3em] text-neutral-500 pl-2 flex items-center justify-between">
-                            Vision Engine
-                            {!isHealthy && <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10} /> {providerStatus}</span>}
-                        </label>
-                        <div className="relative">
-                            <select 
-                                value={selectedProvider} 
-                                onChange={(e) => { setSelectedProvider(e.target.value); setSelectedModel(providers.find(p => p.id === e.target.value)?.models[0].id || ''); }}
-                                className={`w-full bg-zinc-100 dark:bg-white/5 p-3 rounded-xl border border-black/5 dark:border-white/5 text-[10px] font-black uppercase tracking-widest text-black dark:text-white focus:outline-none focus:border-accent/30 appearance-none ${!isHealthy ? 'border-red-500/30' : ''}`}
-                            >
-                                {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
-                            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
-                        </div>
-                    </div>
-                    <div className="flex-1 space-y-2">
-                         <label className="text-[9px] tech-mono font-black uppercase tracking-[0.3em] text-neutral-500 pl-2">Model</label>
-                         <div className="relative">
-                            <select 
-                                value={selectedModel} 
-                                onChange={(e) => setSelectedModel(e.target.value)}
-                                className="w-full bg-zinc-100 dark:bg-white/5 p-3 rounded-xl border border-black/5 dark:border-white/5 text-[10px] font-black uppercase tracking-widest text-black dark:text-white focus:outline-none focus:border-accent/30 appearance-none"
-                            >
-                                {currentModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            </select>
-                            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
-                        </div>
+                        <VisualModelSelector 
+                            label="Vision Engine"
+                            selectedProviderId={selectedProvider}
+                            selectedModelId={selectedModel}
+                            providers={providers}
+                            onSelect={(p, m) => { setSelectedProvider(p); setSelectedModel(m); }}
+                            disabled={!!loading}
+                        />
+                        {!isHealthy && <span className="text-red-500 flex items-center gap-1 text-[9px] font-bold pl-2 pt-2 uppercase tracking-wide"><AlertCircle size={10} /> {providerStatus}</span>}
                     </div>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-8">
-                    {/* CAMERA / UPLOAD ZONE */}
-                    {isCameraActive ? (
-                        <div className="flex-1 relative rounded-[40px] overflow-hidden bg-black border-2 border-accent/30 shadow-[0_0_40px_var(--accent-glow)] min-h-[300px] flex flex-col animate-fade-in group">
-                            <video 
-                                ref={videoRef} 
-                                autoPlay 
-                                playsInline 
-                                muted 
-                                className="w-full h-full object-cover flex-1"
-                            />
-                            
-                            {/* Live Indicator */}
-                            <div className="absolute top-6 left-6 px-3 py-1.5 bg-red-600/90 backdrop-blur-md rounded-lg flex items-center gap-2 z-20">
-                                <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                                <span className="text-[8px] font-black text-white uppercase tracking-widest">LIVE_FEED</span>
+                {/* SPLIT VIEW LAYOUT */}
+                <div className="flex flex-col lg:flex-row gap-8 lg:h-[600px]">
+                    
+                    {/* LEFT: INPUT ZONE */}
+                    <div className="lg:w-5/12 flex flex-col gap-6 h-full">
+                        {isCameraActive ? (
+                            <div className="flex-1 relative rounded-[32px] overflow-hidden bg-black border border-accent/50 shadow-[0_0_40px_var(--accent-glow)] flex flex-col animate-fade-in ring-2 ring-accent/20">
+                                <video 
+                                    ref={videoRef} 
+                                    autoPlay 
+                                    playsInline 
+                                    muted 
+                                    className="w-full h-full object-cover flex-1"
+                                />
+                                <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-8 z-20">
+                                    <button onClick={stopCamera} className="p-4 rounded-full bg-white/20 backdrop-blur-md text-white hover:bg-white/30 border border-white/20 transition-all hover:scale-110"><X size={24}/></button>
+                                    <button onClick={captureFrame} className="w-20 h-20 rounded-full bg-white border-[6px] border-black/10 hover:scale-110 active:scale-95 transition-all shadow-2xl"></button>
+                                </div>
+                                <div className="absolute top-4 left-4 px-3 py-1 bg-red-500/20 text-red-500 rounded-full backdrop-blur flex items-center gap-2 border border-red-500/30">
+                                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_red]"></div>
+                                    <span className="text-[9px] font-black uppercase tracking-widest">LIVE_FEED</span>
+                                </div>
                             </div>
-
-                            {/* Camera Controls Overlay */}
-                            <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/90 to-transparent flex items-center justify-center gap-8 z-20">
-                                <button 
-                                    onClick={stopCamera}
-                                    className="p-4 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white transition-all border border-white/10"
-                                >
-                                    <X size={20} />
-                                </button>
-                                
-                                <button 
-                                    onClick={captureFrame}
-                                    className="w-16 h-16 rounded-full bg-white border-[6px] border-white/30 bg-clip-padding hover:scale-110 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,255,255,0.3)]"
-                                >
-                                </button>
-
-                                <div className="w-12"></div> {/* Spacer for balance */}
-                            </div>
-                        </div>
-                    ) : (
-                        <div 
-                            onClick={() => fileInputRef.current?.click()} 
-                            className="flex-1 p-8 border-2 border-dashed border-black/10 dark:border-white/10 rounded-[40px] flex flex-col items-center justify-center text-center group hover:border-[var(--accent-color)]/50 hover:bg-[var(--accent-color)]/[0.03] transition-all duration-700 cursor-pointer min-h-[300px] shadow-inner relative bg-zinc-50 dark:bg-black/20"
-                        >
-                            <div className="w-24 h-24 rounded-[32px] bg-white dark:bg-white/5 flex items-center justify-center mb-6 shadow-xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 group-hover:bg-accent/10 border border-black/5 dark:border-white/5">
-                                <ImageIcon size={36} className="text-neutral-400 group-hover:text-[var(--accent-color)] transition-colors" />
-                            </div>
-                            <p className="text-[10px] font-black uppercase tech-mono text-neutral-400 group-hover:text-accent transition-colors tracking-[0.4em]">SOURCE_UPLINK</p>
-                            <p className="text-[8px] text-neutral-500 uppercase mt-2 opacity-50 mb-8">DROP FILE OR TAP TO BROWSE</p>
-                            
-                            <div className="flex gap-3 z-10 relative" onClick={(e) => e.stopPropagation()}>
-                                <button 
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="px-6 py-3 bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-black/5 dark:hover:bg-white/10 transition-all text-neutral-500 hover:text-black dark:hover:text-white"
-                                >
-                                    BROWSE
-                                </button>
-                                <button 
-                                    onClick={startCamera}
-                                    className="px-6 py-3 bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-black/5 dark:hover:bg-white/10 transition-all flex items-center gap-2 text-neutral-500 hover:text-accent"
-                                >
-                                    <Camera size={14} /> LIVE_CAM
-                                </button>
-                            </div>
-
-                            <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => e.target.files?.[0] && handleMediaUpload(e.target.files[0], 'ANALYZE')} accept="image/*,video/*" />
-                        </div>
-                    )}
-
-                    <div className="flex-1 flex flex-col gap-6 justify-center">
-                        <div className="relative">
-                            <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Instruksi analisis atau modifikasi..." className="w-full bg-zinc-100 dark:bg-black/20 p-6 rounded-[32px] border border-transparent focus:border-accent/30 focus:bg-white dark:focus:bg-black/40 focus:outline-none text-black dark:text-white font-bold h-40 resize-none transition-all placeholder:text-neutral-400 uppercase italic text-xs shadow-inner" />
-                            <div className="absolute top-4 right-6 opacity-30">
-                                <Activity size={12} className="text-accent" />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                             <button onClick={() => editInputRef.current?.click()} className="py-5 bg-white dark:bg-white/5 text-neutral-500 dark:text-neutral-300 rounded-[20px] font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-3 border border-black/5 dark:border-white/10 hover:border-accent/30 hover:bg-zinc-50 transition-all shadow-lg">
-                                 <Layout size={18} /> EDIT_SOURCE
-                                 <input type="file" ref={editInputRef} className="hidden" onChange={(e) => e.target.files?.[0] && handleMediaUpload(e.target.files[0], 'EDIT')} accept="image/*" />
-                             </button>
-                             <button onClick={() => fileInputRef.current?.click()} className="py-5 bg-[var(--accent-color)] text-on-accent rounded-[20px] font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-3 shadow-2xl hover:scale-[1.02] active:scale-95 transition-all">
-                                 <Send size={18} /> ANALYZE
-                             </button>
-                        </div>
-                    </div>
-                </div>
-
-                {(analysisResult || editResult) && (
-                    <div className="p-10 bg-white dark:bg-black/40 rounded-[40px] border border-black/5 dark:border-white/10 tech-mono text-xs leading-relaxed text-black dark:text-neutral-300 uppercase italic animate-slide-up shadow-lg relative group">
-                        <div className="flex items-center gap-3 mb-8 text-[var(--accent-color)] border-b border-black/5 dark:border-white/10 pb-6">
-                            <Sparkles size={20} className="animate-pulse" />
-                            <span className="font-black tracking-[0.4em]">OUTPUT_LOG</span>
-                        </div>
-                        
-                        {editResult ? (
-                            <img src={editResult} alt="Edited Result" className="w-full rounded-[24px] shadow-lg border border-black/5" />
                         ) : (
-                            <div className="prose dark:prose-invert prose-sm max-w-none text-black dark:text-white mb-4 selection:bg-accent/20">
-                                <Markdown>{analysisResult || ''}</Markdown>
+                            <div 
+                                onClick={() => fileInputRef.current?.click()} 
+                                className="flex-1 border-2 border-dashed border-black/10 dark:border-white/10 rounded-[32px] flex flex-col items-center justify-center text-center group hover:border-accent/50 hover:bg-accent/5 transition-all cursor-pointer relative overflow-hidden bg-zinc-50 dark:bg-[#0a0a0b]"
+                            >
+                                <div className="w-24 h-24 rounded-[32px] bg-white dark:bg-white/5 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg border border-black/5 dark:border-white/5">
+                                    <ImageIcon size={40} className="text-neutral-400 group-hover:text-accent transition-colors" strokeWidth={1.5} />
+                                </div>
+                                <p className="text-[10px] font-black uppercase tech-mono text-neutral-400 group-hover:text-black dark:group-hover:text-white transition-colors tracking-[0.3em] mb-8">DRAG_DROP_VISUAL_DATA</p>
+                                
+                                <div className="flex gap-3 relative z-10" onClick={e => e.stopPropagation()}>
+                                    <button onClick={() => fileInputRef.current?.click()} className="px-6 py-3 bg-white dark:bg-white/10 hover:bg-black dark:hover:bg-white text-black dark:text-white hover:text-white dark:hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm border border-black/5 dark:border-white/5">UPLOAD</button>
+                                    <button onClick={startCamera} className="px-6 py-3 bg-white dark:bg-white/10 hover:bg-accent text-black dark:text-white hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm border border-black/5 dark:border-white/5"><Camera size={14}/> CAM</button>
+                                </div>
+                                <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => e.target.files?.[0] && handleMediaUpload(e.target.files[0], 'ANALYZE')} accept="image/*,video/*" />
                             </div>
                         )}
 
-                        <button onClick={() => { setAnalysisResult(null); setEditResult(null); }} className="absolute top-10 right-10 p-3 text-neutral-400 hover:text-red-500 transition-all hover:bg-red-500/10 rounded-xl"><Trash2 size={20} /></button>
-                        <div className="mt-8 pt-6 border-t border-black/5 dark:border-white/10 flex items-center gap-2 opacity-40">
-                            <div className="w-2 h-2 rounded-full bg-accent animate-pulse"></div>
-                            <span className="text-[8px] font-black tracking-widest">KRNL_VERIFIED_OUTPUT</span>
+                        <div className="relative shrink-0">
+                            <textarea 
+                                value={prompt} 
+                                onChange={(e) => setPrompt(e.target.value)} 
+                                placeholder="INSTRUCTION_SET..." 
+                                className="w-full bg-white dark:bg-[#0a0a0b] p-6 rounded-[24px] border border-black/5 dark:border-white/10 focus:border-accent/30 focus:shadow-lg focus:outline-none text-black dark:text-white font-mono text-xs h-32 resize-none placeholder:text-neutral-400 transition-all" 
+                            />
+                            <button onClick={() => editInputRef.current?.click()} className="absolute bottom-4 right-4 p-2.5 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-neutral-500 hover:text-black dark:hover:text-white rounded-xl transition-all" title="Edit Mode">
+                                <Layout size={16} />
+                                <input type="file" ref={editInputRef} className="hidden" onChange={(e) => e.target.files?.[0] && handleMediaUpload(e.target.files[0], 'EDIT')} accept="image/*" />
+                            </button>
                         </div>
                     </div>
-                )}
+
+                    {/* RIGHT: OUTPUT ZONE */}
+                    <div className="flex-1 bg-white dark:bg-[#0a0a0b] rounded-[32px] border border-black/5 dark:border-white/5 overflow-hidden relative flex flex-col shadow-lg">
+                        <div className="h-16 bg-zinc-50 dark:bg-white/[0.02] border-b border-black/5 dark:border-white/5 flex items-center px-8 justify-between shrink-0">
+                            <div className="flex items-center gap-3">
+                                <ScanEye size={20} className="text-accent" />
+                                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-black dark:text-white">ANALYSIS_LOG</span>
+                            </div>
+                            {(analysisResult || editResult) && (
+                                <button onClick={() => { setAnalysisResult(null); setEditResult(null); }} className="text-neutral-400 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                            )}
+                        </div>
+
+                        <div className="flex-1 p-8 overflow-y-auto custom-scroll relative">
+                            {loading ? (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center space-y-6">
+                                    <div className="w-20 h-20 rounded-full border-4 border-accent/20 border-t-accent animate-spin shadow-[0_0_40px_var(--accent-glow)]"></div>
+                                    <p className="text-[10px] tech-mono font-black text-accent animate-pulse uppercase tracking-[0.3em]">{statusMsg}</p>
+                                </div>
+                            ) : editResult ? (
+                                <img src={editResult} alt="Result" className="w-full h-full object-contain rounded-2xl border border-black/5 dark:border-white/5" />
+                            ) : analysisResult ? (
+                                <div className="prose dark:prose-invert prose-sm max-w-none text-neutral-700 dark:text-neutral-300 font-medium text-[13px] leading-loose animate-slide-up">
+                                    <Markdown>{analysisResult}</Markdown>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full opacity-30 gap-6">
+                                    <Aperture size={64} className="text-black dark:text-white" strokeWidth={1} />
+                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500">AWAITING_VISUAL_INPUT</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
              </div>
         </ToolGroup>
     );

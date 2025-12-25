@@ -1,12 +1,12 @@
 
-import { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import useLocalStorage from '../../../hooks/useLocalStorage';
 import { type ChatThread, type ChatMessage, type Note } from '../../../types';
-import { MODEL_CATALOG, MELSA_KERNEL } from '../../../services/melsaKernel';
+import { MODEL_CATALOG, HANISAH_KERNEL } from '../../../services/melsaKernel';
 import { STOIC_KERNEL } from '../../../services/stoicKernel';
 import { executeNeuralTool } from '../services/toolHandler';
-import { speakWithMelsa } from '../../../services/elevenLabsService';
+import { speakWithHanisah } from '../../../services/elevenLabsService';
 import { useVault } from '../../../contexts/VaultContext';
 
 export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) => {
@@ -32,14 +32,16 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         return MODEL_CATALOG.find(m => m.id === id) || MODEL_CATALOG[0];
     }, [activeThread]);
 
-    const personaMode = activeThread?.persona || 'melsa';
+    // UPDATED: Default to 'stoic' if no thread is active
+    const personaMode = activeThread?.persona || 'stoic';
     
     // Check Config relative to persona
     const vaultEnabled = isVaultConfigEnabled(personaMode);
 
-    const handleNewChat = useCallback(async (persona: 'melsa' | 'stoic' = 'melsa') => {
-        const welcome = persona === 'melsa' 
-            ? "⚡ **MELSA PLATINUM ONLINE.**\n\n*Halo Sayang, aku sudah siap. Apa yang bisa kubantu hari ini?*" 
+    // UPDATED: Default argument to 'stoic'
+    const handleNewChat = useCallback(async (persona: 'hanisah' | 'stoic' = 'stoic') => {
+        const welcome = persona === 'hanisah' 
+            ? "⚡ **HANISAH PLATINUM ONLINE.**\n\n*Halo Sayang, aku sudah siap. Apa yang bisa kubantu hari ini?*" 
             : "🧠 **STOIC_LOGIC ACTIVE.**\n\nMari kita bedah masalah Anda dengan akal budi dan ketenangan.";
         
         const newThread: ChatThread = {
@@ -54,6 +56,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         
         setThreads(prev => [newThread, ...prev]);
         setActiveThreadId(newThread.id);
+        return newThread; // Return for immediate usage
     }, [setActiveThreadId, setThreads]);
 
     const renameThread = useCallback(async (id: string, newTitle: string) => {
@@ -67,19 +70,48 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     const sendMessage = async (e?: React.FormEvent, attachment?: { data: string, mimeType: string }) => {
         const userMsg = input.trim();
         // Allow empty message if there is an attachment
-        if ((!userMsg && !attachment) || isLoading || !activeThreadId || !activeThread) return;
+        if ((!userMsg && !attachment) || isLoading) return;
+
+        let currentThreadId = activeThreadId;
+        let effectiveThread = activeThread;
+
+        // 1. AUTO-INITIALIZATION: If no thread exists, create one immediately
+        if (!currentThreadId || !effectiveThread) {
+            const welcome = personaMode === 'hanisah' 
+                ? "⚡ **HANISAH PLATINUM ONLINE.**\n\n*Halo Sayang, aku sudah siap. Apa yang bisa kubantu hari ini?*" 
+                : "🧠 **STOIC_LOGIC ACTIVE.**\n\nMari kita bedah masalah Anda dengan akal budi dan ketenangan.";
+            
+            const newId = uuidv4();
+            const newThread: ChatThread = {
+                id: newId,
+                title: userMsg ? userMsg.slice(0, 30).toUpperCase() : 'IMAGE_ANALYSIS',
+                persona: personaMode,
+                model_id: 'gemini-3-pro-preview',
+                messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
+                updated: new Date().toISOString(),
+                isPinned: false
+            };
+
+            // Immediate State Update
+            setThreads(prev => [newThread, ...prev]);
+            setActiveThreadId(newId);
+            
+            // Set references for local execution flow
+            currentThreadId = newId;
+            effectiveThread = newThread;
+        }
 
         // Auto-rename thread based on first message if generic title
-        if (activeThread.messages.length <= 1 && activeThread.title.startsWith('SESSION_') && userMsg) {
-            renameThread(activeThreadId, userMsg.slice(0, 30).toUpperCase());
-        } else if (activeThread.messages.length <= 1 && activeThread.title.startsWith('SESSION_') && attachment) {
-            renameThread(activeThreadId, "IMAGE_ANALYSIS");
+        if (effectiveThread.messages.length <= 1 && effectiveThread.title.startsWith('SESSION_') && userMsg) {
+            renameThread(currentThreadId, userMsg.slice(0, 30).toUpperCase());
+        } else if (effectiveThread.messages.length <= 1 && effectiveThread.title.startsWith('SESSION_') && attachment) {
+            renameThread(currentThreadId, "IMAGE_ANALYSIS");
         }
 
         // Add User Message
         const messageText = attachment ? (userMsg ? userMsg : "Sent an image.") : userMsg;
         const updatedMessages: ChatMessage[] = [
-            ...activeThread.messages, 
+            ...effectiveThread.messages, 
             { id: uuidv4(), role: 'user', text: messageText, metadata: { status: 'success' } }
         ];
 
@@ -94,7 +126,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
         // Update thread with new messages AND update the timestamp so it bumps to top
         const now = new Date().toISOString();
-        setThreads(prev => prev.map(t => t.id === activeThreadId ? { 
+        setThreads(prev => prev.map(t => t.id === currentThreadId ? { 
             ...t, 
             messages: [...updatedMessages, initialModelMessage],
             updated: now 
@@ -124,13 +156,11 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                     : "🚫 [[VAULT_SYSTEM_OFFLINE]] (Module disabled in System Configuration. No access possible.)";
             }
 
-            const kernel = personaMode === 'melsa' ? MELSA_KERNEL : STOIC_KERNEL;
-            
+            const kernel = personaMode === 'hanisah' ? HANISAH_KERNEL : STOIC_KERNEL;
+            const currentModelId = effectiveThread.model_id; // Safe access
+
             // Execute Stream - Kernel will handle routing logic and errors internally
-            // Note: Stoic kernel currently doesn't support attachment in `streamExecute` via types signature, 
-            // but for simplicity we assume Melsa use cases for visuals mostly. 
-            // If Stoic used, attachment will be ignored or handled if kernel updated.
-            const stream = kernel.streamExecute(userMsg || (attachment ? "Analyze this image." : "."), activeThread.model_id, noteContext, attachment);
+            const stream = kernel.streamExecute(userMsg || (attachment ? "Analyze this image." : "."), currentModelId, noteContext, attachment);
             
             let accumulatedText = "";
             let currentFunctionCall: any = null;
@@ -140,7 +170,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 if (chunk.functionCall) currentFunctionCall = chunk.functionCall;
 
                 // Update UI Stream in real-time
-                setThreads(prev => prev.map(t => t.id === activeThreadId ? {
+                setThreads(prev => prev.map(t => t.id === currentThreadId ? {
                     ...t,
                     messages: t.messages.map(m => m.id === modelMessageId ? {
                         ...m,
@@ -155,7 +185,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             }
 
             if (isAutoSpeak && accumulatedText && !currentFunctionCall) {
-                speakWithMelsa(accumulatedText.replace(/[*#_`]/g, ''), personaMode === 'melsa' ? 'Melsa' : 'Fenrir');
+                speakWithHanisah(accumulatedText.replace(/[*#_`]/g, ''), personaMode === 'hanisah' ? 'Hanisah' : 'Fenrir');
             }
 
             // Handle Function Calling with SECURE CHECKS
@@ -175,20 +205,20 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 }
 
                 const followUpPrompt = `Tool "${currentFunctionCall.name}" Result: ${toolResult}. \nBerdasarkan hasil ini, berikan konfirmasi ramah kepada user.`;
-                const followUpStream = kernel.streamExecute(followUpPrompt, activeThread.model_id, noteContext);
+                const followUpStream = kernel.streamExecute(followUpPrompt, currentModelId, noteContext);
                 
                 accumulatedText += `\n\n> ⚙️ *System Action: ${toolResult}*\n\n`;
                 
                 for await (const chunk of followUpStream) {
                     if (chunk.text) accumulatedText += chunk.text;
-                    setThreads(prev => prev.map(t => t.id === activeThreadId ? {
+                    setThreads(prev => prev.map(t => t.id === currentThreadId ? {
                         ...t,
                         messages: t.messages.map(m => m.id === modelMessageId ? { ...m, text: accumulatedText } : m)
                     } : t));
                 }
             }
         } catch (err: any) {
-             setThreads(prev => prev.map(t => t.id === activeThreadId ? { 
+             setThreads(prev => prev.map(t => t.id === currentThreadId ? { 
                 ...t, 
                 messages: t.messages.map(m => m.id === modelMessageId ? {
                     ...m, text: `⚠️ **CRITICAL KERNEL FAILURE**: Sistem tidak dapat memulihkan koneksi.\n\n_Manual Reboot Required._`, metadata: { status: 'error' }

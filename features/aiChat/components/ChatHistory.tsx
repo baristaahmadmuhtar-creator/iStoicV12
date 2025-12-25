@@ -117,9 +117,9 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
       {/* Main Drawer Panel */}
       <div className={`
         fixed inset-y-0 right-0 w-[85%] md:w-[380px] 
-        bg-[#f8f9fa]/95 dark:bg-[#09090b]/95 backdrop-blur-2xl 
+        bg-white/95 dark:bg-[#09090b]/95 backdrop-blur-2xl 
         border-l border-black/5 dark:border-white/10 
-        z-[2010] shadow-[-20px_0_50px_rgba(0,0,0,0.3)]
+        z-[2010] shadow-[-20px_0_50px_rgba(0,0,0,0.1)] dark:shadow-[-20px_0_50px_rgba(0,0,0,0.5)]
         transform transition-transform duration-500 cubic-bezier(0.22, 1, 0.36, 1)
         flex flex-col
         ${isOpen ? 'translate-x-0' : 'translate-x-full'}
@@ -129,7 +129,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
         <div className="p-6 border-b border-black/5 dark:border-white/5 bg-zinc-50/50 dark:bg-white/[0.02] shrink-0 space-y-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-accent/10 rounded-lg text-accent">
+              <div className="p-2 bg-accent/10 rounded-lg text-accent border border-accent/20">
                 <History size={18} strokeWidth={2.5} />
               </div>
               <div>
@@ -161,7 +161,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
               placeholder="SEARCH_LOGS..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white dark:bg-black/20 border border-black/5 dark:border-white/10 focus:border-accent/50 rounded-xl py-3 pl-10 pr-4 text-[10px] tech-mono font-bold uppercase tracking-widest text-black dark:text-white focus:outline-none transition-all placeholder:text-neutral-500"
+              className="w-full bg-white dark:bg-black/20 border border-black/5 dark:border-white/10 focus:border-accent/50 rounded-xl py-3 pl-10 pr-4 text-[10px] tech-mono font-bold uppercase tracking-widest text-black dark:text-white focus:outline-none transition-all placeholder:text-neutral-400 dark:placeholder:text-neutral-600"
             />
           </div>
         </div>
@@ -184,7 +184,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                   {items.map(t => {
                     const isActive = activeThreadId === t.id;
                     const isEditing = editingId === t.id;
-                    const ModelIcon = t.persona === 'melsa' ? Flame : Brain;
+                    const ModelIcon = t.persona === 'hanisah' ? Flame : Brain;
                     
                     return (
                       <div 
@@ -194,7 +194,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                           group relative p-3.5 rounded-[16px] border transition-all duration-300 cursor-pointer overflow-hidden
                           ${isActive 
                             ? 'bg-white dark:bg-white/[0.08] border-accent/40 shadow-lg shadow-accent/5 ring-1 ring-accent/20' 
-                            : 'bg-transparent border-transparent hover:bg-white/60 dark:hover:bg-white/[0.03] hover:border-black/5 dark:hover:border-white/5'
+                            : 'bg-transparent border-transparent hover:bg-zinc-100 dark:hover:bg-white/[0.03] hover:border-black/5 dark:hover:border-white/5'
                           }
                         `}
                       >
@@ -209,7 +209,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                             w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all
                             ${isActive 
                                 ? 'bg-accent text-black shadow-md' 
-                                : 'bg-black/5 dark:bg-white/5 text-neutral-400 group-hover:text-black dark:group-hover:text-white'
+                                : 'bg-zinc-200 dark:bg-white/5 text-neutral-400 group-hover:text-black dark:group-hover:text-white'
                             }
                           `}>
                              <ModelIcon size={18} />
@@ -224,7 +224,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                                   value={editValue}
                                   onChange={(e) => setEditValue(e.target.value)}
                                   onBlur={handleCommitRename}
-                                  className="bg-transparent border-b border-accent w-full text-[11px] font-black uppercase outline-none py-1"
+                                  className="bg-transparent border-b border-accent w-full text-[11px] font-black uppercase outline-none py-1 text-black dark:text-white"
                                 />
                               </form>
                             ) : (

@@ -1,14 +1,18 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { NeuralLinkService, type NeuralLinkStatus } from '../../../services/neuralLink';
-import { MELSA_BRAIN } from '../../../services/melsaBrain';
+import { HANISAH_BRAIN } from '../../../services/melsaBrain';
 import { executeNeuralTool } from '../services/toolHandler';
 import { type Note } from '../../../types';
 
-export const useNeuralLinkSession = (personaMode: 'melsa' | 'stoic', notes: Note[], setNotes: (notes: Note[]) => void) => {
+export const useNeuralLinkSession = (personaMode: 'hanisah' | 'stoic', notes: Note[], setNotes: (notes: Note[]) => void) => {
     const [isLiveMode, setIsLiveMode] = useState(false);
     const [liveStatus, setLiveStatus] = useState<NeuralLinkStatus>('IDLE');
-    const [liveTranscript, setLiveTranscript] = useState('');
+    
+    // UPDATED: Split transcript state for stable rendering
+    const [transcriptHistory, setTranscriptHistory] = useState<Array<{role: 'user' | 'model', text: string}>>([]);
+    const [interimTranscript, setInterimTranscript] = useState<{role: 'user' | 'model', text: string} | null>(null);
+    
     const neuralLink = useRef<NeuralLinkService>(new NeuralLinkService());
 
     const toggleLiveMode = useCallback(async () => {
@@ -17,14 +21,17 @@ export const useNeuralLinkSession = (personaMode: 'melsa' | 'stoic', notes: Note
             setIsLiveMode(false);
             setLiveStatus('IDLE');
         } else {
-            setLiveTranscript('');
+            // Reset States
+            setTranscriptHistory([]);
+            setInterimTranscript(null);
+            
             const noteContext = notes.map(n => `- ${n.title}`).join('\n');
-            const systemInstruction = MELSA_BRAIN.getSystemInstruction(personaMode, noteContext);
+            const systemInstruction = HANISAH_BRAIN.getSystemInstruction(personaMode, noteContext);
             
             setIsLiveMode(true);
             try {
                 const storedVoice = localStorage.getItem(`${personaMode}_voice`);
-                const voice = storedVoice ? JSON.parse(storedVoice) : (personaMode === 'melsa' ? 'Zephyr' : 'Fenrir');
+                const voice = storedVoice ? JSON.parse(storedVoice) : (personaMode === 'hanisah' ? 'Zephyr' : 'Fenrir');
 
                 await neuralLink.current.connect({
                     modelId: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -36,12 +43,19 @@ export const useNeuralLinkSession = (personaMode: 'melsa' | 'stoic', notes: Note
                         if (status === 'ERROR') setIsLiveMode(false);
                     },
                     onTranscription: (event) => {
-                        if (event.source === 'model') setLiveTranscript(prev => event.isFinal ? event.text : prev + event.text);
+                        // LOGIC FIX: Handle partial vs final chunks
+                        if (event.isFinal) {
+                            setTranscriptHistory(prev => [...prev, { role: event.source, text: event.text }]);
+                            setInterimTranscript(null); // Clear interim
+                        } else {
+                            setInterimTranscript({ role: event.source, text: event.text });
+                        }
                     },
                     onToolCall: async (call) => await executeNeuralTool(call, notes, setNotes)
                 });
             } catch (e) {
                 setIsLiveMode(false);
+                setLiveStatus('ERROR');
             }
         }
     }, [isLiveMode, personaMode, notes, setNotes]);
@@ -49,7 +63,8 @@ export const useNeuralLinkSession = (personaMode: 'melsa' | 'stoic', notes: Note
     return {
         isLiveMode,
         liveStatus,
-        liveTranscript,
+        transcriptHistory,
+        interimTranscript,
         toggleLiveMode,
         analyser: neuralLink.current.analyser
     };

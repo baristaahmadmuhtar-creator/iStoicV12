@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { debugService } from '../services/debugService';
 import { KEY_MANAGER, type ProviderStatus } from '../services/geminiService';
@@ -170,10 +169,10 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
     if (!isOpen) return null;
 
     return (
-        <div className={`fixed inset-y-0 right-0 bg-[#050505]/95 backdrop-blur-xl border-l border-white/10 z-[9999] shadow-2xl flex flex-col transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] tech-mono ${isExpanded ? 'w-full md:w-[80vw]' : 'w-full md:w-[450px]'}`}>
+        <div className={`fixed inset-y-0 right-0 bg-terminal-void border-l border-white/10 z-[9999] shadow-2xl flex flex-col transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] tech-mono terminal-scanlines ${isExpanded ? 'w-full md:w-[80vw]' : 'w-full md:w-[450px]'}`}>
             
             {/* HEADER */}
-            <header className="h-14 px-4 flex items-center justify-between border-b border-white/10 bg-white/[0.02] shrink-0">
+            <header className="h-14 px-4 flex items-center justify-between border-b border-white/10 bg-white/[0.02] shrink-0 relative z-20">
                 <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-[var(--accent-color)] animate-pulse shadow-[0_0_10px_var(--accent-color)]"></div>
                     <span className="text-[10px] font-black tracking-[0.3em] uppercase text-white">
@@ -191,7 +190,7 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
             </header>
 
             {/* NAV TABS */}
-            <div className="flex border-b border-white/10 bg-black/20 shrink-0">
+            <div className="flex border-b border-white/10 bg-black/20 shrink-0 relative z-20">
                 {['STREAM', 'UPLINK', 'MEMORY'].map((tab) => (
                     <button 
                         key={tab}
@@ -208,7 +207,7 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
             </div>
 
             {/* CONTENT AREA */}
-            <div className="flex-1 overflow-hidden relative bg-black/40">
+            <div className="flex-1 overflow-hidden relative z-10">
                 
                 {/* --- STREAM TAB --- */}
                 {activeTab === 'STREAM' && (
@@ -389,7 +388,7 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
             </div>
 
             {/* CLI FOOTER */}
-            <div className="p-3 bg-[#0a0a0b] border-t border-white/10 shrink-0">
+            <div className="p-3 bg-[#0a0a0b] border-t border-white/10 shrink-0 relative z-20">
                 <form onSubmit={handleCLI} className="relative flex items-center group">
                     <span className="absolute left-3 text-[var(--accent-color)] font-black text-xs animate-pulse">{'>'}</span>
                     <input 

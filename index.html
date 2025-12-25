@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#0d0d0e" />
+    <meta name="theme-color" content="#020202" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>IStoicAI | Platinum Cognitive Terminal v13.5</title>
@@ -61,22 +61,27 @@
     </script>
     <style>
       :root {
-        --bg-deep: #050505;
+        /* UPDATED: Deep Void Black for High Contrast */
+        --bg-deep: #020202; 
         --text-main: #ffffff;
-        --card-bg: rgba(255, 255, 255, 0.03);
+        
+        /* Updated Glass: Slightly darker, more opaque for readability */
+        --card-bg: rgba(20, 20, 23, 0.6); 
         --card-border: rgba(255, 255, 255, 0.08);
-        --accent-color: #00f0ff;
+        
+        /* Default Initial Color: Electric Cyan */
+        --accent-color: #00F0FF;
         --accent-rgb: 0, 240, 255;
         --on-accent-color: #000000;
         --on-accent-rgb: 0, 0, 0;
-        --accent-glow: rgba(0, 240, 255, 0.15);
-        --nav-accent: #00f0ff; 
+        --accent-glow: rgba(0, 240, 255, 0.45);
+        --nav-accent: #00F0FF; 
         --glass-border: 1px solid rgba(255, 255, 255, 0.08);
       }
       
       html.light {
-        --bg-deep: #f2f4f6;
-        --text-main: #0a0a0a;
+        --bg-deep: #f0f2f5;
+        --text-main: #050505;
         --card-bg: rgba(255, 255, 255, 0.85);
         --card-border: rgba(0, 0, 0, 0.06);
         --glass-border: 1px solid rgba(0, 0, 0, 0.05);
@@ -103,10 +108,11 @@
         left: 0;
         width: 100%;
         height: 100%;
+        /* Updated background pattern to be slightly sharper */
         background-image: 
-          radial-gradient(circle at 50% 0%, rgba(var(--accent-rgb), 0.08) 0%, transparent 50%),
-          linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+          radial-gradient(circle at 50% 0%, rgba(var(--accent-rgb), 0.12) 0%, transparent 60%),
+          linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
         background-size: 100% 100%, 40px 40px, 40px 40px;
         z-index: -1;
         pointer-events: none;
@@ -118,8 +124,8 @@
 
       .glass-card-3d {
         background: var(--card-bg);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(16px); /* Increased blur */
+        -webkit-backdrop-filter: blur(16px);
         border: var(--glass-border);
         border-radius: 24px;
         transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1), background-color 0.3s ease;
@@ -127,10 +133,10 @@
       }
 
       .glass-card-3d:hover {
-        border-color: rgba(var(--accent-rgb), 0.3);
-        background: rgba(255, 255, 255, 0.05);
-        transform: translate3d(0, -2px, 0) scale(1.002);
-        box-shadow: 0 20px 40px -10px var(--accent-glow);
+        border-color: rgba(var(--accent-rgb), 0.4);
+        background: rgba(255, 255, 255, 0.07);
+        transform: translate3d(0, -2px, 0) scale(1.005);
+        box-shadow: 0 20px 50px -10px var(--accent-glow);
       }
       
       .text-shadow-glow {

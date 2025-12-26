@@ -1,4 +1,3 @@
-
 import { GLOBAL_VAULT, type Provider } from './hydraVault';
 import { debugService } from './debugService';
 import { GoogleGenAI } from "@google/genai";
@@ -115,7 +114,7 @@ export class OmniRaceKernel {
     // 1. GEMINI IMPLEMENTATION
     if (provider === 'GEMINI') {
         const ai = new GoogleGenAI({ apiKey: key });
-        // Gemini doesn't support AbortSignal in all versions cleanly, but we check signal status in loop
+        // Correctly handle streaming response for Gemini
         const streamResult = await ai.models.generateContentStream({
             model: modelId,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -128,9 +127,11 @@ export class OmniRaceKernel {
         // Return a generator that wraps the Gemini stream
         async function* geminiGenerator() {
             try {
-                for await (const chunk of streamResult.stream) {
+                // Correctly iterate directly over streamResult as an async iterator
+                for await (const chunk of streamResult) {
                     if (signal.aborted) break;
-                    const text = chunk.text();
+                    // Access text property directly (do not call as a function)
+                    const text = chunk.text;
                     if (text) yield { text };
                 }
             } catch (e) {

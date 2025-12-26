@@ -1,5 +1,4 @@
-
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Terminal, ShieldAlert, ZapOff, Copy, Check } from 'lucide-react';
 import { debugService } from '../services/debugService';
 import { KEY_MANAGER } from '../services/geminiService';
@@ -21,13 +20,19 @@ interface State {
  * "Fokus pada apa yang ada di depan mata Anda sekarang." — Marcus Aurelius.
  * Menangani kegagalan sistem dengan ketenangan stoik.
  */
-export class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null,
-    errorInfo: null,
-    copied: false
-  };
+// Use React.Component to ensure inheritance is correctly recognized
+export class ErrorBoundary extends React.Component<Props, State> {
+  public state: State;
+
+  constructor(props: Props) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null,
+      copied: false
+    };
+  }
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error, errorInfo: null, copied: false };
@@ -35,6 +40,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
+    // Use this.props to access viewName
     const view = this.props.viewName || 'UNKNOWN_MODULE';
     const errStr = error.message.toLowerCase();
 

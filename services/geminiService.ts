@@ -29,10 +29,6 @@ class KeyManagerProxy {
   }
 
   public reportFailure(provider: string, error: any) {
-      // In the old system, we didn't pass the specific key string to reportFailure easily from all call sites.
-      // This is a limitation. For now, we just log it. 
-      // HydraVault requires the specific key to punish it.
-      // Ideally, the caller should pass the key. 
       debugService.log('WARN', 'LEGACY_KEY_MGR', 'FAIL_REPORT', `Provider ${provider} reported failure without key context.`);
   }
 
@@ -51,7 +47,7 @@ class KeyManagerProxy {
 
 export const KEY_MANAGER = new KeyManagerProxy();
 
-// --- UTILITIES (Kept same as before, but using GLOBAL_VAULT internally via KEY_MANAGER proxy) ---
+// --- UTILITIES ---
 
 export async function generateImage(prompt: string): Promise<string | null> {
   const key = KEY_MANAGER.getKey('GEMINI');
@@ -62,13 +58,16 @@ export async function generateImage(prompt: string): Promise<string | null> {
       model: 'gemini-2.5-flash-image',
       contents: { parts: [{ text: prompt }] },
     });
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
-      }
+    // Iterate parts to find image, robust check
+    if (response.candidates?.[0]?.content?.parts) {
+        for (const part of response.candidates[0].content.parts) {
+            if (part.inlineData) {
+                return `data:image/png;base64,${part.inlineData.data}`;
+            }
+        }
     }
   } catch (e) {
-    GLOBAL_VAULT.reportFailure('GEMINI', key, e); // Now we have the key context
+    GLOBAL_VAULT.reportFailure('GEMINI', key, e);
   }
   return null;
 }
@@ -116,9 +115,11 @@ export async function editImage(base64: string, mimeType: string, prompt: string
                 ],
             },
         });
-        for (const part of response.candidates?.[0]?.content?.parts || []) {
-            if (part.inlineData) {
-                return `data:image/png;base64,${part.inlineData.data}`;
+        if (response.candidates?.[0]?.content?.parts) {
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData) {
+                    return `data:image/png;base64,${part.inlineData.data}`;
+                }
             }
         }
     } catch (e) {

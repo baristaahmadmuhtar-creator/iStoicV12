@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import useLocalStorage from '../../../hooks/useLocalStorage';
 import { type ChatThread, type ChatMessage, type Note } from '../../../types';
@@ -8,57 +8,60 @@ import { STOIC_KERNEL } from '../../../services/stoicKernel';
 import { executeNeuralTool } from '../services/toolHandler';
 import { speakWithHanisah } from '../../../services/elevenLabsService';
 import { useVault } from '../../../contexts/VaultContext';
+import { debugService } from '../../../services/debugService';
 
 export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) => {
     const [threads, setThreads] = useLocalStorage<ChatThread[]>('chat_threads', []);
     const [activeThreadId, setActiveThreadId] = useLocalStorage<string | null>('active_thread_id', null);
+    const [globalModelId, setGlobalModelId] = useLocalStorage<string>('global_model_preference', 'llama-3.3-70b-versatile');
     
-    // SECURITY: Use Global Context
     const { isVaultUnlocked, lockVault, unlockVault, isVaultConfigEnabled } = useVault();
-    
-    // Settings
     const [isAutoSpeak, setIsAutoSpeak] = useLocalStorage<boolean>('is_auto_speak', false);
     
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isLiveModeActive, setIsLiveModeActive] = useState(false);
 
-    // Memoize active thread to prevent unnecessary re-renders
-    const activeThread = useMemo(() => 
-        threads.find(t => t.id === activeThreadId) || null, 
-    [threads, activeThreadId]);
+    // PERSISTENT REF: To prevent race condition during thread creation
+    const pendingThreadId = useRef<string | null>(null);
+
+    const activeThread = useMemo(() => {
+        const targetId = activeThreadId || pendingThreadId.current;
+        return threads.find(t => t.id === targetId) || null;
+    }, [threads, activeThreadId]);
 
     const activeModel = useMemo(() => {
-        const id = activeThread?.model_id || 'gemini-3-pro-preview';
+        const id = activeThread?.model_id || globalModelId;
         return MODEL_CATALOG.find(m => m.id === id) || MODEL_CATALOG[0];
-    }, [activeThread]);
+    }, [activeThread, globalModelId]);
 
-    // UPDATED: Default to 'stoic' if no thread is active
     const personaMode = activeThread?.persona || 'stoic';
-    
-    // Check Config relative to persona
     const vaultEnabled = isVaultConfigEnabled(personaMode);
 
-    // UPDATED: Default argument to 'stoic'
     const handleNewChat = useCallback(async (persona: 'hanisah' | 'stoic' = 'stoic') => {
         const welcome = persona === 'hanisah' 
             ? "⚡ **HANISAH PLATINUM ONLINE.**\n\n*Halo Sayang, aku sudah siap. Apa yang bisa kubantu hari ini?*" 
             : "🧠 **STOIC_LOGIC ACTIVE.**\n\nMari kita bedah masalah Anda dengan akal budi dan ketenangan.";
         
+        const newId = uuidv4();
+        pendingThreadId.current = newId;
+
         const newThread: ChatThread = {
-            id: uuidv4(),
-            title: `SESSION_${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+            id: newId,
+            title: `NEW_SESSION_${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
             persona,
-            model_id: 'gemini-3-pro-preview',
+            model_id: globalModelId, 
             messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
             updated: new Date().toISOString(),
             isPinned: false
         };
         
         setThreads(prev => [newThread, ...prev]);
-        setActiveThreadId(newThread.id);
-        return newThread; // Return for immediate usage
-    }, [setActiveThreadId, setThreads]);
+        setActiveThreadId(newId);
+        
+        console.debug(`[CHAT_LOGIC] New session created: ${newId} (Persona: ${persona})`);
+        return newThread;
+    }, [setActiveThreadId, setThreads, globalModelId]);
 
     const renameThread = useCallback(async (id: string, newTitle: string) => {
         setThreads(prev => prev.map(t => t.id === id ? { ...t, title: newTitle, updated: new Date().toISOString() } : t));
@@ -70,163 +73,123 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
     const sendMessage = async (e?: React.FormEvent, attachment?: { data: string, mimeType: string }) => {
         const userMsg = input.trim();
-        // Allow empty message if there is an attachment
         if ((!userMsg && !attachment) || isLoading) return;
 
-        let currentThreadId = activeThreadId;
-        let effectiveThread = activeThread;
+        let targetThread = activeThread;
+        let targetId = activeThreadId;
 
-        // 1. AUTO-INITIALIZATION: If no thread exists, create one immediately
-        if (!currentThreadId || !effectiveThread) {
-            const welcome = personaMode === 'hanisah' 
-                ? "⚡ **HANISAH PLATINUM ONLINE.**\n\n*Halo Sayang, aku sudah siap. Apa yang bisa kubantu hari ini?*" 
-                : "🧠 **STOIC_LOGIC ACTIVE.**\n\nMari kita bedah masalah Anda dengan akal budi dan ketenangan.";
-            
-            const newId = uuidv4();
-            const newThread: ChatThread = {
-                id: newId,
-                title: userMsg ? userMsg.slice(0, 30).toUpperCase() : 'IMAGE_ANALYSIS',
-                persona: personaMode,
-                model_id: 'gemini-3-pro-preview',
-                messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
-                updated: new Date().toISOString(),
-                isPinned: false
-            };
+        // DIAGNOSTIC LOG START
+        const transmissionId = uuidv4().slice(0,8);
+        console.group(`🧠 NEURAL_LINK_TRANSMISSION: ${transmissionId}`);
+        console.log("Payload:", { userMsg, attachment: !!attachment, model: activeModel.id });
 
-            // Immediate State Update
-            setThreads(prev => [newThread, ...prev]);
-            setActiveThreadId(newId);
-            
-            // Set references for local execution flow
-            currentThreadId = newId;
-            effectiveThread = newThread;
+        // 1. ATOMIC SESSION INITIALIZATION
+        if (!targetId || !targetThread) {
+            console.log("No active session. Initializing new thread...");
+            targetThread = await handleNewChat(personaMode);
+            targetId = targetThread.id;
         }
 
-        // Auto-rename thread based on first message if generic title
-        if (effectiveThread.messages.length <= 1 && effectiveThread.title.startsWith('SESSION_') && userMsg) {
-            renameThread(currentThreadId, userMsg.slice(0, 30).toUpperCase());
-        } else if (effectiveThread.messages.length <= 1 && effectiveThread.title.startsWith('SESSION_') && attachment) {
-            renameThread(currentThreadId, "IMAGE_ANALYSIS");
-        }
-
-        // Add User Message
-        const messageText = attachment ? (userMsg ? userMsg : "Sent an image.") : userMsg;
-        const updatedMessages: ChatMessage[] = [
-            ...effectiveThread.messages, 
-            { id: uuidv4(), role: 'user', text: messageText, metadata: { status: 'success' } }
-        ];
-
-        // Create Placeholder for AI Message
+        // 2. STATE PREPARATION
+        const userMessageId = uuidv4();
         const modelMessageId = uuidv4();
-        const initialModelMessage: ChatMessage = { 
+        const now = new Date().toISOString();
+
+        const newUserMsg: ChatMessage = { 
+            id: userMessageId, 
+            role: 'user', 
+            text: attachment ? (userMsg || "Analyze attachment") : userMsg, 
+            metadata: { status: 'success' } 
+        };
+
+        const initialModelMsg: ChatMessage = { 
             id: modelMessageId, 
             role: 'model', 
             text: '', 
-            metadata: { status: 'success', model: activeModel.name, provider: activeModel.provider } 
+            metadata: { 
+                status: 'success', 
+                model: activeModel.name, 
+                provider: activeModel.provider 
+            } 
         };
 
-        // Update thread with new messages AND update the timestamp so it bumps to top
-        const now = new Date().toISOString();
-        setThreads(prev => prev.map(t => t.id === currentThreadId ? { 
+        // UI LOCK: Add messages immediately to lock the view into ChatWindow
+        setThreads(prev => prev.map(t => t.id === targetId ? { 
             ...t, 
-            messages: [...updatedMessages, initialModelMessage],
+            messages: [...t.messages, newUserMsg, initialModelMsg],
             updated: now 
         } : t));
-        
+
+        if (targetThread.messages.length <= 1 && userMsg) {
+            renameThread(targetId, userMsg.slice(0, 30).toUpperCase());
+        }
+
         setInput('');
         setIsLoading(true);
 
+        // 3. EXECUTION BLOCK
         try {
-            // RAG CONTEXT INJECTION LOGIC (STRICT SECURITY)
             let noteContext = "";
-            
-            // CRITICAL CHECK: Global Unlock State && Config Enabled
             if (isVaultUnlocked && vaultEnabled) {
-                // Limit context size to avoid token overflow
-                const relevantNotes = notes.slice(0, 50); 
-                const contextList = relevantNotes.map(n => {
-                    const taskInfo = n.tasks && n.tasks.length > 0 
-                        ? `[Pending Tasks: ${n.tasks.filter(t => !t.isCompleted).length}]` 
-                        : '';
-                    return `- [${n.id.slice(0,4)}] ${n.title} ${taskInfo}: ${n.content.slice(0, 200)}...`;
-                }).join('\n');
-                noteContext = `[VAULT_DATABASE_ACTIVE]\n[SECURITY: UNLOCKED]\nBerikut adalah cuplikan catatan user yang TERENKRIPSI namun dibuka untuk sesi ini:\n${contextList}\n[END_VAULT]`;
-            } else {
-                noteContext = vaultEnabled 
-                    ? "🚫 [[VAULT_ACCESS_LOCKED]] (User has NOT authenticated via PIN in Dashboard/Chat. DO NOT reveal any personal data.)" 
-                    : "🚫 [[VAULT_SYSTEM_OFFLINE]] (Module disabled in System Configuration. No access possible.)";
+                noteContext = `[VAULT_UNLOCKED]\nNotes: ${notes.slice(0, 20).map(n => n.title).join(', ')}`;
             }
 
             const kernel = personaMode === 'hanisah' ? HANISAH_KERNEL : STOIC_KERNEL;
-            const currentModelId = effectiveThread.model_id; // Safe access
-
-            // Execute Stream - Kernel will handle routing logic and errors internally
-            const stream = kernel.streamExecute(userMsg || (attachment ? "Analyze this image." : "."), currentModelId, noteContext, attachment);
+            const stream = kernel.streamExecute(userMsg || "Proceed with attachment analysis.", activeModel.id, noteContext, attachment);
             
             let accumulatedText = "";
-            let currentFunctionCall: any = null;
+            let chunkCount = 0;
 
             for await (const chunk of stream) {
-                if (chunk.text) accumulatedText += chunk.text;
-                if (chunk.functionCall) currentFunctionCall = chunk.functionCall;
+                if (chunk.text) {
+                    accumulatedText += chunk.text;
+                    chunkCount++;
+                }
 
-                // Update UI Stream in real-time
-                setThreads(prev => prev.map(t => t.id === currentThreadId ? {
+                // Periodic UI update to reduce render thrashing but keep it responsive
+                setThreads(prev => prev.map(t => t.id === targetId ? {
                     ...t,
                     messages: t.messages.map(m => m.id === modelMessageId ? {
                         ...m,
                         text: accumulatedText,
                         metadata: { 
                             ...m.metadata, 
-                            ...(chunk.metadata ? chunk.metadata : {}),
+                            ...(chunk.metadata || {}),
                             groundingChunks: chunk.groundingChunks || m.metadata?.groundingChunks 
                         }
                     } : m)
                 } : t));
             }
 
-            if (isAutoSpeak && accumulatedText && !currentFunctionCall) {
+            // 4. RESPONSE VALIDATION
+            if (!accumulatedText.trim() && chunkCount === 0) {
+                console.warn(`[${transmissionId}] Zero token response detected.`);
+                throw new Error("EMPTY_AI_RESPONSE: Node returned zero tokens.");
+            }
+
+            console.log(`Transmission success. Chunks: ${chunkCount}, Length: ${accumulatedText.length}`);
+
+            if (isAutoSpeak && accumulatedText) {
                 speakWithHanisah(accumulatedText.replace(/[*#_`]/g, ''), personaMode === 'hanisah' ? 'Hanisah' : 'Fenrir');
             }
 
-            // Handle Function Calling with SECURE CHECKS
-            if (currentFunctionCall) {
-                let toolResult = "";
-                
-                if (currentFunctionCall.name === 'manage_note') {
-                    if (!vaultEnabled) {
-                        toolResult = "❌ SYSTEM_ERROR: Vault Module is disabled in Settings.";
-                    } else if (!isVaultUnlocked) {
-                        toolResult = "❌ ACCESS_DENIED: Vault Access is Locked. Ask user to click 'Authenticate' (Logo Gembok).";
-                    } else {
-                        toolResult = await executeNeuralTool(currentFunctionCall, notes, setNotes);
-                    }
-                } else {
-                    toolResult = await executeNeuralTool(currentFunctionCall, notes, setNotes);
-                }
-
-                const followUpPrompt = `Tool "${currentFunctionCall.name}" Result: ${toolResult}. \nBerdasarkan hasil ini, berikan konfirmasi ramah kepada user.`;
-                const followUpStream = kernel.streamExecute(followUpPrompt, currentModelId, noteContext);
-                
-                accumulatedText += `\n\n> ⚙️ *System Action: ${toolResult}*\n\n`;
-                
-                for await (const chunk of followUpStream) {
-                    if (chunk.text) accumulatedText += chunk.text;
-                    setThreads(prev => prev.map(t => t.id === currentThreadId ? {
-                        ...t,
-                        messages: t.messages.map(m => m.id === modelMessageId ? { ...m, text: accumulatedText } : m)
-                    } : t));
-                }
-            }
         } catch (err: any) {
-             setThreads(prev => prev.map(t => t.id === currentThreadId ? { 
+            console.error(`[${transmissionId}] CRITICAL_FAILURE:`, err);
+            const errorText = `⚠️ **COMMUNICATION_BREAK**: ${err.message || "Unknown anomaly in logic stream."}\n\n_Sistem tetap aktif. Silakan coba lagi atau ganti model._`;
+            
+            setThreads(prev => prev.map(t => t.id === targetId ? { 
                 ...t, 
                 messages: t.messages.map(m => m.id === modelMessageId ? {
-                    ...m, text: `⚠️ **CRITICAL KERNEL FAILURE**: Sistem tidak dapat memulihkan koneksi.\n\n_Manual Reboot Required._`, metadata: { status: 'error' }
+                    ...m, 
+                    text: errorText, 
+                    metadata: { ...m.metadata, status: 'error', errorDetails: err.stack }
                 } : m)
             } : t));
+
+            debugService.reportUIError("CHAT_STREAM_FAILURE");
         } finally {
             setIsLoading(false);
+            console.groupEnd();
         }
     };
 
@@ -234,13 +197,14 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         threads, setThreads,
         activeThread, activeThreadId, setActiveThreadId,
         isVaultSynced: isVaultUnlocked, 
-        setIsVaultSynced: (val: boolean) => val ? unlockVault() : lockVault(), // Bridge to Context
+        setIsVaultSynced: (val: boolean) => val ? unlockVault() : lockVault(),
         isVaultConfigEnabled: vaultEnabled,
         isAutoSpeak, setIsAutoSpeak,
         isLiveModeActive, setIsLiveModeActive, 
         input, setInput,
         isLoading,
         activeModel,
+        setGlobalModelId,
         personaMode,
         handleNewChat,
         renameThread,

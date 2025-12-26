@@ -267,7 +267,11 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                                     onClick={(e) => { 
                                         e.stopPropagation(); 
                                         if (debugService.logAction(UI_REGISTRY.CHAT_BTN_DELETE, FN_REGISTRY.CHAT_DELETE_SESSION, t.id)) {
-                                            if(confirm('Delete this thread?')) onDeleteThread(t.id); 
+                                            // Explicit Confirmation
+                                            const confirmed = window.confirm(`⚠️ DELETE SESSION\n\nDelete "${t.title}" permanently? This cannot be undone.`);
+                                            if (confirmed) {
+                                                onDeleteThread(t.id); 
+                                            }
                                         }
                                     }} 
                                     className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"

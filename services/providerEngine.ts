@@ -215,6 +215,7 @@ export async function* streamOpenAICompatible(
             const tc = toolCallAccumulator[idx];
             try {
                 // Parse arguments to ensure valid JSON
+                // Handle potential incomplete JSON gracefully
                 const args = JSON.parse(tc.args);
                 yield { 
                     functionCall: {
@@ -224,7 +225,8 @@ export async function* streamOpenAICompatible(
                 };
             } catch (e) {
                 console.error("Failed to parse tool arguments", e);
-                yield { text: `\n\n[SYSTEM ERROR: Failed to parse tool arguments for ${tc.name}]` };
+                // Attempt to repair simple cases or yield raw
+                yield { text: `\n\n[SYSTEM WARNING: Model attempted to call ${tc.name} but arguments were incomplete. Raw: ${tc.args}]` };
             }
         }
     }

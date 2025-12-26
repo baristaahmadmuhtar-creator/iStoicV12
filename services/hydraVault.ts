@@ -36,16 +36,35 @@ export class HydraVault {
     const providers: Provider[] = ['GEMINI', 'GROQ', 'OPENAI', 'DEEPSEEK', 'MISTRAL', 'OPENROUTER', 'ELEVENLABS'];
 
     providers.forEach(provider => {
-        const keys: string[] = [];
+        const keys = new Set<string>(); // Use Set to avoid duplicates
+        
+        // 1. Generic Scan (Includes provider name)
         Object.keys(env).forEach(keyName => {
             if (keyName.toUpperCase().includes(provider) && typeof env[keyName] === 'string') {
                 const val = env[keyName];
-                if (val && val.length > 5) keys.push(val.trim());
+                if (val && val.length > 5) keys.add(val.trim());
             }
         });
 
+        // 2. Explicit Numbered Scan (Force check for VITE_GEMINI_KEY_1 to 50)
+        // This ensures VITE_GEMINI_KEY_1, VITE_GEMINI_KEY_2, etc. are definitely caught
+        for (let i = 1; i <= 50; i++) {
+            const explicitKeys = [
+                env[`VITE_${provider}_KEY_${i}`],
+                env[`${provider}_KEY_${i}`],
+                env[`VITE_${provider}_API_KEY_${i}`],
+                env[`${provider}_API_KEY_${i}`]
+            ];
+            
+            explicitKeys.forEach(val => {
+                if (val && typeof val === 'string' && val.length > 5) {
+                    keys.add(val.trim());
+                }
+            });
+        }
+
         // Initialize or Update Pool
-        this.vault[provider] = keys.map(k => ({
+        this.vault[provider] = Array.from(keys).map(k => ({
             key: k,
             provider,
             status: 'ACTIVE',
@@ -55,7 +74,8 @@ export class HydraVault {
         }));
     });
     
-    debugService.log('KERNEL', 'HYDRA_VAULT', 'INIT', `Vault initialized with ${Object.values(this.vault).flat().length} keys.`);
+    const totalKeys = Object.values(this.vault).flat().length;
+    debugService.log('KERNEL', 'HYDRA_VAULT', 'INIT', `Vault initialized with ${totalKeys} keys across ${providers.length} providers.`);
   }
 
   /**
@@ -93,7 +113,7 @@ export class HydraVault {
       return emergencyKey.key;
     }
 
-    debugService.log('ERROR', 'HYDRA_VAULT', 'EXHAUSTED', `No keys available for ${provider}`);
+    debugService.log('ERROR', 'HYDRA_VAULT', 'EXHAUSTED', `No keys available for ${provider}. All ${pool.length} keys in cooldown.`);
     return null;
   }
 
@@ -108,7 +128,7 @@ export class HydraVault {
 
     const errStr = JSON.stringify(error).toLowerCase();
     // 429 = Rate Limit, 402 = Quota Exceeded / Payment Required
-    const isRateLimit = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('402') || errStr.includes('quota');
+    const isRateLimit = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('402') || errStr.includes('quota') || errStr.includes('capacity');
 
     keyRecord.fails++;
     keyRecord.status = 'COOLDOWN';
@@ -116,13 +136,13 @@ export class HydraVault {
     const now = Date.now();
 
     // PENALTY LOGIC
-    // Rate Limit (429) = 120 Seconds (2 Minutes)
-    // Standard Error (500, Network) = 30 Seconds
-    const penaltyMs = isRateLimit ? 120_000 : 30_000;
+    // Rate Limit (429) = 60 Seconds (Aggressive rotation, try others)
+    // Standard Error (500, Network) = 15 Seconds (Temporary blip)
+    const penaltyMs = isRateLimit ? 60_000 : 15_000;
     
     keyRecord.cooldownUntil = now + penaltyMs;
 
-    debugService.log('WARN', 'HYDRA_VAULT', 'PENALTY', `Freezing ${provider} key for ${penaltyMs/1000}s. Reason: ${isRateLimit ? 'RATE_LIMIT' : 'ERROR'}`);
+    debugService.log('WARN', 'HYDRA_VAULT', 'PENALTY', `Freezing ${provider} key (...${keyRecord.key.slice(-4)}) for ${penaltyMs/1000}s. Reason: ${isRateLimit ? 'RATE_LIMIT' : 'ERROR'}`);
 
     // Auto-heal scheduling
     setTimeout(() => {

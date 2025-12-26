@@ -2,7 +2,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { debugService } from "./debugService";
 import { HANISAH_BRAIN } from "./melsaBrain";
-import { noteTools, visualTools, searchTools } from "./geminiService";
+import { noteTools, visualTools, searchTools, universalTools } from "./geminiService";
 import { GLOBAL_VAULT, Provider } from "./hydraVault"; 
 import { mechanicTools } from "../features/mechanic/mechanicTools";
 import { streamOpenAICompatible } from "./providerEngine";
@@ -144,25 +144,32 @@ export class HanisahKernel {
   private history: any[] = [];
 
   private getActiveTools(provider: string, isThinking: boolean): any[] {
-      if (isThinking && provider === 'GEMINI') return [];
+      // 1. GEMINI PROVIDER (Native Tools)
+      if (provider === 'GEMINI') {
+          if (isThinking) return []; // Thinking models (2.0 Pro) often restricted with tools
+          
+          const configStr = localStorage.getItem('hanisah_tools_config');
+          const config = configStr ? JSON.parse(configStr) : { search: true, vault: true, visual: true };
+          
+          const tools: any[] = [];
+          if (config.vault && noteTools) tools.push(noteTools);
+          if (config.visual && visualTools) tools.push(visualTools);
+          if (config.search) tools.push(searchTools); // Use Native Google Search for Gemini
+          if (mechanicTools) tools.push(mechanicTools);
+          return tools;
+      } 
+      
+      // 2. OTHER PROVIDERS (Universal Tools via Proxy)
+      else {
+          // Check config, but generally enable tools for capable models
+          // Note: DeepSeek Reasoner does not support tools in current API usually
+          if (isThinking) return [];
 
-      const configStr = localStorage.getItem('hanisah_tools_config');
-      const config = configStr ? JSON.parse(configStr) : { search: true, vault: true, visual: true };
-
-      const tools: any[] = [];
-      
-      // Strict check to avoid empty tool objects which break Gemini API
-      if (config.vault && noteTools && noteTools.functionDeclarations?.length > 0) tools.push(noteTools);
-      
-      // Visual tools usually empty or null now, so we skip if not valid
-      if (config.visual && visualTools) tools.push(visualTools);
-      
-      if (config.search && provider === 'GEMINI') tools.push(searchTools);
-      
-      // Mechanic tools
-      if (mechanicTools && mechanicTools.functionDeclarations?.length > 0) tools.push(mechanicTools);
-      
-      return tools;
+          // Use the UNIVERSAL toolset (Deep Search + Note Management)
+          // We wrap them in the structure expected by the providerEngine
+          // providerEngine expects an array of tool objects
+          return universalTools.functionDeclarations ? [universalTools] : [];
+      }
   }
 
   // Helper to check feature flags directly from storage (since Kernel is non-React)
@@ -192,7 +199,6 @@ export class HanisahKernel {
             currentModelId = 'gemini-2.0-flash-exp'; 
         } else {
             // Melsa Engine: Non-Streaming Logic wrapped in Generator
-            yield { text: "> *Initializing Melsa Omni-Race (Multi-Engine)...*\n\n" };
             try {
                 // Determine image data format for Melsa
                 const melsaImg = imageData ? { data: imageData.data, mimeType: imageData.mimeType } : null;

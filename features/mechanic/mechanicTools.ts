@@ -37,11 +37,6 @@ export const executeMechanicTool = async (call: any): Promise<string> => {
                 platform: navigator.platform,
                 onLine: navigator.onLine,
                 memory: nav.deviceMemory ? `${nav.deviceMemory} GB` : 'Unknown',
-                connection: nav.connection ? {
-                    effectiveType: nav.connection.effectiveType,
-                    rtt: nav.connection.rtt,
-                    downlink: nav.connection.downlink
-                } : 'Unavailable'
             };
             
             // Storage Calc
@@ -70,7 +65,8 @@ export const executeMechanicTool = async (call: any): Promise<string> => {
                     provider: p.id,
                     status: p.status,
                     pool_size: p.keyCount,
-                    cooldown: p.cooldownRemaining
+                    keys_active: p.keyCount, // Info for diagnostics
+                    cooldown_minutes: p.cooldownRemaining
                 })),
                 recent_errors: recentErrors
             });
@@ -79,7 +75,11 @@ export const executeMechanicTool = async (call: any): Promise<string> => {
             KEY_MANAGER.refreshPools();
             const status = KEY_MANAGER.getAllProviderStatuses();
             const totalKeys = status.reduce((acc, curr) => acc + curr.keyCount, 0);
-            return `SUCCESS: Hydra Engine cycled. Total active keys: ${totalKeys}. Cooldown timers re-evaluated.`;
+            
+            // Detailed report
+            const details = status.map(s => `${s.id}: ${s.keyCount} keys`).join(', ');
+            
+            return `SUCCESS: Hydra Engine cycled. Total active keys: ${totalKeys} [${details}]. Cooldown timers re-evaluated.`;
 
         case "CLEAR_LOGS":
             debugService.clear();

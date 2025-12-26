@@ -32,7 +32,11 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
 
   useEffect(() => {
       // If Auto Diagnostics is disabled, do not poll system health.
+      // Immediate cleanup when flag changes.
       if (!features.AUTO_DIAGNOSTICS) {
+          // Reset visual state when off
+          setHealthScore(0);
+          setHealthColor('bg-neutral-500');
           return;
       }
 
@@ -263,15 +267,18 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
                 {isExpanded ? (
                     <>
                         <div className="flex justify-between items-center text-[8px] font-black text-neutral-500 uppercase tracking-widest mb-2 group-hover:text-black dark:group-hover:text-white transition-colors">
-                            <span className="flex items-center gap-2"><Activity size={10}/> INTEGRITY</span>
+                            <span className="flex items-center gap-2">
+                                {features.AUTO_DIAGNOSTICS ? <Activity size={10}/> : <AlertTriangle size={10} />} 
+                                {features.AUTO_DIAGNOSTICS ? 'INTEGRITY' : 'DIAG_OFF'}
+                            </span>
                             <span className={`${healthScore < 80 ? 'text-red-500' : 'text-green-500'}`}>{healthScore}%</span>
                         </div>
                         <div className="w-full h-1 bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
-                            <div className={`h-full ${healthColor} w-full transition-all duration-1000`} style={{ width: `${healthScore}%`, boxShadow: `0 0 10px currentColor` }}></div>
+                            <div className={`h-full ${features.AUTO_DIAGNOSTICS ? healthColor : 'bg-neutral-500'} w-full transition-all duration-1000`} style={{ width: `${healthScore}%`, boxShadow: `0 0 10px currentColor` }}></div>
                         </div>
                     </>
                 ) : (
-                    <div className={`w-2 h-2 rounded-full ${healthColor} animate-pulse shadow-[0_0_8px_currentColor] mb-2`}></div>
+                    <div className={`w-2 h-2 rounded-full ${features.AUTO_DIAGNOSTICS ? healthColor : 'bg-neutral-500'} animate-pulse shadow-[0_0_8px_currentColor] mb-2`}></div>
                 )}
              </button>
 

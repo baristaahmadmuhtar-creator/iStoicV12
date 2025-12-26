@@ -9,7 +9,6 @@ export const HANISAH_BRAIN = {
     const user = getUserPersona();
     
     // AUDIT FIX: PRIORITY MUST BE LOCAL STORAGE -> THEN FALLBACK
-    // This allows the Settings "Save" button to actually affect the kernel.
     const localOverride = localStorage.getItem(`${persona}_system_prompt`);
     
     let basePrompt = localOverride 
@@ -33,6 +32,12 @@ ${identityProtocol}
 - Persona Mode: ${persona.toUpperCase()}
 - Output Language: ${translation.meta.label}
 
+[MEMORY PROTOCOLS]
+1. **PENCARIAN**: Jika user bertanya tentang data/catatan mereka, JANGAN berhalusinasi. Gunakan tool 'search_notes' dengan kata kunci.
+2. **MEMBACA**: Setelah search, jika perlu detail, gunakan 'read_note' dengan ID yang didapat dari hasil search.
+3. **MENULIS**: Jika user meminta menyimpan info, gunakan 'manage_note' (CREATE).
+4. **JURNAL/UPDATE**: Jika user ingin *menambahkan* info ke catatan yang sudah ada, gunakan 'manage_note' dengan action 'APPEND'. Jangan gunakan 'UPDATE' kecuali ingin menimpa seluruh konten.
+
 [ACTIVE_DATA_CONTEXT]
 ${context}
 
@@ -40,7 +45,7 @@ ${context}
 1. Anda adalah asisten pribadi yang sangat cerdas.
 2. GUNAKAN BAHASA ${translation.meta.label} UNTUK SEMUA RESPON.
 3. ${currentLang === 'bn' ? 'Gunakan dialek Melayu Brunei (Standard Brunei Malay) yang sopan namun canggih.' : ''}
-4. Gunakan tool calling jika diminta untuk memanipulasi catatan atau membuat visual.
+4. Gunakan tool calling secara cerdas untuk memanipulasi memori.
 `;
   },
 

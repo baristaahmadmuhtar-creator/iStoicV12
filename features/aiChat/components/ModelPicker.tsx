@@ -90,6 +90,8 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
           // Only poll if AUTO_DIAGNOSTICS is enabled
           if (features.AUTO_DIAGNOSTICS) {
               interval = setInterval(update, 2000);
+          } else {
+              // If disabled, just keep static initial data or clear
           }
           
           return () => {

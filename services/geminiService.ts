@@ -174,22 +174,66 @@ export async function decodeAudioData(
   return buffer;
 }
 
+// --- TOOL DEFINITIONS ---
+
 const manageNoteTool: FunctionDeclaration = {
   name: 'manage_note',
-  description: 'Manage user notes in the vault.',
+  description: 'Manage user notes in the vault. Use this to create, update, append to, or delete notes.',
   parameters: {
     type: Type.OBJECT,
     properties: {
-      action: { type: Type.STRING, description: 'CREATE, UPDATE, or DELETE' },
-      id: { type: Type.STRING, description: 'Note ID' },
+      action: { type: Type.STRING, description: 'CREATE, UPDATE, APPEND, or DELETE' },
+      id: { type: Type.STRING, description: 'Note ID (required for UPDATE/APPEND/DELETE)' },
       title: { type: Type.STRING, description: 'Note Title' },
-      content: { type: Type.STRING, description: 'Note Content' }
+      content: { type: Type.STRING, description: 'Note Content (Markdown supported)' },
+      appendContent: { type: Type.STRING, description: 'Content to append to existing note (for APPEND action)' },
+      tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Tags for categorization' }
     },
     required: ['action']
   }
 };
 
-export const noteTools = { functionDeclarations: [manageNoteTool] };
-// FIXED: Removed empty functionDeclarations array to prevent 400 Bad Request
+const searchNotesTool: FunctionDeclaration = {
+    name: 'search_notes',
+    description: 'Search through the user\'s local notes vault. Returns metadata and snippets of matching notes.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            query: { type: Type.STRING, description: 'Keywords to search for.' }
+        },
+        required: ['query']
+    }
+};
+
+const readNoteTool: FunctionDeclaration = {
+    name: 'read_note',
+    description: 'Read the full content of a specific note by its ID.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            id: { type: Type.STRING, description: 'The ID of the note to read.' }
+        },
+        required: ['id']
+    }
+};
+
+const deepSearchTool: FunctionDeclaration = {
+    name: 'deep_search',
+    description: 'Perform a real-time web search to retrieve up-to-date information, lyrics, news, or facts from the internet.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            query: { type: Type.STRING, description: 'The search query string.' }
+        },
+        required: ['query']
+    }
+};
+
+export const noteTools = { functionDeclarations: [manageNoteTool, searchNotesTool, readNoteTool] };
 export const visualTools = null; 
-export const searchTools = { googleSearch: {} };
+export const searchTools = { googleSearch: {} }; 
+
+// Universal tools for Non-Gemini providers
+export const universalTools = {
+    functionDeclarations: [manageNoteTool, searchNotesTool, readNoteTool, deepSearchTool]
+};

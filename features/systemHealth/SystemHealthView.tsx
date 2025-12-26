@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
     Activity, Terminal, ShieldCheck, Trash2, Network, Server, Database,
@@ -65,6 +66,7 @@ export const SystemHealthView: React.FC = () => {
     const [logFilter, setLogFilter] = useState<string>('ALL');
     const [logSearch, setLogSearch] = useState<string>('');
     const [isAutoScroll, setIsAutoScroll] = useState(true);
+    const [isStreamFrozen, setIsStreamFrozen] = useState(false); // TRUE PAUSE STATE
     const [cliInput, setCliInput] = useState('');
     const logEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -123,40 +125,62 @@ export const SystemHealthView: React.FC = () => {
         }
     };
 
-    // Initialize & Poll
+    // --- REALTIME & STREAM CONTROL LOGIC ---
     useEffect(() => {
-        // Initial Fetch
-        setHealth(debugService.getSystemHealth());
-        setProviders(KEY_MANAGER.getAllProviderStatuses());
-        setLogs(debugService.getLogs());
+        // 1. Log Subscription with Freeze Capability
+        const unsubscribeLogs = debugService.subscribe((newLogs) => {
+            if (!isStreamFrozen) {
+                setLogs(newLogs);
+            }
+        });
+
+        // 2. Initial Data Fetch
+        setLogs(debugService.getLogs()); // Ensure logs are loaded immediately
         calcStorage();
         updateStorageList();
+        
+        // 3. Auto Diagnostics Interval (Strict Toggle Control)
+        let diagInterval: any = null;
 
-        // Subscription to Logs always active (passive)
-        const unsubscribe = debugService.subscribe((newLogs) => setLogs(newLogs));
-
-        // Background Polling ONLY if AUTO_DIAGNOSTICS is enabled
-        let interval: any = null;
         if (features.AUTO_DIAGNOSTICS) {
-            interval = setInterval(() => {
+            // Immediate update when toggled ON
+            setHealth(debugService.getSystemHealth());
+            setProviders(KEY_MANAGER.getAllProviderStatuses());
+            
+            // Start Interval
+            diagInterval = setInterval(() => {
                 setHealth(debugService.getSystemHealth());
                 setProviders(KEY_MANAGER.getAllProviderStatuses());
                 calcStorage();
             }, 3000);
+        } else {
+            // Clear data visualization if OFF (Optional: user preference to see stale or clear)
+            // Here we keep stale data but stop updating
         }
 
         return () => { 
-            if (interval) clearInterval(interval); 
-            unsubscribe(); 
+            unsubscribeLogs();
+            if (diagInterval) clearInterval(diagInterval);
         };
-    }, [features.AUTO_DIAGNOSTICS]);
+    }, [features.AUTO_DIAGNOSTICS, isStreamFrozen]); // Dependencies ensure real-time reaction
 
-    // Auto-scroll
+    // Toggle Freeze Logic
+    const toggleStreamFreeze = () => {
+        if (isStreamFrozen) {
+            // Unfreezing: Immediately sync with latest backend logs
+            setLogs(debugService.getLogs());
+            // Optional: Re-enable autoscroll when unfreezing for UX
+            setIsAutoScroll(true);
+        }
+        setIsStreamFrozen(!isStreamFrozen);
+    };
+
+    // Auto-scroll Logic
     useEffect(() => {
-        if (activeTab === 'KERNEL_STREAM' && isAutoScroll && logEndRef.current) {
+        if (activeTab === 'KERNEL_STREAM' && isAutoScroll && !isStreamFrozen && logEndRef.current) {
             logEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [logs, activeTab, isAutoScroll]);
+    }, [logs, activeTab, isAutoScroll, isStreamFrozen]);
 
     const calcStorage = () => {
         try {
@@ -233,8 +257,10 @@ export const SystemHealthView: React.FC = () => {
                 <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-black/5 dark:border-white/5 pb-10 shrink-0">
                     <div className="space-y-2">
                         <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 bg-[var(--accent-color)] rounded-full animate-pulse shadow-[0_0_10px_var(--accent-glow)]"></div>
-                            <span className="tech-mono text-[9px] font-black uppercase tracking-[0.4em] text-neutral-500">SYSTEM_INTEGRITY_MODULE_v13.5</span>
+                            <div className={`w-2 h-2 rounded-full shadow-[0_0_10px_currentColor] ${features.AUTO_DIAGNOSTICS ? 'bg-[var(--accent-color)] animate-pulse' : 'bg-red-500'}`}></div>
+                            <span className="tech-mono text-[9px] font-black uppercase tracking-[0.4em] text-neutral-500">
+                                SYSTEM_INTEGRITY_MODULE_v13.5 {features.AUTO_DIAGNOSTICS ? '' : '[OFFLINE]'}
+                            </span>
                         </div>
                         <h2 className="text-[12vw] md:text-[5rem] xl:text-[7rem] heading-heavy text-black dark:text-white leading-[0.85] tracking-tighter uppercase break-words">
                             SYSTEM <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-blue-500 animate-gradient-text">MECHANIC</span>
@@ -262,8 +288,19 @@ export const SystemHealthView: React.FC = () => {
                 {activeTab === 'OVERVIEW' && (
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 animate-slide-up">
                         <div className="lg:col-span-8 space-y-6">
+                            
+                            {/* Auto Diagnostics Off Warning */}
+                            {!features.AUTO_DIAGNOSTICS && (
+                                <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 flex items-center gap-3">
+                                    <Power size={18} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">
+                                        AUTO_DIAGNOSTICS_DISABLED // TELEMETRY PAUSED
+                                    </span>
+                                </div>
+                            )}
+
                             {/* Vitals */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 transition-opacity duration-500 ${features.AUTO_DIAGNOSTICS ? 'opacity-100' : 'opacity-50 grayscale'}`}>
                                 <VitalsCard label="LATENCY" value={`${health.avgLatency}ms`} icon={<Network size={18} />} status={health.avgLatency > 1000 ? 'danger' : 'good'} subtext="API_RESPONSE" />
                                 <VitalsCard label="HEAP_MEM" value={`${health.memoryMb || 'N/A'}MB`} icon={<HardDrive size={18} />} status={health.memoryMb > 800 ? 'warning' : 'good'} subtext="ALLOCATED_RAM" />
                                 <VitalsCard label="ERROR_LOG" value={`${health.errorCount}`} icon={<Bug size={18} />} status={health.errorCount > 5 ? 'danger' : 'good'} subtext="SESSION_ERRORS" />
@@ -349,20 +386,30 @@ export const SystemHealthView: React.FC = () => {
 
                 {/* --- KERNEL STREAM (TERMINAL) TAB --- */}
                 {activeTab === 'KERNEL_STREAM' && (
-                    <div className="flex-1 bg-terminal-void rounded-[32px] border border-white/10 flex flex-col shadow-2xl relative overflow-hidden font-mono animate-slide-up terminal-scanlines">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-cyan-500 z-10"></div>
+                    <div className={`flex-1 bg-terminal-void rounded-[32px] border flex flex-col shadow-2xl relative overflow-hidden font-mono animate-slide-up terminal-scanlines transition-colors duration-500 ${isStreamFrozen ? 'border-amber-500/30' : 'border-white/10'}`}>
+                        <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r z-10 transition-colors duration-500 ${isStreamFrozen ? 'from-amber-500 to-red-500' : 'from-emerald-500 to-cyan-500'}`}></div>
+                        
                         <div className="p-3 border-b border-white/10 flex items-center justify-between bg-white/5 backdrop-blur-md relative z-20">
                             <div className="flex items-center gap-4">
-                                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400 flex items-center gap-2"><Terminal size={12} /> KERNEL_STREAM</span>
+                                <span className={`text-[9px] font-black uppercase tracking-[0.3em] flex items-center gap-2 ${isStreamFrozen ? 'text-amber-500' : 'text-neutral-400'}`}>
+                                    <Terminal size={12} /> {isStreamFrozen ? 'STREAM_FROZEN' : 'KERNEL_STREAM'}
+                                </span>
                                 <div className="flex items-center gap-2">
                                     <input value={logSearch} onChange={e => setLogSearch(e.target.value)} placeholder="GREP..." className="bg-transparent border-none text-[10px] text-white focus:outline-none uppercase w-24 placeholder:text-neutral-700"/>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button onClick={() => setIsAutoScroll(!isAutoScroll)} className={`p-1.5 rounded border transition-all ${!isAutoScroll ? 'bg-amber-500/20 border-amber-500/50 text-amber-500' : 'border-white/10 text-neutral-500 hover:text-white'}`}>{isAutoScroll ? <Pause size={10} /> : <Play size={10} />}</button>
+                                <button 
+                                    onClick={toggleStreamFreeze} 
+                                    className={`p-1.5 rounded border transition-all ${isStreamFrozen ? 'bg-amber-500/20 border-amber-500 text-amber-500' : 'border-white/10 text-neutral-500 hover:text-white'}`}
+                                    title={isStreamFrozen ? "Resume Stream" : "Freeze Stream"}
+                                >
+                                    {isStreamFrozen ? <Play size={10} fill="currentColor"/> : <Pause size={10} />}
+                                </button>
                                 <button onClick={() => executeRepair('CLEAR_LOGS')} className="p-1.5 rounded border border-white/10 text-neutral-500 hover:text-red-500 transition-all"><Trash2 size={10}/></button>
                             </div>
                         </div>
+                        
                         <div className="flex-1 overflow-y-auto p-4 space-y-1.5 custom-scroll text-[10px] relative z-10">
                             {filteredLogs.map(log => (
                                 <div key={log.id} className="flex flex-col gap-1 p-1.5 hover:bg-white/5 rounded transition-colors group">
@@ -374,8 +421,14 @@ export const SystemHealthView: React.FC = () => {
                                     </div>
                                 </div>
                             ))}
+                            {isStreamFrozen && (
+                                <div className="sticky bottom-0 left-0 right-0 p-2 text-center bg-amber-900/20 border-t border-amber-500/30 text-amber-500 text-[9px] font-black uppercase tracking-widest backdrop-blur-md">
+                                    /// STREAM PAUSED - BUFFERING BACKGROUND LOGS ///
+                                </div>
+                            )}
                             <div ref={logEndRef} />
                         </div>
+                        
                         <div className="p-3 bg-[#0a0a0b] border-t border-white/10 relative z-20">
                             <div className="relative flex items-end group">
                                 <span className="absolute left-3 top-3.5 text-[var(--accent-color)] font-black text-xs animate-pulse">{'>'}</span>
@@ -386,7 +439,7 @@ export const SystemHealthView: React.FC = () => {
                     </div>
                 )}
 
-                {/* --- UI MATRIX TAB (Replaced by New Component) --- */}
+                {/* --- UI MATRIX TAB --- */}
                 {activeTab === 'UI_MATRIX' && (
                     <IntegrityMatrix />
                 )}

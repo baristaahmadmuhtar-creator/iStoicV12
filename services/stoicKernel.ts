@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { noteTools, searchTools, visualTools, KEY_MANAGER } from "./geminiService";
+import { noteTools, searchTools, visualTools, universalTools, KEY_MANAGER } from "./geminiService";
 import { debugService } from "./debugService";
 import { MODEL_CATALOG, type StreamChunk } from "./melsaKernel";
 import { HANISAH_BRAIN } from "./melsaBrain";
@@ -9,19 +9,25 @@ import { streamOpenAICompatible } from "./providerEngine";
 class StoicLogicKernel {
   private history: any[] = [];
 
-  private getActiveTools(): any[] {
-      // Read Config (Defaults: Search & Vault active, Visual disabled for Stoic)
+  private getActiveTools(provider: string): any[] {
       const configStr = localStorage.getItem('stoic_tools_config');
       const config = configStr 
           ? JSON.parse(configStr) 
           : { search: true, vault: true, visual: false };
 
-      const tools: any[] = [];
-      if (config.vault) tools.push(noteTools);
-      if (config.visual) tools.push(visualTools);
-      if (config.search) tools.push(searchTools);
-      
-      return tools;
+      if (provider === 'GEMINI') {
+          const tools: any[] = [];
+          if (config.vault) tools.push(noteTools);
+          if (config.visual) tools.push(visualTools);
+          if (config.search) tools.push(searchTools);
+          return tools;
+      } else {
+          // For non-Gemini, if search/vault is enabled, use Universal Tools
+          if (config.search || config.vault) {
+              return universalTools.functionDeclarations ? [universalTools] : [];
+          }
+          return [];
+      }
   }
 
   async *streamExecute(msg: string, modelId: string, context?: string, attachment?: any, configOverride?: any): AsyncGenerator<StreamChunk> {
@@ -61,7 +67,7 @@ class StoicLogicKernel {
         try {
           if (selectedModel.provider === 'GEMINI') {
             const ai = new GoogleGenAI({ apiKey: key });
-            const activeTools = this.getActiveTools();
+            const activeTools = this.getActiveTools('GEMINI');
             
             const config: any = { 
                 systemInstruction: systemPrompt, 
@@ -115,12 +121,9 @@ class StoicLogicKernel {
 
           } else {
             // Support for non-Gemini models (Groq, DeepSeek, etc.) via providerEngine
-            const activeTools = this.getActiveTools();
+            const activeTools = this.getActiveTools(selectedModel.provider);
             
-            // Filter out Google Search if not Gemini, as others don't support it natively in this kernel structure
-            const filteredTools = activeTools.filter(t => !t.googleSearch);
-
-            const stream = streamOpenAICompatible(selectedModel.provider as any, selectedModel.id, [{ role: 'user', content: msg }], systemPrompt, filteredTools, signal);
+            const stream = streamOpenAICompatible(selectedModel.provider as any, selectedModel.id, [{ role: 'user', content: msg }], systemPrompt, activeTools, signal);
             
             let fullText = "";
             for await (const chunk of stream) {
@@ -169,7 +172,7 @@ class StoicLogicKernel {
     try {
       if (selectedModel.provider === 'GEMINI') {
         const ai = new GoogleGenAI({ apiKey: key });
-        const activeTools = this.getActiveTools();
+        const activeTools = this.getActiveTools('GEMINI');
         
         const config: any = { 
             systemInstruction: systemPrompt, 

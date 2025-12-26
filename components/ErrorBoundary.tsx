@@ -1,14 +1,15 @@
-import React, { ErrorInfo, ReactNode } from 'react';
+
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Terminal, ShieldAlert, ZapOff, Copy, Check } from 'lucide-react';
 import { debugService } from '../services/debugService';
 import { KEY_MANAGER } from '../services/geminiService';
 
-interface Props {
+interface ErrorBoundaryProps {
   children?: ReactNode;
   viewName?: string;
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
@@ -20,21 +21,16 @@ interface State {
  * "Fokus pada apa yang ada di depan mata Anda sekarang." — Marcus Aurelius.
  * Menangani kegagalan sistem dengan ketenangan stoik.
  */
-// Use React.Component to ensure inheritance is correctly recognized
-export class ErrorBoundary extends React.Component<Props, State> {
-  public state: State;
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null,
+    errorInfo: null,
+    copied: false
+  };
 
-  constructor(props: Props) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-      copied: false
-    };
-  }
-
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error, errorInfo: null, copied: false };
   }
 
@@ -60,7 +56,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 componentStack: errorInfo.componentStack 
             }
         );
-        KEY_MANAGER.reportFailure('GEMINI', error);
+        KEY_MANAGER.reportFailure('GEMINI', 'UNKNOWN_KEY', error);
     } else {
         debugService.log(
           'ERROR', 

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
     Activity, Terminal, ShieldCheck, Trash2, Network, Server, Database,
@@ -12,7 +11,8 @@ import { speakWithHanisah } from '../../services/elevenLabsService';
 import { type LogEntry } from '../../types';
 import Markdown from 'react-markdown';
 import { executeMechanicTool } from '../mechanic/mechanicTools';
-import { IntegrityMatrix } from './components/IntegrityMatrix'; // New Import
+import { IntegrityMatrix } from './components/IntegrityMatrix';
+import { useFeatures } from '../../contexts/FeatureContext'; // Updated Import
 
 // --- HELPER: JSON TREE VIEW ---
 const JsonTree: React.FC<{ data: any; level?: number }> = ({ data, level = 0 }) => {
@@ -49,6 +49,7 @@ export const SystemHealthView: React.FC = () => {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [health, setHealth] = useState<any>({ avgLatency: 0, memoryMb: 0, errorCount: 0 });
     const [providers, setProviders] = useState<ProviderStatus[]>([]);
+    const { features } = useFeatures();
     
     // UI State
     const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'KERNEL_STREAM' | 'UI_MATRIX' | 'MEMORY'>('KERNEL_STREAM');
@@ -122,26 +123,33 @@ export const SystemHealthView: React.FC = () => {
         }
     };
 
-    // Initialize
+    // Initialize & Poll
     useEffect(() => {
+        // Initial Fetch
         setHealth(debugService.getSystemHealth());
         setProviders(KEY_MANAGER.getAllProviderStatuses());
+        setLogs(debugService.getLogs());
         calcStorage();
         updateStorageList();
-    }, []);
 
-    // Subscribe
-    useEffect(() => {
-        setLogs(debugService.getLogs());
-        const interval = setInterval(() => {
-            setHealth(debugService.getSystemHealth());
-            setProviders(KEY_MANAGER.getAllProviderStatuses());
-            calcStorage();
-        }, 3000);
-
+        // Subscription to Logs always active (passive)
         const unsubscribe = debugService.subscribe((newLogs) => setLogs(newLogs));
-        return () => { clearInterval(interval); unsubscribe(); };
-    }, []);
+
+        // Background Polling ONLY if AUTO_DIAGNOSTICS is enabled
+        let interval: any = null;
+        if (features.AUTO_DIAGNOSTICS) {
+            interval = setInterval(() => {
+                setHealth(debugService.getSystemHealth());
+                setProviders(KEY_MANAGER.getAllProviderStatuses());
+                calcStorage();
+            }, 3000);
+        }
+
+        return () => { 
+            if (interval) clearInterval(interval); 
+            unsubscribe(); 
+        };
+    }, [features.AUTO_DIAGNOSTICS]);
 
     // Auto-scroll
     useEffect(() => {

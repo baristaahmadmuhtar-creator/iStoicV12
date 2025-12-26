@@ -28,8 +28,15 @@ class KeyManagerProxy {
     return GLOBAL_VAULT.isProviderHealthy(provider as Provider);
   }
 
-  public reportFailure(provider: string, error: any) {
-      debugService.log('WARN', 'LEGACY_KEY_MGR', 'FAIL_REPORT', `Provider ${provider} reported failure without key context.`);
+  public reportFailure(provider: string, arg2: any, arg3?: any) {
+      // Overload support: (provider, key, error) OR (provider, error)
+      if (arg3 !== undefined) {
+          // 3-arg signature: arg2 is key, arg3 is error
+          GLOBAL_VAULT.reportFailure(provider as Provider, arg2, arg3);
+      } else {
+          // 2-arg signature: arg2 is error
+          debugService.log('WARN', 'LEGACY_KEY_MGR', 'FAIL_REPORT', `Provider ${provider} reported failure without key context.`);
+      }
   }
 
   public reportSuccess(provider: string) {
@@ -54,8 +61,9 @@ export async function generateImage(prompt: string): Promise<string | null> {
   if (!key) return null;
   const ai = new GoogleGenAI({ apiKey: key });
   try {
+    // Using gemini-2.0-flash-exp which handles image generation prompts natively.
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-2.0-flash-exp',
       contents: { parts: [{ text: prompt }] },
     });
     // Iterate parts to find image, robust check
@@ -107,7 +115,7 @@ export async function editImage(base64: string, mimeType: string, prompt: string
     const ai = new GoogleGenAI({ apiKey: key });
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
+            model: 'gemini-1.5-flash', // Fallback to stable for edits
             contents: {
                 parts: [
                     { inlineData: { data: base64, mimeType } },
@@ -182,5 +190,6 @@ const manageNoteTool: FunctionDeclaration = {
 };
 
 export const noteTools = { functionDeclarations: [manageNoteTool] };
-export const visualTools = { functionDeclarations: [] };
+// FIXED: Removed empty functionDeclarations array to prevent 400 Bad Request
+export const visualTools = null; 
 export const searchTools = { googleSearch: {} };

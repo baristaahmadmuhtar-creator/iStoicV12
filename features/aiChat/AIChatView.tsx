@@ -86,6 +86,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         personaMode,
         handleNewChat,
         sendMessage,
+        stopGeneration, // Destructured here
         togglePinThread,
         renameThread,
         isVaultSynced,
@@ -158,7 +159,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
 
     const handleLiveToggle = () => {
         if (!isLiveLinkEnabled) {
-            alert("FEATURE_DISABLED: Live Link disabled in System Mechanic.");
             return;
         }
         debugService.logAction(UI_REGISTRY.CHAT_BTN_LIVE_TOGGLE, FN_REGISTRY.CHAT_TOGGLE_LIVE, isLiveMode ? 'STOP' : 'START');
@@ -184,20 +184,8 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     };
 
     // CRITICAL: Robust empty state check.
-    // We only show empty state if we are NOT loading AND there are no meaningful messages.
-    // If isLoading is true, we force the ChatWindow to render (state lock).
     const showEmptyState = !isLoading && (!activeThreadId || !activeThread || activeThread.messages.length <= 1);
     
-    // Debug logging for developers
-    useEffect(() => {
-        if (activeThreadId && !activeThread) {
-            console.warn(`[CHAT_VIEW] Active Thread ID ${activeThreadId} set, but thread object not found in store.`);
-        }
-        if (isLoading) {
-            console.log(`[CHAT_VIEW] State Locked: Loading active for session ${activeThreadId}`);
-        }
-    }, [activeThreadId, activeThread, isLoading]);
-
     const isHydraActive = activeModel?.id === 'auto-best';
     const effectiveModelName = isHydraActive ? 'HYDRA_OMNI (MELSA)' : (activeModel?.name || 'GEMINI PRO');
 
@@ -269,12 +257,12 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
 
                             <button 
                                 onClick={handleLiveToggle}
-                                className={`w-9 h-9 rounded-full transition-all flex items-center justify-center active:scale-95 ${
+                                className={`w-9 h-9 rounded-full transition-all flex items-center justify-center ${
                                     !isLiveLinkEnabled 
-                                    ? 'opacity-30 cursor-not-allowed text-neutral-500' 
+                                    ? 'opacity-30 cursor-not-allowed text-neutral-600 bg-neutral-200/10' 
                                     : isLiveMode 
-                                        ? 'bg-red-500 text-white shadow-lg animate-pulse' 
-                                        : 'text-neutral-400 hover:text-red-500 hover:bg-red-500/10'
+                                        ? 'bg-red-500 text-white shadow-lg animate-pulse active:scale-95' 
+                                        : 'text-neutral-400 hover:text-red-500 hover:bg-red-500/10 active:scale-95'
                                 }`}
                                 title={!isLiveLinkEnabled ? "Live Link Disabled" : "Initialize Neural Link"}
                                 disabled={!isLiveLinkEnabled}
@@ -318,6 +306,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                         setInput={setInput}
                                         isLoading={isLoading}
                                         onSubmit={sendMessage}
+                                        onStop={stopGeneration}
                                         onNewChat={() => handleNewChat(personaMode)}
                                         onFocusChange={() => {}}
                                         aiName={personaMode.toUpperCase()}
@@ -400,6 +389,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                 setInput={setInput}
                                 isLoading={isLoading}
                                 onSubmit={sendMessage}
+                                onStop={stopGeneration}
                                 onNewChat={() => handleNewChat(personaMode)}
                                 onFocusChange={() => {}}
                                 aiName={personaMode.toUpperCase()}

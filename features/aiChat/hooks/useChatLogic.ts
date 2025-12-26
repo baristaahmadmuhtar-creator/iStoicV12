@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import useLocalStorage from '../../../hooks/useLocalStorage';
 import { type ChatThread, type ChatMessage, type Note } from '../../../types';
@@ -24,15 +24,28 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
     // PERSISTENT REF: To prevent race condition during thread creation
     const pendingThreadId = useRef<string | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     const activeThread = useMemo(() => {
         const targetId = activeThreadId || pendingThreadId.current;
         return threads.find(t => t.id === targetId) || null;
     }, [threads, activeThreadId]);
 
+    // MIGRATION LOGIC: Fix Stale IDs
+    useEffect(() => {
+        if (activeThread?.model_id === 'gemini-2.5-flash') {
+            console.log("[MIGRATION] Fixing stale model ID gemini-2.5-flash -> gemini-2.0-flash-exp");
+            const newModel = 'gemini-2.0-flash-exp';
+            setThreads(prev => prev.map(t => t.id === activeThreadId ? { ...t, model_id: newModel } : t));
+            setGlobalModelId(newModel);
+        }
+    }, [activeThread, activeThreadId, setThreads, setGlobalModelId]);
+
     const activeModel = useMemo(() => {
         const id = activeThread?.model_id || globalModelId;
-        return MODEL_CATALOG.find(m => m.id === id) || MODEL_CATALOG[0];
+        // Strict fallback to avoid 404s
+        const validId = id === 'gemini-2.5-flash' ? 'gemini-2.0-flash-exp' : id;
+        return MODEL_CATALOG.find(m => m.id === validId) || MODEL_CATALOG[0];
     }, [activeThread, globalModelId]);
 
     const personaMode = activeThread?.persona || 'stoic';
@@ -70,6 +83,15 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     const togglePinThread = useCallback(async (id: string) => {
         setThreads(prev => prev.map(t => t.id === id ? { ...t, isPinned: !t.isPinned } : t));
     }, [setThreads]);
+
+    const stopGeneration = useCallback(() => {
+        if (abortControllerRef.current) {
+            debugService.log('WARN', 'CHAT', 'ABORT', 'User stopped generation.');
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+            setIsLoading(false);
+        }
+    }, []);
 
     const sendMessage = async (e?: React.FormEvent, attachment?: { data: string, mimeType: string }) => {
         const userMsg = input.trim();
@@ -127,6 +149,11 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         setInput('');
         setIsLoading(true);
 
+        // ABORT CONTROLLER INIT
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        const signal = controller.signal;
+
         // 3. EXECUTION BLOCK
         try {
             let noteContext = "";
@@ -135,14 +162,43 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             }
 
             const kernel = personaMode === 'hanisah' ? HANISAH_KERNEL : STOIC_KERNEL;
-            const stream = kernel.streamExecute(userMsg || "Proceed with attachment analysis.", activeModel.id, noteContext, attachment);
+            // Updated to pass signal via configOverride or direct arg if refactored, currently simulating abort by breaking loop + network abort
+            const stream = kernel.streamExecute(
+                userMsg || "Proceed with attachment analysis.", 
+                activeModel.id, 
+                noteContext, 
+                attachment,
+                { signal } // Pass signal to kernel config
+            );
             
             let accumulatedText = "";
             let chunkCount = 0;
 
             for await (const chunk of stream) {
+                if (signal.aborted) {
+                    throw new Error("ABORTED_BY_USER");
+                }
+
+                // HANDLE TEXT CHUNKS
                 if (chunk.text) {
                     accumulatedText += chunk.text;
+                    chunkCount++;
+                }
+
+                // HANDLE TOOL CALLS (Fix for Empty Response error)
+                if (chunk.functionCall) {
+                    const toolName = chunk.functionCall.name;
+                    console.log(`[${transmissionId}] Tool Call Detected: ${toolName}`);
+                    
+                    // Display tool execution in chat
+                    accumulatedText += `\n\n> ⚙️ **EXECUTING:** ${toolName.replace(/_/g, ' ').toUpperCase()}...\n`;
+                    
+                    try {
+                        const toolResult = await executeNeuralTool(chunk.functionCall, notes, setNotes);
+                        accumulatedText += `> ✅ **RESULT:** ${toolResult}\n\n`;
+                    } catch (toolError: any) {
+                        accumulatedText += `> ❌ **FAIL:** ${toolError.message}\n\n`;
+                    }
                     chunkCount++;
                 }
 
@@ -164,7 +220,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             // 4. RESPONSE VALIDATION
             if (!accumulatedText.trim() && chunkCount === 0) {
                 console.warn(`[${transmissionId}] Zero token response detected.`);
-                throw new Error("EMPTY_AI_RESPONSE: Node returned zero tokens.");
+                throw new Error("EMPTY_AI_RESPONSE: Node returned zero tokens. Verify model capabilities.");
             }
 
             console.log(`Transmission success. Chunks: ${chunkCount}, Length: ${accumulatedText.length}`);
@@ -175,20 +231,39 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
         } catch (err: any) {
             console.error(`[${transmissionId}] CRITICAL_FAILURE:`, err);
-            const errorText = `⚠️ **COMMUNICATION_BREAK**: ${err.message || "Unknown anomaly in logic stream."}\n\n_Sistem tetap aktif. Silakan coba lagi atau ganti model._`;
+            
+            let errorText = `⚠️ **COMMUNICATION_BREAK**: ${err.message || "Unknown anomaly in logic stream."}\n\n_Sistem tetap aktif. Silakan coba lagi atau ganti model._`;
+            let status: 'error' | 'success' = 'error';
+
+            if (err.message === "ABORTED_BY_USER" || err.name === "AbortError") {
+                errorText = `\n\n> 🛑 **INTERRUPTED**: _Stream halted by operator._`;
+                status = 'success'; // Treat manual stop as a valid state, not an error state
+                
+                // Append text instead of replacing if we have some content
+                setThreads(prev => prev.map(t => t.id === targetId ? {
+                    ...t,
+                    messages: t.messages.map(m => m.id === modelMessageId ? {
+                        ...m,
+                        text: m.text + errorText,
+                        metadata: { ...m.metadata, status: 'success' }
+                    } : m)
+                } : t));
+                return; // Exit early
+            }
             
             setThreads(prev => prev.map(t => t.id === targetId ? { 
                 ...t, 
                 messages: t.messages.map(m => m.id === modelMessageId ? {
                     ...m, 
                     text: errorText, 
-                    metadata: { ...m.metadata, status: 'error', errorDetails: err.stack }
+                    metadata: { ...m.metadata, status: status, errorDetails: err.stack }
                 } : m)
             } : t));
 
-            debugService.reportUIError("CHAT_STREAM_FAILURE");
+            if (status === 'error') debugService.reportUIError("CHAT_STREAM_FAILURE");
         } finally {
             setIsLoading(false);
+            abortControllerRef.current = null;
             console.groupEnd();
         }
     };
@@ -209,6 +284,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         handleNewChat,
         renameThread,
         togglePinThread,
-        sendMessage
+        sendMessage,
+        stopGeneration // Exported function
     };
 };

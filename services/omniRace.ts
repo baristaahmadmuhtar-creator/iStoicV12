@@ -1,3 +1,4 @@
+
 import { GLOBAL_VAULT, type Provider } from './hydraVault';
 import { debugService } from './debugService';
 import { GoogleGenAI } from "@google/genai";
@@ -21,9 +22,10 @@ export class OmniRaceKernel {
 
   // Model Mapping for Race
   private readonly RACE_CONFIG: Record<string, { provider: Provider, model: string }> = {
-    'GOOGLE': { provider: 'GEMINI', model: 'gemini-2.0-flash-exp' }, // Fallback to 2.0 Flash Exp (Fastest)
-    'GROQ': { provider: 'GROQ', model: 'llama-3.3-70b-versatile' },
-    'OPENAI': { provider: 'OPENAI', model: 'gpt-4o-mini' },
+    'GOOGLE': { provider: 'GEMINI', model: 'gemini-2.0-flash-exp' },
+    'GROQ_70B': { provider: 'GROQ', model: 'llama-3.3-70b-versatile' },
+    'GROQ_8B': { provider: 'GROQ', model: 'llama-3.1-8b-instant' },
+    'OPENAI_MINI': { provider: 'OPENAI', model: 'gpt-4o-mini' },
     'DEEPSEEK': { provider: 'DEEPSEEK', model: 'deepseek-chat' }
   };
 
@@ -145,7 +147,8 @@ export class OmniRaceKernel {
     const baseURLMap: Record<string, string> = {
         'GROQ': 'https://api.groq.com/openai/v1',
         'OPENAI': 'https://api.openai.com/v1',
-        'DEEPSEEK': 'https://api.deepseek.com'
+        'DEEPSEEK': 'https://api.deepseek.com',
+        'MISTRAL': 'https://api.mistral.ai/v1'
     };
 
     const client = new OpenAI({

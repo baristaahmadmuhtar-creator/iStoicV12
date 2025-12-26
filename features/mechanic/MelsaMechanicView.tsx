@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     Activity, Terminal, Cpu, Zap, Wifi, HardDrive, 
@@ -14,6 +13,7 @@ import { HANISAH_BRAIN } from '../../services/melsaBrain';
 import { mechanicTools, executeMechanicTool } from './mechanicTools';
 import Markdown from 'react-markdown';
 import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
+import { useFeatures } from '../../contexts/FeatureContext'; // Updated Import
 
 // Local Kernel Instance for Mechanic Context Isolation
 const MECHANIC_KERNEL = new HanisahKernel();
@@ -198,6 +198,7 @@ export const HanisahMechanicView: React.FC = () => {
     const [health, setHealth] = useState<any>({ avgLatency: 0, memoryMb: 0, errorCount: 0 });
     const [providers, setProviders] = useState<ProviderStatus[]>([]);
     const [uiMatrix, setUiMatrix] = useState<Record<string, any>>(debugService.getUIMatrix());
+    const { features } = useFeatures();
     
     const [messages, setMessages] = useState<Array<{role: 'user'|'mechanic', text: string}>>([
         { role: 'mechanic', text: "Hanisah Mechanic Online. Diagnostic systems active. Ready for input." }
@@ -212,15 +213,21 @@ export const HanisahMechanicView: React.FC = () => {
             setHealth(debugService.getSystemHealth());
             setProviders(KEY_MANAGER.getAllProviderStatuses());
         };
+        
         updateVitals();
-        const interval = setInterval(updateVitals, 2000);
         const unsubscribeUI = debugService.subscribeUI((state) => setUiMatrix(state));
 
+        // Background Polling ONLY if AUTO_DIAGNOSTICS is enabled
+        let interval: any = null;
+        if (features.AUTO_DIAGNOSTICS) {
+            interval = setInterval(updateVitals, 2000);
+        }
+
         return () => {
-            clearInterval(interval);
+            if (interval) clearInterval(interval);
             unsubscribeUI();
         };
-    }, []);
+    }, [features.AUTO_DIAGNOSTICS]);
 
     useEffect(() => {
         if (activeTab === 'CONSOLE') {

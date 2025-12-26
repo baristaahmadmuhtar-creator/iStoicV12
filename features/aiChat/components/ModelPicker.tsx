@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { MODEL_CATALOG } from '../../../services/melsaKernel';
 import { KEY_MANAGER, type ProviderStatus } from '../../../services/geminiService';
+import { useFeatures } from '../../../contexts/FeatureContext'; // Import Feature Context
 
 interface ModelPickerProps {
   isOpen: boolean;
@@ -74,17 +75,28 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   activeModelId,
   onSelectModel
 }) => {
-  const [activeTab, setActiveTab] = useState<'AUTO' | 'GOOGLE' | 'DEEPSEEK' | 'GROQ' | 'ROUTER' | 'MISTRAL'>('AUTO');
+  const [activeTab, setActiveTab] = useState<'AUTO' | 'GOOGLE' | 'OPENAI' | 'DEEPSEEK' | 'GROQ' | 'MISTRAL'>('AUTO');
   const [statuses, setStatuses] = useState<ProviderStatus[]>([]);
+  const { features } = useFeatures(); // Get Feature Flags
 
   useEffect(() => {
       if (isOpen) {
           const update = () => setStatuses(KEY_MANAGER.getAllProviderStatuses());
+          
+          // Initial update
           update();
-          const interval = setInterval(update, 2000);
-          return () => clearInterval(interval);
+          
+          let interval: any = null;
+          // Only poll if AUTO_DIAGNOSTICS is enabled
+          if (features.AUTO_DIAGNOSTICS) {
+              interval = setInterval(update, 2000);
+          }
+          
+          return () => {
+              if (interval) clearInterval(interval);
+          };
       }
-  }, [isOpen]);
+  }, [isOpen, features.AUTO_DIAGNOSTICS]);
 
   if (!isOpen) return null;
 
@@ -109,6 +121,26 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
         border: 'border-blue-500/20',
         models: MODEL_CATALOG.filter(m => m.provider === 'GEMINI' && m.id !== 'auto-best') 
     },
+    'OPENAI': { 
+        icon: <Cpu size={16}/>, 
+        label: 'OPENAI', 
+        sub: 'GPT SERIES',
+        desc: 'Industry standard for reliability and reasoning (GPT-4o).',
+        accent: 'text-green-400',
+        bg: 'bg-green-500/10',
+        border: 'border-green-500/20',
+        models: MODEL_CATALOG.filter(m => m.provider === 'OPENAI') 
+    },
+    'GROQ': { 
+        icon: <Zap size={16}/>, 
+        label: 'GROQ', 
+        sub: 'LPU VELOCITY',
+        desc: 'Ultra-Low Latency Inference (<100ms) running Llama & Mixtral.',
+        accent: 'text-orange-400',
+        bg: 'bg-orange-500/10',
+        border: 'border-orange-500/20',
+        models: MODEL_CATALOG.filter(m => m.provider === 'GROQ') 
+    },
     'DEEPSEEK': { 
         icon: <Brain size={16}/>, 
         label: 'DEEPSEEK', 
@@ -119,36 +151,16 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
         border: 'border-indigo-500/20',
         models: MODEL_CATALOG.filter(m => m.provider === 'DEEPSEEK') 
     },
-    'GROQ': { 
-        icon: <Zap size={16}/>, 
-        label: 'GROQ', 
-        sub: 'LPU VELOCITY',
-        desc: 'Ultra-Low Latency Inference (<100ms).',
-        accent: 'text-orange-400',
-        bg: 'bg-orange-500/10',
-        border: 'border-orange-500/20',
-        models: MODEL_CATALOG.filter(m => m.provider === 'GROQ') 
-    },
     'MISTRAL': { 
         icon: <Wind size={16}/>, 
         label: 'MISTRAL', 
         sub: 'EUROPE',
-        desc: 'High Precision & Efficiency (Le Chat).',
+        desc: 'High Precision & Efficiency (Large/Small).',
         accent: 'text-yellow-400',
         bg: 'bg-yellow-500/10',
         border: 'border-yellow-500/20',
         models: MODEL_CATALOG.filter(m => m.provider === 'MISTRAL') 
-    },
-    'ROUTER': { 
-        icon: <Globe size={16}/>, 
-        label: 'ROUTER', 
-        sub: 'FRONTIER',
-        desc: 'Aggregated Global Intelligence Access.',
-        accent: 'text-pink-400',
-        bg: 'bg-pink-500/10',
-        border: 'border-pink-500/20',
-        models: MODEL_CATALOG.filter(m => m.provider === 'OPENROUTER') 
-    },
+    }
   };
 
   const currentTab = tabs[activeTab];
@@ -300,7 +312,6 @@ const ArchitectureCard: React.FC<{
   const providerStatus = statuses.find(s => s.id === model.provider);
   const statusType = isAuto ? 'HEALTHY' : (providerStatus?.status || 'OFFLINE');
   
-  // Dynamic color extraction from Tailwind class string (simplified for this context)
   const accentColorClass = isActive ? accent : 'text-neutral-500';
   const borderColorClass = isActive ? `border-${accent.split('-')[1]}-500/50` : 'border-white/5';
   

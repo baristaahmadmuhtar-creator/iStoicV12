@@ -1,3 +1,4 @@
+
 /* 
   IStoicAI Base Styles 
   Note: Utama styling menggunakan Tailwind CDN di index.html
@@ -116,4 +117,33 @@ body {
 }
 .pt-safe {
   padding-top: env(safe-area-inset-top);
+}
+
+/* --- HIGH PERFORMANCE OVERRIDES (GLASSMORPHIC ENGINE OFF) --- */
+body.low-perf * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  animation-duration: 0s !important;
+  transition-duration: 0s !important;
+}
+
+body.low-perf .glass-card-3d,
+body.low-perf .backdrop-blur-xl,
+body.low-perf .backdrop-blur-md,
+body.low-perf .backdrop-blur-sm,
+body.low-perf .bg-white\/80,
+body.low-perf .bg-black\/80,
+body.low-perf .bg-white\/60,
+body.low-perf .bg-white\/95,
+body.low-perf .bg-[#050505]\/95 {
+  background: var(--bg-deep) !important;
+  border: 1px solid rgba(128,128,128,0.1) !important;
+}
+
+body.low-perf .animate-pulse,
+body.low-perf .animate-spin,
+body.low-perf .animate-bounce {
+  animation: none !important;
 }

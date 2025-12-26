@@ -65,7 +65,8 @@ export async function* streamOpenAICompatible(
     modelId: string,
     messages: StandardMessage[],
     systemInstruction?: string,
-    tools: any[] = []
+    tools: any[] = [],
+    signal?: AbortSignal
 ): AsyncGenerator<{ text?: string; functionCall?: any; }> {
 
     const apiKey = KEY_MANAGER.getKey(provider);
@@ -123,16 +124,22 @@ export async function* streamOpenAICompatible(
         response = await fetch(endpoint, {
             method: 'POST',
             headers,
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal // Pass the signal here
         });
     } catch (e: any) {
-        throw new Error(`Network Error: ${e.message}`);
+        if (e.name === 'AbortError') {
+            throw e; // Propagate abort
+        }
+        debugService.log('ERROR', provider, 'NET_ERR', e.message);
+        throw new Error(`Network Error (${provider}): ${e.message}`);
     }
 
     if (!response.ok) {
         let errorText = "";
         try { errorText = await response.text(); } catch {}
-        throw new Error(`API Error ${response.status}: ${errorText}`);
+        debugService.log('ERROR', provider, `API_${response.status}`, errorText);
+        throw new Error(`API Error ${response.status} from ${provider}: ${errorText.slice(0, 100)}...`);
     }
 
     if (!response.body) throw new Error("No response body");
@@ -149,6 +156,7 @@ export async function* streamOpenAICompatible(
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            if (signal?.aborted) break; // Check signal in loop
             
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
@@ -201,8 +209,8 @@ export async function* streamOpenAICompatible(
         reader.releaseLock();
     }
 
-    // Finalize Tool Calls
-    if (isAccumulatingTool) {
+    // Finalize Tool Calls if NOT aborted
+    if (isAccumulatingTool && !signal?.aborted) {
         for (const idx in toolCallAccumulator) {
             const tc = toolCallAccumulator[idx];
             try {
@@ -228,17 +236,21 @@ export async function analyzeMultiModalMedia(provider: string, modelId: string, 
 
     // --- GEMINI VISION ---
     if (provider === 'GEMINI') {
-        const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-            model: modelId || 'gemini-2.5-flash',
-            contents: { parts: [{ inlineData: { data, mimeType } }, { text: prompt }] }
-        });
-        KEY_MANAGER.reportSuccess('GEMINI');
-        return response.text || "No response.";
+        try {
+            const ai = new GoogleGenAI({ apiKey });
+            const response = await ai.models.generateContent({
+                model: modelId || 'gemini-1.5-flash',
+                contents: { parts: [{ inlineData: { data, mimeType } }, { text: prompt }] }
+            });
+            KEY_MANAGER.reportSuccess('GEMINI');
+            return response.text || "No response.";
+        } catch (e: any) {
+            KEY_MANAGER.reportFailure('GEMINI', apiKey, e);
+            throw new Error(`Gemini Vision Failed: ${e.message}`);
+        }
     }
 
     // --- OPENAI COMPATIBLE VISION ---
-    // Using fetch directly to avoid SDK header issues and reduce bundle size
     if (['GROQ', 'OPENAI', 'OPENROUTER'].includes(provider)) {
         const baseURLMap: Record<string, string> = {
             'GROQ': 'https://api.groq.com/openai/v1/chat/completions',
@@ -311,8 +323,10 @@ export async function generateMultiModalImage(provider: string, modelId: string,
             const validRatios = ["1:1", "16:9", "9:16", "4:3", "3:4"];
             const ratio = validRatios.includes(options?.aspectRatio) ? options.aspectRatio : "1:1";
 
+            // Using standard model for image gen call, which will use the tool internally or specific endpoint
+            // gemini-2.0-flash-exp supports generation
             const response = await ai.models.generateContent({
-                model: modelId || 'gemini-2.5-flash-image',
+                model: modelId || 'gemini-2.0-flash-exp', 
                 contents: { parts: [{ text: prompt }] },
                 config: { imageConfig: { aspectRatio: ratio } } 
             });

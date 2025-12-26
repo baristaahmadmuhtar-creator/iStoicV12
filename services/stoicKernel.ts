@@ -24,8 +24,9 @@ class StoicLogicKernel {
       return tools;
   }
 
-  async *streamExecute(msg: string, modelId: string, context?: string): AsyncGenerator<StreamChunk> {
+  async *streamExecute(msg: string, modelId: string, context?: string, attachment?: any, configOverride?: any): AsyncGenerator<StreamChunk> {
     const systemPrompt = HANISAH_BRAIN.getSystemInstruction('stoic', context);
+    const signal = configOverride?.signal; // AbortSignal passed via configOverride
     
     // FIX 404: If modelId is 'auto-best' (Omni-Race Virtual ID), map it to a concrete model.
     let effectiveModelId = modelId;
@@ -35,16 +36,19 @@ class StoicLogicKernel {
 
     // Stoic Retry Logic: Try requested model, then fallback to Gemini Flash if it fails
     // This helps mitigate 429 errors on Pro/Flash-8b by falling back to the standard, high-quota Flash model.
-    const plan = [effectiveModelId, 'gemini-2.5-flash'];
+    // Updated fallback to gemini-1.5-flash as it is most stable
+    const plan = [effectiveModelId, 'gemini-1.5-flash'];
     
     // Remove duplicates if effectiveModelId IS Flash
-    if (effectiveModelId === 'gemini-2.5-flash') plan.pop();
+    if (effectiveModelId === 'gemini-1.5-flash') plan.pop();
 
     for (const currentModelId of plan) {
-        let selectedModel = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-2.5-flash');
+        if (signal?.aborted) break;
+
+        let selectedModel = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-1.5-flash');
         
         if (!selectedModel) {
-             selectedModel = { id: 'gemini-2.5-flash', name: 'Gemini Flash (Fallback)', category: 'GEMINI_2_5', provider: 'GEMINI', description: 'Fallback', specs: { context: '1M', speed: 'INSTANT', intelligence: 9 } };
+             selectedModel = { id: 'gemini-1.5-flash', name: 'Gemini Flash (Fallback)', category: 'GEMINI_2_5', provider: 'GEMINI', description: 'Fallback', specs: { context: '1M', speed: 'INSTANT', intelligence: 9 } };
         }
 
         const key = KEY_MANAGER.getKey(selectedModel.provider);
@@ -72,7 +76,10 @@ class StoicLogicKernel {
             // Only Gemini Pro/Thinking models support 'thinkingConfig'.
             // Do not use thinkingConfig with tools if the specific model version doesn't support it (2.5 Pro does).
             if (selectedModel.specs.speed === 'THINKING' || selectedModel.id.includes('pro')) {
-               config.thinkingConfig = { thinkingBudget: 1024 }; 
+               // Only for newer models
+               if (selectedModel.id.includes('2.5') || selectedModel.id.includes('3')) {
+                   config.thinkingConfig = { thinkingBudget: 1024 }; 
+               }
             }
 
             const responseStream = await ai.models.generateContentStream({
@@ -83,6 +90,7 @@ class StoicLogicKernel {
 
             let fullText = "";
             for await (const chunk of responseStream) {
+              if (signal?.aborted) break;
               if (chunk.text) {
                 fullText += chunk.text;
                 yield { text: chunk.text };
@@ -94,6 +102,7 @@ class StoicLogicKernel {
                 yield { groundingChunks: chunk.candidates[0].groundingMetadata.groundingChunks };
               }
             }
+            if (signal?.aborted) return;
 
             this.updateHistory(msg, fullText);
             KEY_MANAGER.reportSuccess('GEMINI');
@@ -111,13 +120,16 @@ class StoicLogicKernel {
             // Filter out Google Search if not Gemini, as others don't support it natively in this kernel structure
             const filteredTools = activeTools.filter(t => !t.googleSearch);
 
-            const stream = streamOpenAICompatible(selectedModel.provider as any, selectedModel.id, [{ role: 'user', content: msg }], systemPrompt, filteredTools);
+            const stream = streamOpenAICompatible(selectedModel.provider as any, selectedModel.id, [{ role: 'user', content: msg }], systemPrompt, filteredTools, signal);
             
             let fullText = "";
             for await (const chunk of stream) {
+                if (signal?.aborted) break;
                 if (chunk.text) { fullText += chunk.text; yield { text: chunk.text }; }
                 if (chunk.functionCall) yield { functionCall: chunk.functionCall };
             }
+            if (signal?.aborted) return;
+
             this.updateHistory(msg, fullText);
             KEY_MANAGER.reportSuccess(selectedModel.provider as any);
             
@@ -127,6 +139,7 @@ class StoicLogicKernel {
             return;
           }
         } catch (err: any) {
+          if (signal?.aborted) return; // Silent return if aborted
           debugService.log('ERROR', 'STOIC_KERNEL', 'EXEC_FAIL', `Model ${selectedModel.id} failed: ${JSON.stringify(err)}`);
           KEY_MANAGER.reportFailure(selectedModel.provider, err);
           
@@ -147,7 +160,7 @@ class StoicLogicKernel {
     let effectiveModelId = modelId;
     if (effectiveModelId === 'auto-best') effectiveModelId = 'llama-3.3-70b-versatile';
 
-    let selectedModel = MODEL_CATALOG.find(m => m.id === effectiveModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-2.5-flash');
+    let selectedModel = MODEL_CATALOG.find(m => m.id === effectiveModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-1.5-flash');
     if (!selectedModel) throw new Error("CRITICAL_KERNEL_ERROR: No valid model found.");
 
     const systemPrompt = HANISAH_BRAIN.getSystemInstruction('stoic', context);
@@ -165,10 +178,6 @@ class StoicLogicKernel {
 
         if (activeTools.length > 0) {
             config.tools = activeTools;
-        }
-
-        if (selectedModel.specs.speed === 'THINKING' || selectedModel.id.includes('pro')) {
-           config.thinkingConfig = { thinkingBudget: 1024 }; 
         }
 
         const response = await ai.models.generateContent({

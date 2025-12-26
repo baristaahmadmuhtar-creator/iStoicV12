@@ -7,6 +7,7 @@ import { useNavigationIntelligence } from '../hooks/useNavigationIntelligence';
 import { getText, getLang } from '../services/i18n';
 import { debugService } from '../services/debugService';
 import { UI_REGISTRY, FN_REGISTRY, UI_ID } from '../constants/registry';
+import { useFeatures } from '../contexts/FeatureContext';
 
 interface SidebarProps {
   activeFeature: FeatureID;
@@ -21,6 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
   const [isExpanded, setIsExpanded] = useLocalStorage<boolean>('sidebar_expanded', false);
   
   const { isForcedStealth } = useNavigationIntelligence();
+  const { features } = useFeatures();
   
   const [healthScore, setHealthScore] = useState(100);
   const [healthColor, setHealthColor] = useState('bg-green-500');
@@ -29,6 +31,11 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
   const [uiMatrix, setUiMatrix] = useState<Record<string, any>>(debugService.getUIMatrix());
 
   useEffect(() => {
+      // If Auto Diagnostics is disabled, do not poll system health.
+      if (!features.AUTO_DIAGNOSTICS) {
+          return;
+      }
+
       const checkHealth = () => {
           const stats = debugService.getSystemHealth();
           let score = 100;
@@ -44,15 +51,17 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
           else setHealthColor('bg-red-500');
       };
 
+      // Run once immediately
+      checkHealth();
+
       const interval = setInterval(checkHealth, 2000);
       const unsubscribe = debugService.subscribeUI((state) => setUiMatrix(state)); // Listen to matrix updates
       
-      checkHealth();
       return () => { 
           clearInterval(interval);
           unsubscribe(); 
       };
-  }, []);
+  }, [features.AUTO_DIAGNOSTICS]);
   
   const getLabel = (id: string) => {
       const keyMap: Record<string, string> = {

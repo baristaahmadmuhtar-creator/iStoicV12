@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { debugService } from '../services/debugService';
 import { KEY_MANAGER, type ProviderStatus } from '../services/geminiService';
@@ -9,6 +10,7 @@ import {
     Clock, ShieldCheck, ShieldAlert, PowerOff, Database, HardDrive, 
     Server, Globe, Key, Sparkles, Box
 } from 'lucide-react';
+import { useFeatures } from '../contexts/FeatureContext'; // Import Feature Context
 
 // --- HELPER: JSON TREE VIEW ---
 const JsonTree: React.FC<{ data: any; level?: number }> = ({ data, level = 0 }) => {
@@ -70,6 +72,8 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
     const bottomRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+    const { features } = useFeatures(); // Get Feature Flags
+
     // Initial Data Load
     useEffect(() => {
         if (!isOpen) return;
@@ -78,20 +82,28 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
         setProviderStatuses(KEY_MANAGER.getAllProviderStatuses());
         updateStorageList();
         
-        const statInterval = setInterval(() => {
+        let statInterval: any = null;
+
+        // Respect AUTO_DIAGNOSTICS flag
+        if (features.AUTO_DIAGNOSTICS) {
+            statInterval = setInterval(() => {
+                setHealth(debugService.getSystemHealth());
+                setProviderStatuses(KEY_MANAGER.getAllProviderStatuses());
+            }, 1000);
+        } else {
+            // One-time fetch if auto polling is disabled
             setHealth(debugService.getSystemHealth());
-            setProviderStatuses(KEY_MANAGER.getAllProviderStatuses());
-        }, 1000);
+        }
 
         const sub = debugService.subscribe((newLogs) => {
             setLogs(newLogs);
         });
 
         return () => {
-            clearInterval(statInterval);
+            if (statInterval) clearInterval(statInterval);
             sub();
         };
-    }, [isOpen]);
+    }, [isOpen, features.AUTO_DIAGNOSTICS]);
 
     const updateStorageList = () => {
         const keys = Object.keys(localStorage).filter(k => k.startsWith('app_') || k === 'chat_threads' || k === 'notes' || k.includes('config') || k.includes('voice'));

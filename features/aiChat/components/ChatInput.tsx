@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, memo } from 'react';
-import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, Paperclip, X, Image as ImageIcon, Flame, Brain, CornerDownLeft, Clipboard, ShieldCheck, FileText } from 'lucide-react';
+import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, Paperclip, X, Image as ImageIcon, Flame, Brain, CornerDownLeft, Clipboard, ShieldCheck, FileText, Square } from 'lucide-react';
 import { TRANSLATIONS, getLang } from '../../../services/i18n';
 import { debugService } from '../../../services/debugService';
 import { UI_REGISTRY, FN_REGISTRY } from '../../../constants/registry';
@@ -10,6 +10,7 @@ interface ChatInputProps {
   setInput: React.Dispatch<React.SetStateAction<string>>;
   isLoading: boolean;
   onSubmit: (e?: React.FormEvent, attachment?: { data: string, mimeType: string }) => void;
+  onStop?: () => void;
   onNewChat: () => void;
   onFocusChange: (isFocused: boolean) => void;
   aiName: string;
@@ -18,6 +19,7 @@ interface ChatInputProps {
   personaMode?: 'hanisah' | 'stoic';
   isVaultEnabled?: boolean;
   onTogglePersona?: () => void;
+  variant?: 'hero' | 'standard'; // Added variant prop definition from usage in AIChatView
 }
 
 const MAX_CHARS = 4000;
@@ -27,6 +29,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   setInput,
   isLoading,
   onSubmit,
+  onStop,
   onNewChat,
   onFocusChange,
   aiName,
@@ -34,7 +37,8 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   onToggleVaultSync,
   personaMode = 'hanisah',
   isVaultEnabled = true,
-  onTogglePersona
+  onTogglePersona,
+  variant = 'standard'
 }) => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -134,7 +138,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit();
+      if (!isLoading) handleSubmit();
     }
   };
 
@@ -166,6 +170,12 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   const handleNewChatClick = () => {
       debugService.logAction(UI_REGISTRY.CHAT_INPUT_NEW, FN_REGISTRY.CHAT_NEW_SESSION, 'CLICK');
       onNewChat();
+  };
+
+  const handleStop = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (onStop) onStop();
   };
 
   const handleSubmit = () => {
@@ -271,6 +281,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 className="w-full bg-transparent text-[15px] font-medium text-black dark:text-white placeholder:text-neutral-400 resize-none focus:outline-none max-h-60 custom-scroll leading-relaxed"
                 rows={1}
                 aria-label="Chat Input"
+                disabled={isLoading && !onStop} // Disable if loading but no stop capability
             />
         </div>
 
@@ -337,20 +348,31 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                     {isDictating ? <MicOff size={16} /> : <Mic size={18} strokeWidth={2} />}
                 </button>
 
-                {/* Send Button */}
-                <button 
-                    onClick={() => handleSubmit()}
-                    disabled={(!input.trim() && !attachment) || isLoading || input.length > MAX_CHARS}
-                    aria-label="Send Message"
-                    className={`
-                        w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300
-                        ${(input.trim() || attachment) && !isLoading && input.length <= MAX_CHARS
-                            ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg hover:scale-105 active:scale-95 hover:shadow-[0_0_20px_var(--accent-glow)]' 
-                            : 'bg-black/5 dark:bg-white/5 text-neutral-400 cursor-not-allowed'}
-                    `}
-                >
-                    {isLoading ? <Loader2 size={18} className="animate-spin" /> : <CornerDownLeft size={20} strokeWidth={2.5} />}
-                </button>
+                {/* Send / Stop Button */}
+                {isLoading ? (
+                    <button 
+                        onClick={handleStop}
+                        aria-label="Stop Generation"
+                        className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 bg-red-500 text-white shadow-lg hover:scale-105 active:scale-95 hover:shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse"
+                        title="Stop Generation"
+                    >
+                        <Square size={16} fill="currentColor" />
+                    </button>
+                ) : (
+                    <button 
+                        onClick={() => handleSubmit()}
+                        disabled={(!input.trim() && !attachment) || input.length > MAX_CHARS}
+                        aria-label="Send Message"
+                        className={`
+                            w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300
+                            ${(input.trim() || attachment) && input.length <= MAX_CHARS
+                                ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg hover:scale-105 active:scale-95 hover:shadow-[0_0_20px_var(--accent-glow)]' 
+                                : 'bg-black/5 dark:bg-white/5 text-neutral-400 cursor-not-allowed'}
+                        `}
+                    >
+                        <CornerDownLeft size={20} strokeWidth={2.5} />
+                    </button>
+                )}
             </div>
         </div>
       </div>

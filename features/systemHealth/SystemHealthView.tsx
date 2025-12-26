@@ -1,94 +1,45 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-    Activity, Terminal, ShieldCheck, Zap, AlertTriangle, 
-    RefreshCw, Trash2, Cpu, Stethoscope, Search, 
-    CheckCircle2, HardDrive, Network, Server, Database,
+    Activity, Terminal, ShieldCheck, Trash2, Network, Server, Database,
     Wifi, Power, Bug, Monitor, Volume2, 
-    ChevronRight, ChevronDown, Play, Pause, ArrowRight, Key, LayoutGrid, ToggleLeft, ToggleRight, Info
+    ChevronRight, Play, Pause, ArrowRight, Key, RefreshCw, Stethoscope, Search, CheckCircle2, HardDrive
 } from 'lucide-react';
-import { debugService, type UIStatus } from '../../services/debugService';
+import { debugService } from '../../services/debugService';
 import { KEY_MANAGER, type ProviderStatus } from '../../services/geminiService';
 import { HANISAH_KERNEL } from '../../services/melsaKernel';
 import { speakWithHanisah } from '../../services/elevenLabsService';
 import { type LogEntry } from '../../types';
 import Markdown from 'react-markdown';
 import { executeMechanicTool } from '../mechanic/mechanicTools';
+import { IntegrityMatrix } from './components/IntegrityMatrix'; // New Import
 
 // --- HELPER: JSON TREE VIEW ---
 const JsonTree: React.FC<{ data: any; level?: number }> = ({ data, level = 0 }) => {
     const [expanded, setExpanded] = useState(level < 1);
-    
     if (typeof data !== 'object' || data === null) {
         const valueColor = typeof data === 'string' ? 'text-emerald-400' : typeof data === 'number' ? 'text-orange-400' : 'text-purple-400';
         return <span className={`${valueColor} break-all`}>{JSON.stringify(data)}</span>;
     }
-
     const isArray = Array.isArray(data);
     const keys = Object.keys(data);
     const isEmpty = keys.length === 0;
-
     return (
         <div className="font-mono text-[10px] leading-relaxed ml-3 border-l border-white/10 pl-1">
-            <div 
-                className={`flex items-center gap-1 cursor-pointer hover:text-white ${isEmpty ? 'opacity-50 cursor-default' : 'text-neutral-500'}`} 
-                onClick={() => !isEmpty && setExpanded(!expanded)}
-            >
-                {!isEmpty && (expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />)}
-                <span className="text-neutral-500">{isArray ? '[' : '{'}</span>
+            <div className={`flex items-center gap-1 cursor-pointer hover:text-white ${isEmpty ? 'opacity-50 cursor-default' : 'text-neutral-500'}`} onClick={() => !isEmpty && setExpanded(!expanded)}>
+                {!isEmpty && (expanded ? "▼" : "▶")} <span className="text-neutral-500">{isArray ? '[' : '{'}</span>
                 {!expanded && !isEmpty && <span className="text-neutral-400">...</span>}
                 {isEmpty && <span className="text-neutral-500">{isArray ? ']' : '}'}</span>}
-                {!isEmpty && !expanded && <span className="text-neutral-500">{isArray ? ']' : '}'}</span>}
-                {!isEmpty && <span className="text-neutral-400 text-[8px] ml-2">({keys.length} items)</span>}
+                {!isEmpty && <span className="text-neutral-400 text-[8px] ml-2">({keys.length})</span>}
             </div>
-            
             {expanded && !isEmpty && (
                 <div className="my-0.5">
                     {keys.map((key) => (
-                        <div key={key} className="flex items-start">
-                            <span className="text-[var(--accent-color)] opacity-70 mr-2 shrink-0">{key}:</span>
-                            <JsonTree data={data[key]} level={level + 1} />
-                        </div>
+                        <div key={key} className="flex items-start"><span className="text-[var(--accent-color)] opacity-70 mr-2 shrink-0">{key}:</span><JsonTree data={data[key]} level={level + 1} /></div>
                     ))}
                     <div className="text-neutral-500">{isArray ? ']' : '}'}</div>
                 </div>
             )}
-        </div>
-    );
-};
-
-// --- HELPER: UI MATRIX NODE ---
-const UIElementNode: React.FC<{ id: string, status: UIStatus, errors: number, usage: number, onToggle: () => void }> = ({ id, status, errors, usage, onToggle }) => {
-    const getStatusColor = () => {
-        if (status === 'DISABLED') return 'bg-red-500/10 border-red-500 text-red-500';
-        if (status === 'UNSTABLE') return 'bg-yellow-500/10 border-yellow-500 text-yellow-500 animate-pulse';
-        return 'bg-emerald-500/10 border-emerald-500 text-emerald-500';
-    };
-
-    const cleanName = id.replace(/UI_|BTN_/g, '').replace(/_/g, ' ');
-
-    return (
-        <div 
-            onClick={onToggle}
-            className={`
-                relative p-3 rounded-xl border transition-all cursor-pointer group select-none
-                ${getStatusColor()} hover:scale-[1.02] active:scale-95
-            `}
-        >
-            <div className="flex justify-between items-start mb-2">
-                <div className="p-1.5 rounded-lg bg-black/20">
-                    {status === 'DISABLED' ? <ToggleLeft size={14} /> : <ToggleRight size={14} />}
-                </div>
-                <div className="text-[9px] font-mono opacity-70">
-                    ERR:{errors} | USE:{usage}
-                </div>
-            </div>
-            <div className="text-[10px] font-black uppercase tracking-wider truncate" title={id}>
-                {cleanName}
-            </div>
-            <div className="text-[8px] font-mono mt-1 opacity-60">
-                {status}
-            </div>
         </div>
     );
 };
@@ -105,7 +56,6 @@ export const SystemHealthView: React.FC = () => {
     const [hanisahDiagnosis, setHanisahDiagnosis] = useState<string | null>(null);
     const [storageUsage, setStorageUsage] = useState({ used: 0, percent: 0 });
     const [realPing, setRealPing] = useState<number | null>(null);
-    const [uiMatrix, setUiMatrix] = useState<Record<string, any>>(debugService.getUIMatrix());
     
     // Hydraulic Rotation Animation
     const [isRotatingKeys, setIsRotatingKeys] = useState(false);
@@ -123,36 +73,23 @@ export const SystemHealthView: React.FC = () => {
     const [selectedStorageKey, setSelectedStorageKey] = useState<string | null>(null);
     const [storageValue, setStorageValue] = useState<any>(null);
 
-    // Device Info (Static)
-    const deviceInfo = useRef({
-        ua: navigator.userAgent,
-        cores: navigator.hardwareConcurrency || 4,
-        mem: (navigator as any).deviceMemory || 4, // Approx GB
-        platform: navigator.platform,
-        res: `${window.screen.width}x${window.screen.height}`
-    });
-
     const executeRepair = async (action: string) => {
         debugService.log('INFO', 'MECHANIC', 'FIX_EXEC', `Initiating protocol: ${action}`);
         
-        // Hard Reset Exception
         if (action === 'HARD_RESET') {
             if(confirm("PERINGATAN: System Reboot akan merefresh halaman.")) window.location.reload();
             return;
         }
 
-        // Artificial delay for UX processing feel
         await new Promise(r => setTimeout(r, 800));
-
         const result = await executeMechanicTool({ args: { action } });
         debugService.log('INFO', 'MECHANIC', 'FIX_RESULT', result);
         
-        // Immediate Local State Updates
         if (action === 'REFRESH_KEYS') {
             setProviders(KEY_MANAGER.getAllProviderStatuses());
         } else if (action === 'CLEAR_LOGS') {
-            setLogs([]); // Clear local state immediately
-            debugService.clear(); // Ensure service is clear
+            setLogs([]);
+            debugService.clear();
         } else if (action === 'OPTIMIZE_MEMORY') {
             calcStorage();
             setHealth(debugService.getSystemHealth());
@@ -168,20 +105,9 @@ export const SystemHealthView: React.FC = () => {
     const runHanisahDiagnosis = async () => {
         setIsScanning(true);
         setHanisahDiagnosis(null);
-        
         try {
             debugService.log('INFO', 'MECHANIC', 'SCAN_INIT', 'Running full system diagnostics...');
-            
-            // CALL THE REAL TOOL TO GET DATA
             const toolResultJson = await executeMechanicTool({ args: { action: 'GET_DIAGNOSTICS' } });
-            
-            // Log raw telemetry to terminal for user visibility
-            try {
-                const telemetry = JSON.parse(toolResultJson);
-                debugService.log('TRACE', 'MECHANIC', 'TELEMETRY', 'System Vital Signs', telemetry);
-            } catch(e) {
-                debugService.log('INFO', 'MECHANIC', 'RAW_DATA', toolResultJson);
-            }
             
             const prompt = `[ROLE: HANISAH_SYSTEM_MECHANIC]\nAnalisa data telemetri (CPU, RAM, Latency).\nBerikan laporan performa sistem gaya Cyberpunk.\n\n[RAW_DATA]\n${toolResultJson}\n\nFORMAT:\n1. **SYSTEM INTEGRITY**: (SCORE %)\n2. **METRICS SUMMARY**: (CPU/Mem/Net Status)\n3. **ANOMALIES**: (List - be specific)\n4. **OPTIMIZATION**: (Actionable steps)`;
             
@@ -189,63 +115,40 @@ export const SystemHealthView: React.FC = () => {
             setHanisahDiagnosis(response.text || "Diagnostic matrix failed to render.");
             debugService.log('INFO', 'MECHANIC', 'SCAN_COMPLETE', 'Diagnosis generated successfully.');
         } catch (e: any) {
-            console.error(e);
-            const errMsg = `⚠️ Neural Link Interrupted. ${e.message}`;
-            setHanisahDiagnosis(errMsg);
-            debugService.log('ERROR', 'MECHANIC', 'SCAN_FAIL', errMsg);
+            setHanisahDiagnosis(`⚠️ Neural Link Interrupted. ${e.message}`);
+            debugService.log('ERROR', 'MECHANIC', 'SCAN_FAIL', e.message);
         } finally {
             setIsScanning(false);
         }
     };
 
-    // Initialize without auto-running heavy protocols that clutter logs
+    // Initialize
     useEffect(() => {
-        // Initial data sync only
         setHealth(debugService.getSystemHealth());
         setProviders(KEY_MANAGER.getAllProviderStatuses());
         calcStorage();
         updateStorageList();
     }, []);
 
-    // Subscribe to Data Sources
+    // Subscribe
     useEffect(() => {
         setLogs(debugService.getLogs());
-        
         const interval = setInterval(() => {
             setHealth(debugService.getSystemHealth());
             setProviders(KEY_MANAGER.getAllProviderStatuses());
             calcStorage();
         }, 3000);
 
-        const unsubscribe = debugService.subscribe((newLogs) => {
-            setLogs(newLogs);
-        });
-
-        const unsubscribeUI = debugService.subscribeUI((state) => {
-            setUiMatrix(state);
-        });
-
-        return () => {
-            clearInterval(interval);
-            unsubscribe();
-            unsubscribeUI();
-        };
+        const unsubscribe = debugService.subscribe((newLogs) => setLogs(newLogs));
+        return () => { clearInterval(interval); unsubscribe(); };
     }, []);
 
-    // Auto-scroll logic for Terminal
+    // Auto-scroll
     useEffect(() => {
         if (activeTab === 'KERNEL_STREAM' && isAutoScroll && logEndRef.current) {
             logEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
     }, [logs, activeTab, isAutoScroll]);
-
-    // Auto-resize CLI input
-    useEffect(() => {
-        if (inputRef.current) {
-            inputRef.current.style.height = 'auto';
-            inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px';
-        }
-    }, [cliInput]);
 
     const calcStorage = () => {
         try {
@@ -254,14 +157,12 @@ export const SystemHealthView: React.FC = () => {
                 if (!localStorage.hasOwnProperty(x)) continue;
                 total += ((localStorage[x].length + x.length) * 2);
             }
-            const limit = 5 * 1024 * 1024;
-            const percent = Math.min((total / limit) * 100, 100);
-            setStorageUsage({ used: total, percent });
+            setStorageUsage({ used: total, percent: Math.min((total / (5 * 1024 * 1024)) * 100, 100) });
         } catch(e) {}
     };
 
     const updateStorageList = () => {
-        const keys = Object.keys(localStorage).filter(k => k.startsWith('app_') || k === 'chat_threads' || k === 'notes' || k.includes('config') || k.includes('voice'));
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('app_') || k === 'chat_threads' || k === 'notes' || k.includes('config'));
         setStorageKeys(keys.sort());
     };
 
@@ -280,18 +181,9 @@ export const SystemHealthView: React.FC = () => {
         const start = Date.now();
         try {
             await fetch('https://www.google.com/favicon.ico', { mode: 'no-cors', cache: 'no-store' });
-            const duration = Date.now() - start;
-            setRealPing(duration);
-            debugService.log('TRACE', 'NETWORK', 'PING', `External Uplink Latency: ${duration}ms`);
+            setRealPing(Date.now() - start);
         } catch (e) {
             setRealPing(-1);
-            debugService.log('WARN', 'NETWORK', 'PING_FAIL', 'External Uplink Unreachable');
-        }
-    };
-
-    const readDiagnosis = () => {
-        if (hanisahDiagnosis) {
-            speakWithHanisah(hanisahDiagnosis.replace(/[*#_`]/g, ''));
         }
     };
 
@@ -300,28 +192,14 @@ export const SystemHealthView: React.FC = () => {
         const cmd = cliInput.trim().toLowerCase();
         if (!cmd) return;
         debugService.log('INFO', 'CLI', 'EXEC', `> ${cmd}`);
-        
-        // CLI Mapping to Tools
         switch (cmd) {
-            case 'help':
-                debugService.log('INFO', 'CLI', 'HELP', 'Available: clear, refresh_keys, optimize, diagnose, nuke_storage, reload');
-                break;
             case 'clear': executeRepair('CLEAR_LOGS'); break;
             case 'refresh_keys': executeRepair('REFRESH_KEYS'); break;
-            case 'optimize': executeRepair('OPTIMIZE_MEMORY'); break;
             case 'diagnose': runHanisahDiagnosis(); break;
-            case 'nuke_storage': if(confirm('WARNING: WIPE ALL LOCAL DATA?')) { localStorage.clear(); window.location.reload(); } break;
             case 'reload': window.location.reload(); break;
             default: debugService.log('WARN', 'CLI', 'UKN', `Command unknown: ${cmd}`);
         }
         setCliInput('');
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleCLI(e as any);
-        }
     };
 
     const filteredLogs = useMemo(() => {
@@ -332,22 +210,11 @@ export const SystemHealthView: React.FC = () => {
         });
     }, [logs, logFilter, logSearch]);
 
-    const toggleUIElement = (id: string) => {
-        const current = uiMatrix[id];
-        const newStatus = current.status === 'DISABLED' ? 'ACTIVE' : 'DISABLED';
-        debugService.setUIStatus(id, newStatus);
-    };
-
     const getLevelBadge = (level: string) => {
-        const baseClass = "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border";
-        switch (level) {
-            case 'ERROR': return `${baseClass} bg-red-500/10 border-red-500/30 text-red-500`;
-            case 'WARN': return `${baseClass} bg-amber-500/10 border-amber-500/30 text-amber-500`;
-            case 'INFO': return `${baseClass} bg-blue-500/10 border-blue-500/30 text-blue-500`;
-            case 'KERNEL': return `${baseClass} bg-purple-500/10 border-purple-500/30 text-purple-500`;
-            case 'TRACE': return `${baseClass} bg-zinc-500/10 border-zinc-500/30 text-zinc-500`;
-            default: return `${baseClass} bg-zinc-500/10 border-zinc-500/30 text-zinc-500`;
-        }
+        const base = "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border";
+        if(level === 'ERROR') return `${base} bg-red-500/10 border-red-500/30 text-red-500`;
+        if(level === 'WARN') return `${base} bg-amber-500/10 border-amber-500/30 text-amber-500`;
+        return `${base} bg-zinc-500/10 border-zinc-500/30 text-zinc-500`;
     };
 
     return (
@@ -361,7 +228,6 @@ export const SystemHealthView: React.FC = () => {
                             <div className="w-2 h-2 bg-[var(--accent-color)] rounded-full animate-pulse shadow-[0_0_10px_var(--accent-glow)]"></div>
                             <span className="tech-mono text-[9px] font-black uppercase tracking-[0.4em] text-neutral-500">SYSTEM_INTEGRITY_MODULE_v13.5</span>
                         </div>
-                        {/* Clamped typography for System Mechanic */}
                         <h2 className="text-[12vw] md:text-[5rem] xl:text-[7rem] heading-heavy text-black dark:text-white leading-[0.85] tracking-tighter uppercase break-words">
                             SYSTEM <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-blue-500 animate-gradient-text">MECHANIC</span>
                         </h2>
@@ -401,7 +267,6 @@ export const SystemHealthView: React.FC = () => {
                                     <div>
                                         <p className="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-1">NET_PING</p>
                                         <p className="text-3xl font-black italic tracking-tighter dark:text-white">{realPing === null ? 'TEST' : realPing === -1 ? 'ERR' : `${realPing}ms`}</p>
-                                        <p className="text-[7px] tech-mono font-bold text-neutral-400 mt-2">TAP_TO_MEASURE</p>
                                     </div>
                                 </div>
                             </div>
@@ -416,16 +281,15 @@ export const SystemHealthView: React.FC = () => {
                                     <button 
                                         onClick={handleHydraRefresh} 
                                         className={`p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg text-neutral-400 hover:text-[var(--accent-color)] transition-all ${isRotatingKeys ? 'animate-spin text-accent' : ''}`} 
-                                        title="Force Refresh Keys"
                                     >
                                         <RefreshCw size={14} />
                                     </button>
                                 </div>
                                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {providers.map(p => (
-                                        <div key={p.id} className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] border border-black/5 dark:border-white/5 transition-all hover:bg-zinc-100 dark:hover:bg-white/5">
+                                        <div key={p.id} className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] border border-black/5 dark:border-white/5 transition-all">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-2 h-2 rounded-full ${p.status === 'HEALTHY' ? 'bg-emerald-500' : p.status === 'COOLDOWN' ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`}></div>
+                                                <div className={`w-2 h-2 rounded-full ${p.status === 'HEALTHY' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
                                                 <div>
                                                     <p className="text-[10px] font-black uppercase tracking-wider dark:text-white">{p.id}</p>
                                                     <p className="text-[8px] tech-mono text-neutral-500">{p.status === 'COOLDOWN' ? `RESTORING (${p.cooldownRemaining}m)` : 'OPERATIONAL'}</p>
@@ -433,42 +297,9 @@ export const SystemHealthView: React.FC = () => {
                                             </div>
                                             <div className="text-right">
                                                 <span className="text-lg font-black italic text-[var(--accent-color)]">{p.keyCount}</span>
-                                                <p className="text-[7px] font-bold text-neutral-500 uppercase">KEYS_IN_POOL</p>
                                             </div>
                                         </div>
                                     ))}
-                                </div>
-                            </div>
-
-                            {/* Storage & Device */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="p-6 bg-white dark:bg-[#0a0a0b] rounded-[32px] border border-black/5 dark:border-white/5">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <Database size={18} className="text-purple-500" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-500">STORAGE_CORE</span>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <div className="flex justify-between items-end">
-                                            <span className="text-2xl font-black italic dark:text-white">{storageUsage.percent.toFixed(1)}%</span>
-                                            <span className="text-[9px] tech-mono text-neutral-500">{(storageUsage.used / 1024).toFixed(1)}KB / 5MB</span>
-                                        </div>
-                                        <div className="h-2 w-full bg-zinc-100 dark:bg-white/10 rounded-full overflow-hidden">
-                                            <div className="h-full bg-purple-500 transition-all duration-1000" style={{ width: `${storageUsage.percent}%` }}></div>
-                                        </div>
-                                        <p className="text-[8px] text-neutral-400 font-medium">Local Storage persistence active.</p>
-                                    </div>
-                                </div>
-                                <div className="p-6 bg-white dark:bg-[#0a0a0b] rounded-[32px] border border-black/5 dark:border-white/5">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <Monitor size={18} className="text-blue-500" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-500">DEVICE_FINGERPRINT</span>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><p className="text-[8px] font-bold text-neutral-500 uppercase">PLATFORM</p><p className="text-xs font-black dark:text-white truncate">{deviceInfo.current.platform}</p></div>
-                                        <div><p className="text-[8px] font-bold text-neutral-500 uppercase">RESOLUTION</p><p className="text-xs font-black dark:text-white">{deviceInfo.current.res}</p></div>
-                                        <div><p className="text-[8px] font-bold text-neutral-500 uppercase">LOGICAL CORES</p><p className="text-xs font-black dark:text-white">{deviceInfo.current.cores}</p></div>
-                                        <div><p className="text-[8px] font-bold text-neutral-500 uppercase">MEMORY (EST)</p><p className="text-xs font-black dark:text-white">~{deviceInfo.current.mem} GB</p></div>
-                                    </div>
                                 </div>
                             </div>
 
@@ -487,7 +318,7 @@ export const SystemHealthView: React.FC = () => {
                                     <Stethoscope size={20} className="text-[var(--accent-color)]" />
                                     <h3 className="text-[10px] font-black uppercase tracking-[0.3em] dark:text-white">HANISAH_DIAGNOSTICS</h3>
                                 </div>
-                                {hanisahDiagnosis && <button onClick={readDiagnosis} className="p-2 bg-white/10 rounded-full hover:text-[var(--accent-color)] transition-colors text-neutral-500"><Volume2 size={16} /></button>}
+                                {hanisahDiagnosis && <button onClick={() => speakWithHanisah(hanisahDiagnosis.replace(/[*#_`]/g, ''))} className="p-2 bg-white/10 rounded-full hover:text-[var(--accent-color)] transition-colors text-neutral-500"><Volume2 size={16} /></button>}
                             </div>
                             <div className="flex-1 p-6 relative overflow-y-auto custom-scroll">
                                 {hanisahDiagnosis ? (
@@ -500,7 +331,7 @@ export const SystemHealthView: React.FC = () => {
                                 )}
                             </div>
                             <div className="p-4 border-t border-black/5 dark:border-white/5 bg-zinc-50 dark:bg-white/[0.02]">
-                                <button onClick={runHanisahDiagnosis} disabled={isScanning} className={`w-full py-4 rounded-xl font-black uppercase text-[10px] tracking-[0.3em] flex items-center justify-center gap-3 transition-all ${isScanning ? 'bg-zinc-200 dark:bg-white/10 text-neutral-500' : 'bg-[var(--accent-color)] text-on-accent shadow-lg hover:shadow-[0_0_20px_var(--accent-glow)]'}`}>
+                                <button onClick={runHanisahDiagnosis} disabled={isScanning} className={`w-full py-4 rounded-xl font-black uppercase text-[10px] tracking-[0.3em] flex items-center justify-center gap-3 transition-all ${isScanning ? 'bg-zinc-200 dark:bg-white/10 text-neutral-500' : 'bg-[var(--accent-color)] text-on-accent shadow-lg'}`}>
                                     {isScanning ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />} {isScanning ? 'RUNNING_ANALYSIS...' : 'START_DIAGNOSIS'}
                                 </button>
                             </div>
@@ -512,102 +343,44 @@ export const SystemHealthView: React.FC = () => {
                 {activeTab === 'KERNEL_STREAM' && (
                     <div className="flex-1 bg-terminal-void rounded-[32px] border border-white/10 flex flex-col shadow-2xl relative overflow-hidden font-mono animate-slide-up terminal-scanlines">
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-cyan-500 z-10"></div>
-                        
-                        {/* Toolbar */}
                         <div className="p-3 border-b border-white/10 flex items-center justify-between bg-white/5 backdrop-blur-md relative z-20">
                             <div className="flex items-center gap-4">
                                 <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400 flex items-center gap-2"><Terminal size={12} /> KERNEL_STREAM</span>
-                                <div className="h-4 w-[1px] bg-white/10"></div>
                                 <div className="flex items-center gap-2">
-                                    <Search size={12} className="text-neutral-600"/>
                                     <input value={logSearch} onChange={e => setLogSearch(e.target.value)} placeholder="GREP..." className="bg-transparent border-none text-[10px] text-white focus:outline-none uppercase w-24 placeholder:text-neutral-700"/>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <select value={logFilter} onChange={e => setLogFilter(e.target.value)} className="bg-black border border-white/10 rounded px-2 py-1 text-[9px] text-neutral-400 focus:outline-none uppercase">
-                                    <option value="ALL">ALL LEVELS</option>
-                                    <option value="ERROR">ERROR</option>
-                                    <option value="WARN">WARN</option>
-                                    <option value="INFO">INFO</option>
-                                    <option value="TRACE">TRACE</option>
-                                </select>
                                 <button onClick={() => setIsAutoScroll(!isAutoScroll)} className={`p-1.5 rounded border transition-all ${!isAutoScroll ? 'bg-amber-500/20 border-amber-500/50 text-amber-500' : 'border-white/10 text-neutral-500 hover:text-white'}`}>{isAutoScroll ? <Pause size={10} /> : <Play size={10} />}</button>
                                 <button onClick={() => executeRepair('CLEAR_LOGS')} className="p-1.5 rounded border border-white/10 text-neutral-500 hover:text-red-500 transition-all"><Trash2 size={10}/></button>
                             </div>
                         </div>
-
-                        {/* Logs */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-1.5 custom-scroll text-[10px] relative z-10">
                             {filteredLogs.map(log => (
                                 <div key={log.id} className="flex flex-col gap-1 p-1.5 hover:bg-white/5 rounded transition-colors group">
-                                    <div className={`flex gap-3 ${log.level === 'ERROR' ? 'text-red-400' : log.level === 'WARN' ? 'text-amber-400' : log.level === 'TRACE' ? 'text-neutral-500' : 'text-emerald-400'}`}>
+                                    <div className={`flex gap-3 ${log.level === 'ERROR' ? 'text-red-400' : log.level === 'WARN' ? 'text-amber-400' : 'text-emerald-400'}`}>
                                         <span className="opacity-50 shrink-0 font-mono">[{log.timestamp.split('T')[1].replace('Z','')}]</span>
                                         <div className={getLevelBadge(log.level)}>{log.level}</div>
                                         <span className="font-bold shrink-0 w-24 text-right opacity-70 uppercase">{log.layer}</span>
                                         <span className="break-all flex-1 text-neutral-300 font-mono">{log.message}</span>
                                     </div>
-                                    {log.payload && Object.keys(log.payload).length > 0 && (
-                                        <div className="pl-24 ml-2 border-l border-white/10 hidden group-hover:block">
-                                            <JsonTree data={log.payload} />
-                                        </div>
-                                    )}
                                 </div>
                             ))}
                             <div ref={logEndRef} />
                         </div>
-
-                        {/* CLI Input */}
                         <div className="p-3 bg-[#0a0a0b] border-t border-white/10 relative z-20">
                             <div className="relative flex items-end group">
                                 <span className="absolute left-3 top-3.5 text-[var(--accent-color)] font-black text-xs animate-pulse">{'>'}</span>
-                                <textarea
-                                    ref={inputRef}
-                                    value={cliInput}
-                                    onChange={e => setCliInput(e.target.value)}
-                                    onKeyDown={handleKeyDown}
-                                    placeholder="ENTER_COMMAND..."
-                                    rows={1}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-8 pr-12 text-[11px] text-white focus:outline-none focus:border-[var(--accent-color)]/50 focus:bg-white/10 transition-all font-mono placeholder:text-neutral-700 resize-none overflow-hidden min-h-[42px]"
-                                />
-                                <button 
-                                    onClick={(e) => handleCLI(e as any)} 
-                                    disabled={!cliInput} 
-                                    className="absolute right-2 bottom-2 p-1.5 bg-white/10 rounded-lg text-neutral-400 hover:text-white hover:bg-[var(--accent-color)]/20 transition-all disabled:opacity-0"
-                                >
-                                    <ArrowRight size={14} />
-                                </button>
+                                <textarea ref={inputRef} value={cliInput} onChange={e => setCliInput(e.target.value)} onKeyDown={(e) => { if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); handleCLI(e as any); } }} placeholder="ENTER_COMMAND..." rows={1} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-8 pr-12 text-[11px] text-white focus:outline-none focus:border-[var(--accent-color)]/50 focus:bg-white/10 transition-all font-mono resize-none overflow-hidden min-h-[42px]"/>
+                                <button onClick={(e) => handleCLI(e as any)} disabled={!cliInput} className="absolute right-2 bottom-2 p-1.5 bg-white/10 rounded-lg text-neutral-400 hover:text-white hover:bg-[var(--accent-color)]/20 transition-all disabled:opacity-0"><ArrowRight size={14} /></button>
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* --- UI MATRIX TAB --- */}
+                {/* --- UI MATRIX TAB (Replaced by New Component) --- */}
                 {activeTab === 'UI_MATRIX' && (
-                    <div className="flex-1 overflow-y-auto p-6 md:p-8 relative z-20 bg-[#0a0a0b] rounded-[32px] border border-white/5 shadow-2xl animate-slide-up">
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-3">
-                                <LayoutGrid size={18} className="text-accent" />
-                                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">INTERFACE_INTEGRITY_MATRIX</h3>
-                            </div>
-                            <div className="flex items-center gap-2 text-[9px] text-neutral-500 font-mono">
-                                <Info size={12} className="text-accent" />
-                                <span>RED = Disabled | YELLOW = Unstable | GREEN = Nominal</span>
-                            </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {Object.values(uiMatrix).map((el: any) => (
-                                <UIElementNode 
-                                    key={el.id}
-                                    id={el.id}
-                                    status={el.status}
-                                    errors={el.errorCount}
-                                    usage={el.usageCount}
-                                    onToggle={() => toggleUIElement(el.id)}
-                                />
-                            ))}
-                        </div>
-                    </div>
+                    <IntegrityMatrix />
                 )}
 
                 {/* --- MEMORY TAB --- */}
@@ -668,7 +441,6 @@ const VitalsCard: React.FC<{ label: string, value: string, icon: React.ReactNode
 
 const RepairButton: React.FC<{ icon: React.ReactNode, label: string, onClick: () => Promise<void>, danger?: boolean }> = ({ icon, label, onClick, danger }) => {
     const [status, setStatus] = useState<'IDLE' | 'LOADING' | 'SUCCESS'>('IDLE');
-
     const handleClick = async () => {
         if (status !== 'IDLE') return;
         setStatus('LOADING');
@@ -676,7 +448,6 @@ const RepairButton: React.FC<{ icon: React.ReactNode, label: string, onClick: ()
         setStatus('SUCCESS');
         setTimeout(() => setStatus('IDLE'), 2000);
     };
-
     return (
         <button 
             onClick={handleClick} 
@@ -686,12 +457,10 @@ const RepairButton: React.FC<{ icon: React.ReactNode, label: string, onClick: ()
                 : 'bg-white dark:bg-[#0a0a0b] border-black/5 dark:border-white/5 hover:border-[var(--accent-color)]/30 hover:text-[var(--accent-color)] text-neutral-500'
             }`}
         >
-            {/* Success Overlay */}
             <div className={`absolute inset-0 flex flex-col items-center justify-center bg-emerald-500 text-white transition-all duration-300 ${status === 'SUCCESS' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                 <CheckCircle2 size={24} className="animate-bounce" />
                 <span className="text-[8px] font-black uppercase tracking-widest mt-2">DONE</span>
             </div>
-
             <div className={`transition-all duration-300 flex flex-col items-center gap-3 ${status === 'SUCCESS' ? 'opacity-0' : 'opacity-100'}`}>
                 {status === 'LOADING' ? <RefreshCw size={20} className="animate-spin" /> : React.cloneElement(icon as React.ReactElement<any>, { size: 20 })}
                 <span className="text-[8px] font-black uppercase tracking-widest text-center leading-tight">{label}</span>

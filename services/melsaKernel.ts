@@ -3,10 +3,10 @@ import { GoogleGenAI } from "@google/genai";
 import { debugService } from "./debugService";
 import { HANISAH_BRAIN } from "./melsaBrain";
 import { noteTools, visualTools, searchTools } from "./geminiService";
-import { GLOBAL_VAULT, Provider } from "./hydraVault"; // Updated Import
+import { GLOBAL_VAULT, Provider } from "./hydraVault"; 
 import { mechanicTools } from "../features/mechanic/mechanicTools";
 import { streamOpenAICompatible } from "./providerEngine";
-import { OMNI_KERNEL } from "./omniRace"; // New Import
+import { OMNI_KERNEL } from "./omniRace"; 
 import { type ModelMetadata } from "../types";
 
 export const MODEL_CATALOG: ModelMetadata[] = [
@@ -71,7 +71,6 @@ export class HanisahKernel {
   private history: any[] = [];
 
   private getActiveTools(provider: string, isThinking: boolean): any[] {
-      // Gemini 3.0 Pro / Thinking models DO NOT support tools yet
       if (isThinking && provider === 'GEMINI') return [];
 
       const configStr = localStorage.getItem('hanisah_tools_config');
@@ -86,21 +85,32 @@ export class HanisahKernel {
       return tools;
   }
 
-  // Fix: Added configOverride parameter to signature
+  // Helper to check feature flags directly from storage (since Kernel is non-React)
+  private isOmniRaceEnabled(): boolean {
+      try {
+          const stored = localStorage.getItem('sys_feature_flags');
+          if (!stored) return true; // Default ON
+          const flags = JSON.parse(stored);
+          return flags['OMNI_RACE'] !== false; // Default true if key missing
+      } catch (e) { return true; }
+  }
+
   async *streamExecute(msg: string, initialModelId: string, context?: string, imageData?: { data: string, mimeType: string }, configOverride?: any): AsyncGenerator<StreamChunk> {
     const systemPrompt = configOverride?.systemInstruction || HANISAH_BRAIN.getSystemInstruction('hanisah', context);
     
-    // --- OMNI RACE LOGIC ---
+    // --- OMNI RACE LOGIC with FEATURE FLAG CHECK ---
     if (initialModelId === 'auto-best') {
-        // OmniRace currently only supports text generation, no image inputs yet in standard race config
-        // If image data is present, fallback to Gemini Flash
-        if (imageData) {
+        const isEnabled = this.isOmniRaceEnabled();
+        
+        if (!isEnabled) {
+            yield { text: `\n\n> 🛑 *Omni-Race disabled by Protocol. Switching to Single-Core (Gemini Flash)...*` };
+            initialModelId = 'gemini-2.5-flash'; // Fallback
+        } else if (imageData) {
             yield { text: `\n\n> ⚠️ *Visual Input detected. Falling back to Gemini Vision...*` };
-            // Fallthrough to standard logic below with Flash
             initialModelId = 'gemini-2.5-flash';
         } else {
             yield* OMNI_KERNEL.raceStream(msg, systemPrompt, context);
-            this.updateHistory(msg, "[Omni-Race Response]"); // Simplified history update
+            this.updateHistory(msg, "[Omni-Race Response]"); 
             return;
         }
     }
@@ -129,7 +139,6 @@ export class HanisahKernel {
                 const ai = new GoogleGenAI({ apiKey: key });
                 const config: any = { systemInstruction: systemPrompt, temperature: 0.7 };
                 
-                // CRITICAL FIX: Only add tools if NOT in thinking mode
                 if (activeTools.length > 0) config.tools = activeTools;
                 if (isThinking) config.thinkingConfig = { thinkingBudget: 4096 };
 
@@ -148,9 +157,6 @@ export class HanisahKernel {
                 GLOBAL_VAULT.reportSuccess(provider as Provider);
                 return;
             } else {
-                // OpenAI Compatible (Groq, DeepSeek, etc)
-                // Note: streamOpenAICompatible needs to be updated to take the key directly or pull from vault
-                // For now, providerEngine still pulls from KEY_MANAGER (which proxies GLOBAL_VAULT)
                 const stream = streamOpenAICompatible(provider as any, model.id, [{ role: 'user', content: msg }], systemPrompt, activeTools);
                 let fullText = "";
                 for await (const chunk of stream) {
@@ -163,13 +169,12 @@ export class HanisahKernel {
             }
         } catch (err: any) {
             GLOBAL_VAULT.reportFailure(provider as Provider, key, err);
-            
             const isQuota = JSON.stringify(err).includes('429') || JSON.stringify(err).includes('resource_exhausted') || JSON.stringify(err).includes('limit');
             const isBalance = JSON.stringify(err).includes('402');
 
             if (isQuota || isBalance) {
                 yield { text: `\n\n> 🔄 *Quota ${provider} penuh. Merotasi sistem...*` };
-                currentModelId = 'gemini-2.5-flash'; // Fallback to most stable
+                currentModelId = 'gemini-2.5-flash';
                 continue;
             }
             throw err;
@@ -177,7 +182,6 @@ export class HanisahKernel {
     }
   }
 
-  // Fix: Added execute method for non-streaming calls
   async execute(msg: string, modelId: string, context?: string): Promise<StreamChunk> {
     const it = this.streamExecute(msg, modelId, context);
     let fullText = "";

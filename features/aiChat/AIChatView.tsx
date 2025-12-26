@@ -9,7 +9,6 @@ import {
   History, Settings2, LayoutTemplate, ArrowDown, CircuitBoard, Infinity
 } from 'lucide-react';
 
-// Hooks & Logic
 import { useNeuralLinkSession } from './hooks/useNeuralLinkSession';
 import { ChatHistory } from './components/ChatHistory';
 import { ModelPicker } from './components/ModelPicker';
@@ -18,17 +17,14 @@ import { ChatInput } from './components/ChatInput';
 import { ChatWindow } from './components/ChatWindow'; 
 import { VaultPinModal } from '../../components/VaultPinModal';
 import { useNavigationIntelligence } from '../../hooks/useNavigationIntelligence';
-import { useAIProvider } from '../../hooks/useAIProvider'; 
-// STRICT REGISTRY
 import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
 import { debugService } from '../../services/debugService';
+import { useFeatures } from '../../contexts/FeatureContext'; // Import Feature Hook
 
 interface AIChatViewProps {
     chatLogic: any;
 }
 
-// BENTO GRID CARD COMPONENT - ANIMATED & RESPONSIVE
-// Removed arbitrary animation delay to feel faster
 const SuggestionCard: React.FC<{ 
     icon: React.ReactNode, 
     label: string, 
@@ -78,6 +74,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const [isTransitioning, setIsTransitioning] = useState(false); 
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     
+    // Feature Flags
+    const { isFeatureEnabled } = useFeatures();
+    const isLiveLinkEnabled = isFeatureEnabled('LIVE_LINK');
+
     // Mobile Intelligence
     const { isInputFocused, shouldShowNav } = useNavigationIntelligence();
     const isMobileNavVisible = shouldShowNav && (!isInputFocused || window.innerWidth > 768);
@@ -113,6 +113,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     };
 
     const handleLiveToggle = () => {
+        if (!isLiveLinkEnabled) {
+            alert("FEATURE_DISABLED: Live Link disabled in System Mechanic to save resources.");
+            return;
+        }
         debugService.logAction(UI_REGISTRY.CHAT_BTN_LIVE_TOGGLE, FN_REGISTRY.CHAT_TOGGLE_LIVE, isLiveMode ? 'STOP' : 'START');
         toggleLiveMode();
     };
@@ -171,7 +175,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
             const { scrollTop, scrollHeight, clientHeight } = container;
             const distanceToBottom = scrollHeight - scrollTop - clientHeight;
             
-            // Only show button if user has scrolled up significantly (more than 300px)
             if (distanceToBottom > 300) {
                 isAutoScrolling.current = false;
                 setShowScrollBtn(true);
@@ -280,11 +283,14 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                             <button 
                                 onClick={handleLiveToggle}
                                 className={`w-8 h-8 rounded-full transition-all flex items-center justify-center active:scale-95 ${
-                                    isLiveMode 
-                                    ? 'bg-red-500 text-white shadow-lg animate-pulse' 
-                                    : 'text-neutral-500 hover:text-red-500 hover:bg-red-500/10'
+                                    !isLiveLinkEnabled 
+                                    ? 'opacity-30 cursor-not-allowed text-neutral-500' 
+                                    : isLiveMode 
+                                        ? 'bg-red-500 text-white shadow-lg animate-pulse' 
+                                        : 'text-neutral-500 hover:text-red-500 hover:bg-red-500/10'
                                 }`}
-                                title="Initialize Neural Link"
+                                title={!isLiveLinkEnabled ? "Live Link Disabled" : "Initialize Neural Link"}
+                                disabled={!isLiveLinkEnabled}
                             >
                                 <Radio size={14} strokeWidth={2} />
                             </button>

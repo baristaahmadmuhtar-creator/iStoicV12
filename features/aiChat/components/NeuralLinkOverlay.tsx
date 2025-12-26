@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Flame, Brain, MicOff, Radio, Shield, X, Mic, Volume2, Activity } from 'lucide-react';
 import { type NeuralLinkStatus } from '../../../services/neuralLink';
+import { useFeatures } from '../../../contexts/FeatureContext'; // Import Feature Hook
 
 interface NeuralLinkOverlayProps {
   isOpen: boolean;
@@ -26,9 +27,11 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
-  
-  // Volume state for orb scaling
   const [volume, setVolume] = useState(0);
+
+  // Check Feature Flag
+  const { isFeatureEnabled } = useFeatures();
+  const isVisualEngineEnabled = isFeatureEnabled('VISUAL_ENGINE');
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -47,6 +50,12 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
   // Enhanced Audio Visualizer
   useEffect(() => {
     if (!isOpen || !analyser || !canvasRef.current) return;
+    
+    // IF VISUAL ENGINE DISABLED -> SKIP RENDERING
+    if (!isVisualEngineEnabled) {
+        setVolume(128); // Static volume for orb
+        return;
+    }
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -122,7 +131,7 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
 
     draw();
     return () => cancelAnimationFrame(animationId);
-  }, [isOpen, analyser, windowSize, personaMode]);
+  }, [isOpen, analyser, windowSize, personaMode, isVisualEngineEnabled]);
 
   if (!isOpen) return null;
 
@@ -130,12 +139,14 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
     <div className="fixed inset-0 z-[5000] bg-black flex flex-col animate-fade-in transition-all overflow-hidden selection:bg-accent/30 font-sans">
       
       {/* 1. VISUALIZER LAYER */}
-      <canvas 
-        ref={canvasRef} 
-        className="absolute inset-0 pointer-events-none z-0"
-      />
+      {isVisualEngineEnabled && (
+          <canvas 
+            ref={canvasRef} 
+            className="absolute inset-0 pointer-events-none z-0"
+          />
+      )}
 
-      {/* 2. AMBIENT ORB LAYER */}
+      {/* 2. AMBIENT ORB LAYER (Simplified if Visual Engine Disabled) */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 transition-transform duration-100 ease-out"
            style={{ transform: `scale(${1 + (volume / 256) * 0.2})` }}
       >
@@ -157,6 +168,9 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
                       <Radio size={14} className={status === 'ACTIVE' ? 'animate-pulse text-green-400' : ''} />
                       <span className="text-[10px] font-black uppercase tracking-widest">{status}</span>
                   </div>
+                  {!isVisualEngineEnabled && (
+                      <span className="text-[8px] font-mono text-neutral-500 bg-black/20 px-2 py-1 rounded">ECO_MODE</span>
+                  )}
               </div>
               <button onClick={onTerminate} className="w-10 h-10 rounded-full bg-white/10 hover:bg-red-500/20 text-white hover:text-red-500 flex items-center justify-center transition-all border border-white/5 hover:border-red-500/50">
                   <X size={18} />

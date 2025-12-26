@@ -131,3 +131,82 @@ export const FN_REGISTRY = {
 // Type definitions for type safety enforcement
 export type UI_ID = typeof UI_REGISTRY[keyof typeof UI_REGISTRY];
 export type FN_ID = typeof FN_REGISTRY[keyof typeof FN_REGISTRY];
+
+export interface UIMetadata {
+    label: string;
+    event: 'CLICK' | 'HOVER' | 'TYPE' | 'TOGGLE' | 'SUBMIT';
+    fn: FN_ID;
+    desc: string;
+}
+
+export const COMPLETE_UI_MAP: Record<UI_ID, UIMetadata> = {
+    // SIDEBAR
+    [UI_REGISTRY.SIDEBAR_BTN_DASHBOARD]: { label: 'Nav Dashboard', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Navigate to Dashboard' },
+    [UI_REGISTRY.SIDEBAR_BTN_NOTES]: { label: 'Nav Notes', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Navigate to Notes' },
+    [UI_REGISTRY.SIDEBAR_BTN_CHAT]: { label: 'Nav Chat', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Navigate to Chat' },
+    [UI_REGISTRY.SIDEBAR_BTN_TOOLS]: { label: 'Nav Tools', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Navigate to Tools' },
+    [UI_REGISTRY.SIDEBAR_BTN_SYSTEM]: { label: 'Nav System', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Navigate to System' },
+    [UI_REGISTRY.SIDEBAR_BTN_SETTINGS]: { label: 'Nav Settings', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Navigate to Settings' },
+    [UI_REGISTRY.SIDEBAR_BTN_LOGO]: { label: 'Logo Home', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Navigate Home via Logo' },
+
+    // DASHBOARD
+    [UI_REGISTRY.DASHBOARD_BTN_SYSTEM_STATUS]: { label: 'System Uptime', event: 'CLICK', fn: FN_REGISTRY.OPEN_SYSTEM_MECHANIC, desc: 'Open System Status' },
+    [UI_REGISTRY.DASHBOARD_CARD_NOTES]: { label: 'Notes Stat', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Quick Access Notes' },
+    [UI_REGISTRY.DASHBOARD_CARD_SYNC]: { label: 'Sync Stat', event: 'CLICK', fn: FN_REGISTRY.OPEN_SYSTEM_MECHANIC, desc: 'Quick Access Sync' },
+    [UI_REGISTRY.DASHBOARD_BENTO_CHAT]: { label: 'Chat Bento', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Bento Grid Chat' },
+    [UI_REGISTRY.DASHBOARD_BENTO_ARCHIVE]: { label: 'Archive Bento', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Bento Grid Archive' },
+    [UI_REGISTRY.DASHBOARD_BENTO_TOOLS]: { label: 'Tools Bento', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Bento Grid Tools' },
+    [UI_REGISTRY.DASHBOARD_BTN_RECENT_LOGS]: { label: 'Recent Log', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Open Specific Note' },
+    [UI_REGISTRY.DASHBOARD_BTN_VAULT_TOGGLE]: { label: 'Vault Toggle', event: 'CLICK', fn: FN_REGISTRY.TOGGLE_VAULT_LOCK, desc: 'Lock/Unlock Vault' },
+
+    // CHAT
+    [UI_REGISTRY.CHAT_BTN_MODEL_PICKER]: { label: 'Model Picker', event: 'CLICK', fn: FN_REGISTRY.CHAT_SELECT_MODEL, desc: 'Open Model Selector' },
+    [UI_REGISTRY.CHAT_BTN_HISTORY]: { label: 'History', event: 'CLICK', fn: FN_REGISTRY.CHAT_LOAD_HISTORY, desc: 'Open Chat History' },
+    [UI_REGISTRY.CHAT_BTN_LIVE_TOGGLE]: { label: 'Live Link', event: 'CLICK', fn: FN_REGISTRY.CHAT_TOGGLE_LIVE, desc: 'Toggle Voice Mode' },
+    [UI_REGISTRY.CHAT_BTN_SCROLL_DOWN]: { label: 'Scroll Down', event: 'CLICK', fn: FN_REGISTRY.CHAT_LOAD_HISTORY, desc: 'Scroll to bottom' },
+    [UI_REGISTRY.CHAT_INPUT_SEND]: { label: 'Send Msg', event: 'CLICK', fn: FN_REGISTRY.CHAT_SEND_MESSAGE, desc: 'Send Text Message' },
+    [UI_REGISTRY.CHAT_INPUT_ATTACH]: { label: 'Attach', event: 'CLICK', fn: FN_REGISTRY.CHAT_SEND_MESSAGE, desc: 'Attach Image' },
+    [UI_REGISTRY.CHAT_INPUT_MIC]: { label: 'Mic Input', event: 'CLICK', fn: FN_REGISTRY.CHAT_SEND_MESSAGE, desc: 'Dictate Message' },
+    [UI_REGISTRY.CHAT_INPUT_NEW]: { label: 'New Chat', event: 'CLICK', fn: FN_REGISTRY.CHAT_NEW_SESSION, desc: 'Start New Session' },
+    [UI_REGISTRY.CHAT_SUGGESTION_CARD]: { label: 'Suggestion', event: 'CLICK', fn: FN_REGISTRY.CHAT_SEND_MESSAGE, desc: 'Use Suggestion' },
+
+    // NOTES
+    [UI_REGISTRY.NOTES_BTN_CREATE]: { label: 'Create Note', event: 'CLICK', fn: FN_REGISTRY.NOTE_CREATE, desc: 'Create New Note' },
+    [UI_REGISTRY.NOTES_INPUT_SEARCH]: { label: 'Search Notes', event: 'TYPE', fn: FN_REGISTRY.NOTE_SEARCH, desc: 'Filter Notes' },
+    [UI_REGISTRY.NOTES_BTN_FILTER_ARCHIVE]: { label: 'Filter Archive', event: 'CLICK', fn: FN_REGISTRY.NOTE_SEARCH, desc: 'Toggle Archive View' },
+    [UI_REGISTRY.NOTES_BTN_BATCH_MODE]: { label: 'Batch Mode', event: 'CLICK', fn: FN_REGISTRY.NOTE_BATCH_ACTION, desc: 'Toggle Batch Selection' },
+    [UI_REGISTRY.NOTES_CARD_ITEM]: { label: 'Open Note', event: 'CLICK', fn: FN_REGISTRY.NOTE_UPDATE, desc: 'Open Note Editor' },
+    [UI_REGISTRY.NOTES_BTN_DELETE_ITEM]: { label: 'Delete Note', event: 'CLICK', fn: FN_REGISTRY.NOTE_DELETE, desc: 'Delete Single Note' },
+
+    // TOOLS
+    [UI_REGISTRY.TOOLS_BTN_TAB_GEN]: { label: 'Tab Gen', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Open Generative Studio' },
+    [UI_REGISTRY.TOOLS_BTN_TAB_VIS]: { label: 'Tab Vis', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Open Neural Vision' },
+    [UI_REGISTRY.TOOLS_GEN_BTN_IMAGE]: { label: 'Gen Image', event: 'CLICK', fn: FN_REGISTRY.TOOL_GENERATE_IMAGE, desc: 'Generate Image' },
+    [UI_REGISTRY.TOOLS_GEN_BTN_VIDEO]: { label: 'Gen Video', event: 'CLICK', fn: FN_REGISTRY.TOOL_GENERATE_VIDEO, desc: 'Generate Video' },
+    [UI_REGISTRY.TOOLS_VIS_BTN_UPLOAD]: { label: 'Vis Upload', event: 'CLICK', fn: FN_REGISTRY.TOOL_ANALYZE_IMAGE, desc: 'Upload for Analysis' },
+    [UI_REGISTRY.TOOLS_VIS_BTN_CAMERA]: { label: 'Vis Camera', event: 'CLICK', fn: FN_REGISTRY.TOOL_CAMERA_CAPTURE, desc: 'Capture for Analysis' },
+    [UI_REGISTRY.TOOLS_VIS_BTN_EDIT]: { label: 'Vis Edit', event: 'CLICK', fn: FN_REGISTRY.TOOL_GENERATE_IMAGE, desc: 'Edit Image' },
+
+    // MECHANIC
+    [UI_REGISTRY.MECH_BTN_SCAN]: { label: 'Scan', event: 'CLICK', fn: FN_REGISTRY.MECH_RUN_DIAGNOSIS, desc: 'Run Diagnostics' },
+    [UI_REGISTRY.MECH_BTN_REFRESH_KEYS]: { label: 'Refresh Keys', event: 'CLICK', fn: FN_REGISTRY.MECH_EXECUTE_FIX, desc: 'Rotate API Keys' },
+    [UI_REGISTRY.MECH_BTN_OPTIMIZE]: { label: 'Optimize', event: 'CLICK', fn: FN_REGISTRY.MECH_EXECUTE_FIX, desc: 'Optimize Memory' },
+    [UI_REGISTRY.MECH_BTN_CLEAR_LOGS]: { label: 'Clear Logs', event: 'CLICK', fn: FN_REGISTRY.MECH_EXECUTE_FIX, desc: 'Clear System Logs' },
+    [UI_REGISTRY.MECH_BTN_HARD_RESET]: { label: 'Hard Reset', event: 'CLICK', fn: FN_REGISTRY.MECH_EXECUTE_FIX, desc: 'Force Reboot' },
+    [UI_REGISTRY.MECH_INPUT_CLI]: { label: 'CLI', event: 'SUBMIT', fn: FN_REGISTRY.MECH_CLI_EXEC, desc: 'Execute Command' },
+
+    // SETTINGS
+    [UI_REGISTRY.SETTINGS_BTN_LANG_ID]: { label: 'Lang ID', event: 'CLICK', fn: FN_REGISTRY.SET_LANGUAGE, desc: 'Set Indonesian' },
+    [UI_REGISTRY.SETTINGS_BTN_LANG_EN]: { label: 'Lang EN', event: 'CLICK', fn: FN_REGISTRY.SET_LANGUAGE, desc: 'Set English' },
+    [UI_REGISTRY.SETTINGS_BTN_LANG_BN]: { label: 'Lang BN', event: 'CLICK', fn: FN_REGISTRY.SET_LANGUAGE, desc: 'Set Brunei' },
+    [UI_REGISTRY.SETTINGS_BTN_THEME_SYSTEM]: { label: 'Theme Sys', event: 'CLICK', fn: FN_REGISTRY.SET_THEME_MODE, desc: 'Set System Theme' },
+    [UI_REGISTRY.SETTINGS_BTN_THEME_LIGHT]: { label: 'Theme Light', event: 'CLICK', fn: FN_REGISTRY.SET_THEME_MODE, desc: 'Set Light Theme' },
+    [UI_REGISTRY.SETTINGS_BTN_THEME_DARK]: { label: 'Theme Dark', event: 'CLICK', fn: FN_REGISTRY.SET_THEME_MODE, desc: 'Set Dark Theme' },
+    [UI_REGISTRY.SETTINGS_BTN_SAVE]: { label: 'Save Config', event: 'CLICK', fn: FN_REGISTRY.SAVE_CONFIG, desc: 'Save Settings' },
+    [UI_REGISTRY.SETTINGS_BTN_RESET]: { label: 'Reset Config', event: 'CLICK', fn: FN_REGISTRY.RESET_SYSTEM, desc: 'Factory Reset' },
+    [UI_REGISTRY.SETTINGS_BTN_BACKUP]: { label: 'Backup', event: 'CLICK', fn: FN_REGISTRY.BACKUP_DATA, desc: 'Download Backup' },
+    [UI_REGISTRY.SETTINGS_BTN_RESTORE]: { label: 'Restore', event: 'CLICK', fn: FN_REGISTRY.RESTORE_DATA, desc: 'Upload Backup' },
+
+    // DEBUG
+    [UI_REGISTRY.DEBUG_TOGGLE]: { label: 'Debug Toggle', event: 'TOGGLE', fn: FN_REGISTRY.TRIGGER_DEBUG, desc: 'Toggle Debug Console' }
+};

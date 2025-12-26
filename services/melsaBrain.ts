@@ -8,9 +8,13 @@ export const HANISAH_BRAIN = {
     const translation = TRANSLATIONS[currentLang];
     const user = getUserPersona();
     
-    let basePrompt = persona === 'hanisah' 
-        ? translation.prompts.hanisah
-        : translation.prompts.stoic;
+    // AUDIT FIX: PRIORITY MUST BE LOCAL STORAGE -> THEN FALLBACK
+    // This allows the Settings "Save" button to actually affect the kernel.
+    const localOverride = localStorage.getItem(`${persona}_system_prompt`);
+    
+    let basePrompt = localOverride 
+        ? localOverride
+        : (persona === 'hanisah' ? translation.prompts.hanisah : translation.prompts.stoic);
 
     const identityProtocol = persona === 'hanisah' 
       ? `[IDENTITY: FEMALE, PLAYFUL, GENIUS HACKER] [LANGUAGE_MODE: ${translation.meta.label}]`

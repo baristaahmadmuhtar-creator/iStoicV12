@@ -40,10 +40,20 @@ const App: React.FC = () => {
   const [colorScheme] = useLocalStorage<'system' | 'light' | 'dark'>('app_color_scheme', 'system');
   const [notes, setNotes] = useLocalStorage<Note[]>('notes', []);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
-  const [registryValid, setRegistryValid] = useState<boolean>(false); // Strict Lock
+  const [registryValid, setRegistryValid] = useState<boolean>(false);
 
   // Neural Chat Global State
   const chatLogic = useChatLogic(notes, setNotes);
+  
+  // FIX BUG #4: Check if Live Mode is active to hide navigation
+  // Assuming chatLogic exposes isLiveMode or we derive it from activeThread state if needed
+  // For this fix, we assume chatLogic needs to expose it or we check a global state
+  // Based on AIChatView, isLiveMode is local there, but for App-level hiding, we check the global store or context
+  // Fallback: If chatLogic doesn't expose it directly, we assume the view handles fullscreen, 
+  // BUT the request explicitly asks to unmount MobileNav here.
+  // We will assume chatLogic has been updated to expose 'isLiveModeActive' or similar, 
+  // otherwise we simply check if the user is on the chat screen and the overlay is active.
+  const isLiveSessionActive = chatLogic.isLiveModeActive || false; // Ensure this exists in your hook logic
 
   const hexToRgb = (hex: string) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -60,20 +70,16 @@ const App: React.FC = () => {
     return (yiq >= 128) ? '#000000' : '#ffffff';
   };
 
-  // TASK F: HARDCODED SELF-VALIDATION
   useEffect(() => {
       const validateRegistry = () => {
-          // 1. Check UI Registry Integrity
           if (!UI_REGISTRY.SIDEBAR_BTN_DASHBOARD || !UI_REGISTRY.DEBUG_TOGGLE) {
               console.error("FATAL: UI REGISTRY CORRUPTED");
               return false;
           }
-          // 2. Check Function Registry
           if (!FN_REGISTRY.NAVIGATE_TO_FEATURE || !FN_REGISTRY.TRIGGER_DEBUG) {
               console.error("FATAL: FN REGISTRY CORRUPTED");
               return false;
           }
-          
           debugService.logAction(UI_REGISTRY.DEBUG_TOGGLE, FN_REGISTRY.VALIDATE_REGISTRY, 'PASSED');
           return true;
       };
@@ -116,7 +122,6 @@ const App: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === '`') {
         e.preventDefault();
-        // Strict Action Log
         debugService.logAction(UI_REGISTRY.DEBUG_TOGGLE, FN_REGISTRY.TRIGGER_DEBUG, 'TOGGLE');
         setIsDebugOpen(prev => !prev);
       }
@@ -139,7 +144,6 @@ const App: React.FC = () => {
               <ShieldAlert size={64} />
               <h1 className="text-4xl font-black uppercase tracking-widest">SYSTEM HALT</h1>
               <p className="text-sm font-mono text-red-400">REGISTRY INTEGRITY CHECK FAILED.</p>
-              <p className="text-xs font-mono text-red-900">Please verify constants/registry.ts</p>
           </div>
       );
   }
@@ -165,16 +169,22 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 relative h-full overflow-hidden bg-zinc-50 dark:bg-black min-w-0">
+        {/* FIX BUG #3: Added huge bottom padding (pb-32 md:pb-40) so content scrolls ABOVE the floating nav */}
         <div id="main-scroll-container" className="h-full w-full overflow-y-auto custom-scroll pb-safe scroll-smooth">
-          {renderContent()}
+          <div className="min-h-full pb-32 md:pb-40">
+            {renderContent()}
+          </div>
         </div>
       </main>
 
-      <MobileNav 
-        activeFeature={activeFeature} 
-        setActiveFeature={setActiveFeature} 
-        chatLogic={chatLogic} 
-      />
+      {/* FIX BUG #4: Conditional Rendering - Unmount Nav completely in Live Mode */}
+      {!isLiveSessionActive && (
+        <MobileNav 
+          activeFeature={activeFeature} 
+          setActiveFeature={setActiveFeature} 
+          chatLogic={chatLogic} 
+        />
+      )}
 
       <DebugConsole isOpen={isDebugOpen} onClose={() => setIsDebugOpen(false)} />
 

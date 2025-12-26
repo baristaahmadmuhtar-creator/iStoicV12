@@ -103,6 +103,8 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
           ${isHovered ? 'w-[280px] shadow-[20px_0_60px_rgba(0,0,0,0.1)] dark:shadow-[20px_0_60px_rgba(0,0,0,0.5)]' : 'w-[80px]'}
           ${isForcedStealth ? 'opacity-0 pointer-events-none -translate-x-full' : 'opacity-100 translate-x-0'}
         `}
+        role="navigation"
+        aria-label="Main Navigation"
       >
         <div className="flex flex-col h-full w-full overflow-hidden py-8">
           
@@ -110,6 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
           <div className={`px-5 mb-10 transition-all duration-500 ${isHovered ? 'items-start' : 'items-center'} flex flex-col`}>
               <button 
                 onClick={handleNavLogo}
+                aria-label="Go to Dashboard"
                 className={`
                   relative group outline-none transition-all duration-500
                   ${isHovered ? 'w-full flex items-center gap-4' : 'w-12 h-12 flex items-center justify-center'}
@@ -138,7 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
           </div>
 
           {/* NAVIGATION LINKS */}
-          <nav className="flex-1 flex flex-col gap-3 px-4 w-full">
+          <nav className="flex-1 flex flex-col gap-3 px-4 w-full" aria-label="Feature Links">
             {FEATURES.map((feature) => {
               const isActive = activeFeature === feature.id;
               const label = getLabel(feature.id);
@@ -154,6 +157,8 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
                 <button
                   key={feature.id}
                   onClick={handleClick}
+                  aria-label={label}
+                  aria-current={isActive ? 'page' : undefined}
                   className={`
                     relative flex items-center rounded-xl transition-all duration-300 group overflow-hidden
                     ${isHovered ? 'w-full px-4 py-3.5 gap-4' : 'w-12 h-12 justify-center mx-auto'}
@@ -183,6 +188,7 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
              {isHovered && (
                  <button 
                     onClick={handleNavSystem}
+                    aria-label={`System Integrity: ${healthScore}%`}
                     className="p-3 bg-zinc-100 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 animate-fade-in group hover:border-accent/30 transition-colors w-full text-left"
                  >
                     <div className="flex justify-between items-center text-[8px] font-black text-neutral-500 uppercase tracking-widest mb-2 group-hover:text-black dark:group-hover:text-white transition-colors">
@@ -199,6 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
 
              <button 
                 onClick={handleNavSettings}
+                aria-label="Open Settings"
                 className={`
                   flex items-center rounded-xl transition-all duration-300 group
                   ${isHovered ? 'w-full px-4 py-3 gap-4 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 border border-black/5 dark:border-white/5' : 'w-12 h-12 justify-center mx-auto hover:bg-black/5 dark:hover:bg-white/5'}

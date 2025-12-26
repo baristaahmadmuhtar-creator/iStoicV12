@@ -310,17 +310,18 @@ export const SystemHealthView: React.FC = () => {
                             <div className="w-2 h-2 bg-[var(--accent-color)] rounded-full animate-pulse shadow-[0_0_10px_var(--accent-glow)]"></div>
                             <span className="tech-mono text-[9px] font-black uppercase tracking-[0.4em] text-neutral-500">SYSTEM_INTEGRITY_MODULE_v13.5</span>
                         </div>
-                        <h2 className="text-[12vw] md:text-[6rem] xl:text-[8rem] heading-heavy text-black dark:text-white leading-[0.85] tracking-tighter uppercase">
+                        {/* Clamped typography for System Mechanic */}
+                        <h2 className="text-[12vw] md:text-[5rem] xl:text-[7rem] heading-heavy text-black dark:text-white leading-[0.85] tracking-tighter uppercase break-words">
                             SYSTEM <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-blue-500 animate-gradient-text">MECHANIC</span>
                         </h2>
                     </div>
                     
-                    <div className="flex bg-zinc-100 dark:bg-white/5 p-1 rounded-xl border border-black/5 dark:border-white/5">
+                    <div className="flex bg-zinc-100 dark:bg-white/5 p-1 rounded-xl border border-black/5 dark:border-white/5 overflow-x-auto max-w-full">
                         {['OVERVIEW', 'TERMINAL', 'MEMORY'].map((tab) => (
                             <button 
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)}
-                                className={`px-6 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                                className={`px-4 md:px-6 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
                                     activeTab === tab 
                                     ? 'bg-white dark:bg-[#0a0a0b] text-[var(--accent-color)] shadow-sm' 
                                     : 'text-neutral-500 hover:text-black dark:hover:text-white'

@@ -2,6 +2,8 @@
 import React, { useRef, useEffect, useState, memo } from 'react';
 import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, Paperclip, X, Image as ImageIcon, Flame, Brain, CornerDownLeft, Clipboard, ShieldCheck, FileText } from 'lucide-react';
 import { TRANSLATIONS, getLang } from '../../../services/i18n';
+import { debugService } from '../../../services/debugService';
+import { UI_REGISTRY, FN_REGISTRY } from '../../../constants/registry';
 
 interface ChatInputProps {
   input: string;
@@ -73,6 +75,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
 
   const toggleDictation = (e: React.MouseEvent) => {
     e.stopPropagation();
+    debugService.logAction(UI_REGISTRY.CHAT_INPUT_MIC, FN_REGISTRY.CHAT_SEND_MESSAGE, isDictating ? 'STOP' : 'START');
     if (isDictating) {
       recognitionRef.current?.stop();
       setIsDictating(false);
@@ -155,6 +158,16 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
       e.target.value = '';
   };
 
+  const handleAttachClick = () => {
+      debugService.logAction(UI_REGISTRY.CHAT_INPUT_ATTACH, FN_REGISTRY.CHAT_SEND_MESSAGE, 'OPEN_DIALOG');
+      fileInputRef.current?.click();
+  };
+
+  const handleNewChatClick = () => {
+      debugService.logAction(UI_REGISTRY.CHAT_INPUT_NEW, FN_REGISTRY.CHAT_NEW_SESSION, 'CLICK');
+      onNewChat();
+  };
+
   const handleSubmit = () => {
       if (isDictating) {
           recognitionRef.current?.stop();
@@ -165,6 +178,8 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
           alert(`Character limit exceeded (${MAX_CHARS}). Please shorten your message.`);
           return;
       }
+
+      debugService.logAction(UI_REGISTRY.CHAT_INPUT_SEND, FN_REGISTRY.CHAT_SEND_MESSAGE, 'SUBMIT');
 
       const attachmentPayload = attachment ? { data: attachment.base64, mimeType: attachment.file.type } : undefined;
       onSubmit(undefined, attachmentPayload);
@@ -233,6 +248,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                     <img src={attachment.preview} alt="Preview" className="h-16 w-auto rounded-xl border border-black/10 dark:border-white/10 shadow-sm object-cover" />
                     <button 
                         onClick={() => setAttachment(null)}
+                        aria-label="Remove Attachment"
                         className="absolute -top-2 -right-2 bg-black text-white rounded-full p-1 shadow-md hover:bg-red-500 transition-colors border border-white/20"
                     >
                         <X size={10} />
@@ -264,7 +280,8 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
             {/* Left Tools */}
             <div className="flex gap-1 items-center">
                 <button 
-                    onClick={onNewChat}
+                    onClick={handleNewChatClick}
+                    aria-label="New Chat"
                     className="w-8 h-8 flex items-center justify-center rounded-xl text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95"
                     title={t.newChat}
                 >
@@ -272,7 +289,8 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 </button>
                 
                 <button 
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={handleAttachClick}
+                    aria-label="Attach Image"
                     className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${attachment ? 'text-accent bg-accent/10' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
                     title="Attach Image"
                 >
@@ -285,6 +303,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 <button 
                     onClick={onToggleVaultSync}
                     disabled={!isVaultEnabled}
+                    aria-label={isVaultEnabled ? (isVaultSynced ? "Vault Sync Active" : "Vault Sync Inactive") : "Vault Disabled"}
                     className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${!isVaultEnabled ? 'opacity-30' : isVaultSynced ? 'text-accent bg-accent/5' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
                     title={isVaultEnabled ? "Vault Sync" : "Vault Disabled"}
                 >
@@ -293,6 +312,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
 
                 <button 
                     onClick={onTogglePersona}
+                    aria-label={`Switch to ${personaMode === 'hanisah' ? 'Stoic' : 'Hanisah'} Persona`}
                     className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${personaMode === 'hanisah' ? 'text-orange-500 bg-orange-500/5' : 'text-cyan-500 bg-cyan-500/5'}`}
                     title="Switch Persona"
                 >
@@ -310,6 +330,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 {/* Dictation */}
                 <button 
                     onClick={toggleDictation}
+                    aria-label={isDictating ? "Stop Dictation" : "Start Dictation"}
                     className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${isDictating ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
                     title="Real-time Dictation"
                 >
@@ -320,6 +341,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 <button 
                     onClick={() => handleSubmit()}
                     disabled={(!input.trim() && !attachment) || isLoading || input.length > MAX_CHARS}
+                    aria-label="Send Message"
                     className={`
                         w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300
                         ${(input.trim() || attachment) && !isLoading && input.length <= MAX_CHARS

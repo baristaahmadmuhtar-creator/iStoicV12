@@ -46,11 +46,14 @@ export const NoteBatchActions: React.FC<NoteBatchActionsProps> = ({
 
     return (
         <div className={`
-            fixed z-[1600] transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1) left-1/2 -translate-x-1/2
+            fixed transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1) left-1/2 -translate-x-1/2
+            /* FIX BUG #1: Higher Z-Index (200) to override Mobile Nav (100) */
+            z-[200]
             bottom-24 md:bottom-10 w-auto min-w-[320px] max-w-[95vw]
             ${isVisible ? 'translate-y-0 opacity-100 scale-100 pointer-events-auto' : 'translate-y-[150%] opacity-0 scale-90 pointer-events-none'}
         `}>
-            <div className="bg-white/95 dark:bg-[#0a0a0b]/95 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.3)] rounded-[32px] p-2 pr-3 flex items-center gap-3 ring-1 ring-white/10">
+            {/* Added solid background/border for better visibility over content */}
+            <div className="bg-white/95 dark:bg-[#0a0a0b]/95 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.5)] rounded-[32px] p-2 pr-3 flex items-center gap-3 ring-1 ring-white/10 pointer-events-auto">
                 
                 {/* Select Toggle */}
                 <button 

@@ -21,6 +21,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isLiveModeActive, setIsLiveModeActive] = useState(false);
 
     // Memoize active thread to prevent unnecessary re-renders
     const activeThread = useMemo(() => 
@@ -235,7 +236,8 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         isVaultSynced: isVaultUnlocked, 
         setIsVaultSynced: (val: boolean) => val ? unlockVault() : lockVault(), // Bridge to Context
         isVaultConfigEnabled: vaultEnabled,
-        isAutoSpeak, setIsAutoSpeak, 
+        isAutoSpeak, setIsAutoSpeak,
+        isLiveModeActive, setIsLiveModeActive, 
         input, setInput,
         isLoading,
         activeModel,

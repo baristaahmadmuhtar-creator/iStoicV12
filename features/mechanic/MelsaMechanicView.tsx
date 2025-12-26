@@ -4,9 +4,10 @@ import {
     Activity, Terminal, Cpu, Zap, Wifi, HardDrive, 
     RefreshCw, ShieldCheck, Trash2, 
     ChevronRight, Send, Command, Network, Server,
-    AlertTriangle, CheckCircle2, Play, FileText, BrainCircuit
+    AlertTriangle, CheckCircle2, Play, FileText, BrainCircuit,
+    LayoutGrid, MousePointer2, ToggleLeft, ToggleRight, Fingerprint, Info
 } from 'lucide-react';
-import { debugService } from '../../services/debugService';
+import { debugService, type UIStatus } from '../../services/debugService';
 import { KEY_MANAGER, type ProviderStatus } from '../../services/geminiService';
 import { HanisahKernel } from '../../services/melsaKernel';
 import { HANISAH_BRAIN } from '../../services/melsaBrain';
@@ -59,6 +60,45 @@ const MetricRing: React.FC<{
     );
 };
 
+const UIElementNode: React.FC<{ id: string, status: UIStatus, errors: number, usage: number, onToggle: () => void }> = ({ id, status, errors, usage, onToggle }) => {
+    const getStatusColor = () => {
+        if (status === 'DISABLED') return 'bg-red-500/10 border-red-500 text-red-500';
+        if (status === 'UNSTABLE') return 'bg-yellow-500/10 border-yellow-500 text-yellow-500 animate-pulse';
+        return 'bg-emerald-500/10 border-emerald-500 text-emerald-500';
+    };
+
+    const cleanName = id.replace(/UI_|BTN_/g, '').replace(/_/g, ' ');
+
+    return (
+        <div 
+            onClick={onToggle}
+            className={`
+                relative p-3 rounded-xl border transition-all cursor-pointer group select-none
+                ${getStatusColor()} hover:scale-[1.02] active:scale-95
+            `}
+        >
+            <div className="flex justify-between items-start mb-2">
+                <div className="p-1.5 rounded-lg bg-black/20">
+                    {status === 'DISABLED' ? <ToggleLeft size={14} /> : <ToggleRight size={14} />}
+                </div>
+                <div className="text-[9px] font-mono opacity-70">
+                    ERR:{errors} | USE:{usage}
+                </div>
+            </div>
+            <div className="text-[10px] font-black uppercase tracking-wider truncate" title={id}>
+                {cleanName}
+            </div>
+            <div className="text-[8px] font-mono mt-1 opacity-60">
+                {status}
+            </div>
+            
+            {/* Holographic Overlay */}
+            <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+        </div>
+    );
+};
+
+// ... (DiagnosticReport component preserved from previous version, no changes needed there) ...
 const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => void }> = ({ text, onExecute }) => {
     const integrityMatch = text.match(/SYSTEM INTEGRITY:\s*(\d+)%/i);
     const score = integrityMatch ? parseInt(integrityMatch[1]) : 0;
@@ -66,7 +106,6 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
     const parts = text.split('###');
     const getSection = (titlePart: string) => parts.find(s => s.toUpperCase().includes(titlePart)) || '';
 
-    // Extract Cognitive Insight (The natural language mission brief)
     const insightSection = getSection('COGNITIVE INSIGHT');
     const insightText = insightSection ? insightSection.replace(/COGNITIVE INSIGHT(\s*\**\s*)?/i, '').trim() : '';
 
@@ -78,10 +117,7 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
 
     return (
         <div className="bg-zinc-900/50 rounded-[32px] border border-white/10 p-6 md:p-8 my-4 space-y-6 font-sans animate-fade-in w-full shadow-2xl relative overflow-hidden ring-1 ring-accent/20">
-            {/* Background Texture */}
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none"></div>
-
-            {/* Header: Score */}
             <div className="flex items-center justify-between border-b border-white/10 pb-6 relative z-10">
                 <div>
                     <h4 className="text-xs font-black uppercase tracking-[0.3em] text-white flex items-center gap-2">
@@ -96,8 +132,6 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
                     </div>
                 </div>
             </div>
-
-            {/* Natural Language Summary Card */}
             {insightText && (
                 <div className="bg-white/[0.03] rounded-2xl p-5 border border-white/5 relative group transition-all hover:bg-white/[0.05]">
                     <div className="flex items-center gap-3 mb-4 text-accent/70 text-[9px] font-black uppercase tracking-[0.2em]">
@@ -108,10 +142,7 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
                     </div>
                 </div>
             )}
-
-            {/* Grid for Anomalies and Actions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Anomalies */}
                 <div className={`${anomalyList.length > 0 && !anomalyList[0].toLowerCase().includes('none') ? 'bg-red-500/[0.03] border-red-500/20' : 'bg-emerald-500/[0.03] border-emerald-500/20'} rounded-2xl p-5 border flex flex-col`}>
                     <h5 className={`text-[9px] font-black uppercase tracking-wider mb-4 flex items-center gap-2 ${anomalyList.length > 0 && !anomalyList[0].toLowerCase().includes('none') ? 'text-red-400' : 'text-emerald-400'}`}>
                         <AlertTriangle size={12} /> {anomalyList.length > 0 && !anomalyList[0].toLowerCase().includes('none') ? 'ANOMALIES_DETECTED' : 'SYSTEM_STABLE'}
@@ -131,8 +162,6 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
                         </div>
                     )}
                 </div>
-
-                {/* Actions */}
                 <div className="bg-white/[0.03] rounded-2xl p-5 border border-white/5">
                     <h5 className="text-[9px] font-black text-neutral-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                         <Zap size={12} className="text-accent" /> PROTOCOL_REVIEWS
@@ -160,24 +189,15 @@ const DiagnosticReport: React.FC<{ text: string, onExecute: (cmd: string) => voi
                     </div>
                 </div>
             </div>
-            
-            <div className="pt-4 border-t border-white/5 flex justify-between items-center opacity-30">
-                <span className="text-[7px] font-mono text-neutral-500 uppercase tracking-[0.4em]">Verified_by_Hanisah_Kernel</span>
-                <div className="flex gap-1">
-                    <div className="w-1 h-1 bg-white rounded-full"></div>
-                    <div className="w-1 h-1 bg-white rounded-full"></div>
-                    <div className="w-1 h-1 bg-white rounded-full"></div>
-                </div>
-            </div>
         </div>
     );
 };
 
-// --- MAIN VIEW ---
-
 export const HanisahMechanicView: React.FC = () => {
+    const [activeTab, setActiveTab] = useState<'CONSOLE' | 'UI_MATRIX'>('CONSOLE');
     const [health, setHealth] = useState<any>({ avgLatency: 0, memoryMb: 0, errorCount: 0 });
     const [providers, setProviders] = useState<ProviderStatus[]>([]);
+    const [uiMatrix, setUiMatrix] = useState<Record<string, any>>(debugService.getUIMatrix());
     
     const [messages, setMessages] = useState<Array<{role: 'user'|'mechanic', text: string}>>([
         { role: 'mechanic', text: "Hanisah Mechanic Online. Diagnostic systems active. Ready for input." }
@@ -194,12 +214,19 @@ export const HanisahMechanicView: React.FC = () => {
         };
         updateVitals();
         const interval = setInterval(updateVitals, 2000);
-        return () => clearInterval(interval);
+        const unsubscribeUI = debugService.subscribeUI((state) => setUiMatrix(state));
+
+        return () => {
+            clearInterval(interval);
+            unsubscribeUI();
+        };
     }, []);
 
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+        if (activeTab === 'CONSOLE') {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [messages, activeTab]);
 
     // Auto-resize textarea
     useEffect(() => {
@@ -214,39 +241,32 @@ export const HanisahMechanicView: React.FC = () => {
                      action === 'OPTIMIZE_MEMORY' ? UI_REGISTRY.MECH_BTN_OPTIMIZE :
                      action === 'CLEAR_LOGS' ? UI_REGISTRY.MECH_BTN_CLEAR_LOGS : UI_REGISTRY.MECH_BTN_HARD_RESET;
         
-        debugService.logAction(uiId, FN_REGISTRY.MECH_EXECUTE_FIX, action);
+        // This logAction call might be blocked if we disable our own buttons! 
+        // But for Mechanic self-healing, we might allow it. 
+        // For now, let's treat Mechanic controls as "Root" and bypass standard check? 
+        // No, let's test the system. If user disables "Refresh Keys" button in Matrix, it should fail here.
+        if (!debugService.logAction(uiId, FN_REGISTRY.MECH_EXECUTE_FIX, action)) return;
+
         debugService.log('INFO', 'MECHANIC', 'FIX_EXEC', `Initiating protocol: ${action}`);
         
-        // Hard Reset Exception
         if (action === 'HARD_RESET') {
             if(confirm("PERINGATAN: System Reboot akan merefresh halaman.")) window.location.reload();
             return;
         }
 
-        // Artificial delay for UX processing feel
         await new Promise(r => setTimeout(r, 800));
-
         const result = await executeMechanicTool({ args: { action } });
         debugService.log('INFO', 'MECHANIC', 'FIX_RESULT', result);
         
-        // Immediate Local State Updates
-        if (action === 'REFRESH_KEYS') {
-            setProviders(KEY_MANAGER.getAllProviderStatuses());
-        } else if (action === 'CLEAR_LOGS') {
+        if (action === 'REFRESH_KEYS') setProviders(KEY_MANAGER.getAllProviderStatuses());
+        else if (action === 'CLEAR_LOGS') {
             setMessages(prev => [{ role: 'mechanic', text: "Logs cleared. Buffer reset." }]);
             debugService.clear(); 
-        } else if (action === 'OPTIMIZE_MEMORY') {
-            setHealth(debugService.getSystemHealth());
-        }
-    };
-
-    const handleHydraRefresh = async () => {
-        await executeRepair('REFRESH_KEYS');
+        } else if (action === 'OPTIMIZE_MEMORY') setHealth(debugService.getSystemHealth());
     };
 
     const runHanisahDiagnosis = async () => {
-        debugService.logAction(UI_REGISTRY.MECH_BTN_SCAN, FN_REGISTRY.MECH_RUN_DIAGNOSIS, 'START');
-        // Add user message to log flow
+        if (!debugService.logAction(UI_REGISTRY.MECH_BTN_SCAN, FN_REGISTRY.MECH_RUN_DIAGNOSIS, 'START')) return;
         setMessages(prev => [...prev, { role: 'user', text: "Run full diagnostic scan." }]);
         setIsProcessing(true);
         
@@ -271,7 +291,8 @@ export const HanisahMechanicView: React.FC = () => {
         const cmd = cmdOverride || input.trim();
         if (!cmd || isProcessing) return;
 
-        debugService.logAction(UI_REGISTRY.MECH_INPUT_CLI, FN_REGISTRY.MECH_CLI_EXEC, cmd);
+        if (!debugService.logAction(UI_REGISTRY.MECH_INPUT_CLI, FN_REGISTRY.MECH_CLI_EXEC, cmd)) return;
+
         setMessages(prev => [...prev, { role: 'user', text: cmd }]);
         setInput('');
         setIsProcessing(true);
@@ -336,6 +357,18 @@ export const HanisahMechanicView: React.FC = () => {
         }
     };
 
+    const toggleUIElement = (id: string) => {
+        const current = uiMatrix[id];
+        const newStatus = current.status === 'DISABLED' ? 'ACTIVE' : 'DISABLED';
+        debugService.setUIStatus(id, newStatus);
+    };
+
+    const runGhostScan = () => {
+        const count = debugService.runGhostScan();
+        setMessages(prev => [...prev, { role: 'mechanic', text: `**UI_SCAN_COMPLETE**: ${count} anomalies flagged in UI Matrix.` }]);
+        setActiveTab('UI_MATRIX');
+    };
+
     return (
         <div className="h-full flex flex-col p-4 md:p-12 lg:p-16 pb-32 overflow-hidden font-sans animate-fade-in bg-zinc-50 dark:bg-[#050505] text-black dark:text-white">
             {/* Header */}
@@ -349,14 +382,16 @@ export const HanisahMechanicView: React.FC = () => {
                         <p className="text-[9px] tech-mono font-bold text-neutral-500 uppercase tracking-[0.3em]">NEURAL_DIAGNOSTICS_MATRIX</p>
                     </div>
                 </div>
+                
+                {/* Header Controls */}
                 <div className="flex gap-3">
-                    <div className="px-4 py-2 bg-white dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 flex items-center gap-3 shadow-sm transition-all hover:border-accent/30">
-                        <Wifi size={14} className={health.avgLatency > 1000 ? "text-red-500" : "text-emerald-500"} />
-                        <span className="text-[10px] font-black tech-mono">{health.avgLatency}ms</span>
-                    </div>
-                    <div className="px-4 py-2 bg-white dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 flex items-center gap-3 shadow-sm">
-                        <ShieldCheck size={14} className="text-accent" />
-                        <span className="text-[10px] font-black tech-mono uppercase">Link_Secure</span>
+                    <div className="flex bg-white dark:bg-white/5 p-1 rounded-xl border border-black/5 dark:border-white/5">
+                        <button onClick={() => setActiveTab('CONSOLE')} className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === 'CONSOLE' ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm' : 'text-neutral-500 hover:text-black dark:hover:text-white'}`}>
+                            CONSOLE
+                        </button>
+                        <button onClick={() => setActiveTab('UI_MATRIX')} className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === 'UI_MATRIX' ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm' : 'text-neutral-500 hover:text-black dark:hover:text-white'}`}>
+                            UI_MATRIX
+                        </button>
                     </div>
                 </div>
             </header>
@@ -366,13 +401,11 @@ export const HanisahMechanicView: React.FC = () => {
                 {/* Left: Vitals & Tools */}
                 <div className="w-full lg:w-1/3 flex flex-col gap-6 overflow-y-auto custom-scroll pr-2">
                     
-                    {/* Ring Metrics Grid */}
                     <div className="grid grid-cols-2 gap-3">
                         <MetricRing label="LATENCY" value={health.avgLatency} max={2000} unit="ms" icon={<Network size={14}/>} />
                         <MetricRing label="MEMORY" value={health.memoryMb || 0} max={2000} unit="MB" icon={<HardDrive size={14}/>} />
                     </div>
 
-                    {/* Quick Actions Panel */}
                     <div className="bg-white dark:bg-[#0a0a0b] border border-black/5 dark:border-white/5 rounded-[32px] p-6 shadow-sm">
                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400 mb-5 flex items-center gap-2">
                             <Zap size={12} className="text-accent" /> RAPID_MAINTENANCE
@@ -383,14 +416,9 @@ export const HanisahMechanicView: React.FC = () => {
                                 <span>FULL_SYSTEM_SCAN</span>
                                 <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
-                            <button onClick={() => executeRepair('REFRESH_KEYS')} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
-                                <RefreshCw size={16} className="text-accent group-hover:text-on-accent transition-colors" /> 
-                                <span>ROTATE_UPLINKS</span>
-                                <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </button>
-                            <button onClick={() => executeRepair('OPTIMIZE_MEMORY')} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-accent hover:text-on-accent border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
-                                <Cpu size={16} className="text-accent group-hover:text-on-accent transition-colors" /> 
-                                <span>MEMORY_COMPACT</span>
+                            <button onClick={runGhostScan} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-amber-500 hover:text-white border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
+                                <MousePointer2 size={16} className="text-amber-500 group-hover:text-white transition-colors" /> 
+                                <span>SCAN_GHOST_UI</span>
                                 <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
                             <button onClick={() => executeRepair('CLEAR_LOGS')} disabled={isProcessing} className="p-4 bg-zinc-50 dark:bg-white/5 hover:bg-red-500 hover:text-white border border-black/5 dark:border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-wider text-left transition-all flex items-center gap-3 group">
@@ -401,10 +429,9 @@ export const HanisahMechanicView: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Provider Status List */}
                     <div className="flex-1 bg-white dark:bg-[#0a0a0b] border border-black/5 dark:border-white/5 rounded-[32px] p-6 overflow-hidden flex flex-col shadow-sm">
                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400 mb-4 flex items-center gap-2">
-                            <Server size={12} className="text-emerald-500" /> ACTIVE_COGNITIVE_NODES
+                            <Server size={12} className="text-emerald-500" /> ACTIVE_NODES
                         </h3>
                         <div className="flex-1 overflow-y-auto space-y-2 custom-scroll pr-1">
                             {providers.map(p => (
@@ -425,8 +452,9 @@ export const HanisahMechanicView: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Right: Neural Console */}
+                {/* Right: Console or UI Matrix */}
                 <div className="flex-1 bg-terminal-void border border-black/5 dark:border-white/10 rounded-[32px] flex flex-col overflow-hidden relative shadow-2xl backdrop-blur-xl ring-1 ring-accent/20 terminal-scanlines">
+                    
                     {/* Header Strip */}
                     <div className="h-12 bg-white/5 border-b border-white/5 flex items-center px-5 justify-between shrink-0 relative z-20">
                         <div className="flex gap-2">
@@ -435,79 +463,102 @@ export const HanisahMechanicView: React.FC = () => {
                             <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/50 shadow-[0_0_8px_rgba(34,197,94,0.2)]"></div>
                         </div>
                         <div className="flex items-center gap-3">
-                            <span className="text-[8px] font-mono text-neutral-500 uppercase tracking-widest animate-pulse">Neural_Link: Established</span>
+                            <span className="text-[8px] font-mono text-neutral-500 uppercase tracking-widest animate-pulse">
+                                {activeTab === 'UI_MATRIX' ? 'UI_Governance_Protocol' : 'Neural_Link: Established'}
+                            </span>
                             <span className="text-[8px] font-mono text-neutral-600 uppercase tracking-widest">shell_v13.5</span>
                         </div>
                     </div>
 
-                    {/* Output Stream */}
-                    <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scroll font-mono relative z-20">
-                        {messages.map((m, i) => (
-                            <div key={i} className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
-                                {m.role === 'mechanic' && (
-                                    <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/30 flex items-center justify-center shrink-0 text-accent mt-1">
-                                        <Terminal size={14} />
-                                    </div>
-                                )}
-                                <div className={`max-w-[95%] lg:max-w-[85%] ${m.role === 'mechanic' ? 'w-full' : ''}`}>
-                                    {m.role === 'mechanic' && m.text.includes("SYSTEM INTEGRITY") ? (
-                                        <DiagnosticReport text={m.text} onExecute={handleCommand} />
-                                    ) : (
-                                        <div className={`p-4 rounded-xl text-xs leading-relaxed border ${
-                                            m.role === 'user' 
-                                            ? 'bg-white/10 text-white border-white/10 rounded-tr-none' 
-                                            : 'bg-black/40 text-accent border-accent/20 rounded-tl-none shadow-[0_0_15px_var(--accent-glow)] text-terminal-glow'
-                                        }`}>
-                                            <Markdown>{m.text}</Markdown>
+                    {activeTab === 'CONSOLE' ? (
+                        <>
+                            {/* Output Stream */}
+                            <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scroll font-mono relative z-20">
+                                {messages.map((m, i) => (
+                                    <div key={i} className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
+                                        {m.role === 'mechanic' && (
+                                            <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/30 flex items-center justify-center shrink-0 text-accent mt-1">
+                                                <Terminal size={14} />
+                                            </div>
+                                        )}
+                                        <div className={`max-w-[95%] lg:max-w-[85%] ${m.role === 'mechanic' ? 'w-full' : ''}`}>
+                                            {m.role === 'mechanic' && m.text.includes("SYSTEM INTEGRITY") ? (
+                                                <DiagnosticReport text={m.text} onExecute={handleCommand} />
+                                            ) : (
+                                                <div className={`p-4 rounded-xl text-xs leading-relaxed border ${
+                                                    m.role === 'user' 
+                                                    ? 'bg-white/10 text-white border-white/10 rounded-tr-none' 
+                                                    : 'bg-black/40 text-accent border-accent/20 rounded-tl-none shadow-[0_0_15px_var(--accent-glow)] text-terminal-glow'
+                                                }`}>
+                                                    <Markdown>{m.text}</Markdown>
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
-                                {m.role === 'user' && (
-                                    <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center shrink-0 text-white mt-1">
-                                        <ChevronRight size={14} />
+                                        {m.role === 'user' && (
+                                            <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center shrink-0 text-white mt-1">
+                                                <ChevronRight size={14} />
+                                            </div>
+                                        )}
                                     </div>
-                                )}
+                                ))}
+                                <div ref={messagesEndRef} />
                             </div>
-                        ))}
-                        <div ref={messagesEndRef} />
-                    </div>
 
-                    {/* Input Area */}
-                    <div className="p-4 bg-[#0a0a0b] border-t border-white/10 relative z-20">
-                        <div className="relative group">
-                            <div className="absolute inset-0 bg-accent/10 blur-xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
+                            {/* Input Area */}
+                            <div className="p-4 bg-[#0a0a0b] border-t border-white/10 relative z-20">
+                                <div className="relative group">
+                                    <div className="absolute inset-0 bg-accent/10 blur-xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
+                                    <span className="absolute left-4 top-4 text-accent z-20 animate-pulse font-black">{'>'}</span>
+                                    <textarea
+                                        ref={inputRef}
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        onKeyDown={handleKeyDown}
+                                        placeholder="ENTER_SYSTEM_COMMAND..."
+                                        rows={1}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-12 text-sm text-accent font-mono focus:outline-none focus:border-accent/50 focus:bg-white/10 transition-all placeholder:text-neutral-800 relative z-10 resize-none overflow-hidden custom-scroll"
+                                        disabled={isProcessing}
+                                        autoFocus
+                                    />
+                                    <button 
+                                        onClick={() => handleCommand()}
+                                        disabled={!input.trim() || isProcessing}
+                                        className="absolute right-3 bottom-3 p-2 bg-accent/10 text-accent rounded-lg hover:bg-accent hover:text-black transition-all disabled:opacity-0 z-20 active:scale-95"
+                                    >
+                                        <Send size={14} />
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        // UI MATRIX VIEW
+                        <div className="flex-1 overflow-y-auto p-6 md:p-8 relative z-20">
+                            <div className="flex items-center gap-3 mb-6">
+                                <LayoutGrid size={18} className="text-accent" />
+                                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">INTERFACE_INTEGRITY_MATRIX</h3>
+                            </div>
                             
-                            <span className="absolute left-4 top-4 text-accent z-20 animate-pulse font-black">{'>'}</span>
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                {Object.values(uiMatrix).map((el: any) => (
+                                    <UIElementNode 
+                                        key={el.id}
+                                        id={el.id}
+                                        status={el.status}
+                                        errors={el.errorCount}
+                                        usage={el.usageCount}
+                                        onToggle={() => toggleUIElement(el.id)}
+                                    />
+                                ))}
+                            </div>
                             
-                            <textarea
-                                ref={inputRef}
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                placeholder="ENTER_SYSTEM_COMMAND..."
-                                rows={1}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-12 text-sm text-accent font-mono focus:outline-none focus:border-accent/50 focus:bg-white/10 transition-all placeholder:text-neutral-800 relative z-10 resize-none overflow-hidden custom-scroll"
-                                disabled={isProcessing}
-                                autoFocus
-                            />
-                            
-                            <button 
-                                onClick={() => handleCommand()}
-                                disabled={!input.trim() || isProcessing}
-                                className="absolute right-3 bottom-3 p-2 bg-accent/10 text-accent rounded-lg hover:bg-accent hover:text-black transition-all disabled:opacity-0 z-20 active:scale-95"
-                            >
-                                <Send size={14} />
-                            </button>
+                            <div className="mt-8 p-4 bg-white/5 rounded-xl border border-white/5">
+                                <div className="flex items-center gap-2 text-[10px] text-neutral-400 font-mono">
+                                    <Info size={12} className="text-accent" />
+                                    <span>RED = Disabled (User Kill Switch) | YELLOW = Unstable (Auto-Flagged) | GREEN = Nominal</span>
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex justify-between mt-3 px-1">
-                            <span className="text-[7px] font-black text-neutral-600 uppercase tracking-[0.2em] flex items-center gap-1">
-                                <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div> KERNEL_ACTIVE
-                            </span>
-                            <span className="text-[7px] font-black text-accent uppercase tracking-[0.2em] flex items-center gap-1">
-                                <Command size={8}/> READY_FOR_UPLINK
-                            </span>
-                        </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>

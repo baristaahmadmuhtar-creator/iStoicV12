@@ -5,9 +5,9 @@ import {
     RefreshCw, Trash2, Cpu, Stethoscope, Search, 
     CheckCircle2, HardDrive, Network, Server, Database,
     Wifi, Power, Bug, Monitor, Volume2, 
-    ChevronRight, ChevronDown, Play, Pause, ArrowRight, Key
+    ChevronRight, ChevronDown, Play, Pause, ArrowRight, Key, LayoutGrid, ToggleLeft, ToggleRight, Info
 } from 'lucide-react';
-import { debugService } from '../../services/debugService';
+import { debugService, type UIStatus } from '../../services/debugService';
 import { KEY_MANAGER, type ProviderStatus } from '../../services/geminiService';
 import { HANISAH_KERNEL } from '../../services/melsaKernel';
 import { speakWithHanisah } from '../../services/elevenLabsService';
@@ -29,9 +29,9 @@ const JsonTree: React.FC<{ data: any; level?: number }> = ({ data, level = 0 }) 
     const isEmpty = keys.length === 0;
 
     return (
-        <div className="font-mono text-[10px] leading-relaxed ml-3 border-l border-black/5 dark:border-white/5 pl-1">
+        <div className="font-mono text-[10px] leading-relaxed ml-3 border-l border-white/10 pl-1">
             <div 
-                className={`flex items-center gap-1 cursor-pointer hover:text-black dark:hover:text-white ${isEmpty ? 'opacity-50 cursor-default' : 'text-neutral-500'}`} 
+                className={`flex items-center gap-1 cursor-pointer hover:text-white ${isEmpty ? 'opacity-50 cursor-default' : 'text-neutral-500'}`} 
                 onClick={() => !isEmpty && setExpanded(!expanded)}
             >
                 {!isEmpty && (expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />)}
@@ -57,6 +57,42 @@ const JsonTree: React.FC<{ data: any; level?: number }> = ({ data, level = 0 }) 
     );
 };
 
+// --- HELPER: UI MATRIX NODE ---
+const UIElementNode: React.FC<{ id: string, status: UIStatus, errors: number, usage: number, onToggle: () => void }> = ({ id, status, errors, usage, onToggle }) => {
+    const getStatusColor = () => {
+        if (status === 'DISABLED') return 'bg-red-500/10 border-red-500 text-red-500';
+        if (status === 'UNSTABLE') return 'bg-yellow-500/10 border-yellow-500 text-yellow-500 animate-pulse';
+        return 'bg-emerald-500/10 border-emerald-500 text-emerald-500';
+    };
+
+    const cleanName = id.replace(/UI_|BTN_/g, '').replace(/_/g, ' ');
+
+    return (
+        <div 
+            onClick={onToggle}
+            className={`
+                relative p-3 rounded-xl border transition-all cursor-pointer group select-none
+                ${getStatusColor()} hover:scale-[1.02] active:scale-95
+            `}
+        >
+            <div className="flex justify-between items-start mb-2">
+                <div className="p-1.5 rounded-lg bg-black/20">
+                    {status === 'DISABLED' ? <ToggleLeft size={14} /> : <ToggleRight size={14} />}
+                </div>
+                <div className="text-[9px] font-mono opacity-70">
+                    ERR:{errors} | USE:{usage}
+                </div>
+            </div>
+            <div className="text-[10px] font-black uppercase tracking-wider truncate" title={id}>
+                {cleanName}
+            </div>
+            <div className="text-[8px] font-mono mt-1 opacity-60">
+                {status}
+            </div>
+        </div>
+    );
+};
+
 export const SystemHealthView: React.FC = () => {
     // Core Data
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -64,11 +100,12 @@ export const SystemHealthView: React.FC = () => {
     const [providers, setProviders] = useState<ProviderStatus[]>([]);
     
     // UI State
-    const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'TERMINAL' | 'MEMORY'>('TERMINAL');
+    const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'KERNEL_STREAM' | 'UI_MATRIX' | 'MEMORY'>('KERNEL_STREAM');
     const [isScanning, setIsScanning] = useState(false);
     const [hanisahDiagnosis, setHanisahDiagnosis] = useState<string | null>(null);
     const [storageUsage, setStorageUsage] = useState({ used: 0, percent: 0 });
     const [realPing, setRealPing] = useState<number | null>(null);
+    const [uiMatrix, setUiMatrix] = useState<Record<string, any>>(debugService.getUIMatrix());
     
     // Hydraulic Rotation Animation
     const [isRotatingKeys, setIsRotatingKeys] = useState(false);
@@ -184,15 +221,20 @@ export const SystemHealthView: React.FC = () => {
             setLogs(newLogs);
         });
 
+        const unsubscribeUI = debugService.subscribeUI((state) => {
+            setUiMatrix(state);
+        });
+
         return () => {
             clearInterval(interval);
             unsubscribe();
+            unsubscribeUI();
         };
     }, []);
 
     // Auto-scroll logic for Terminal
     useEffect(() => {
-        if (activeTab === 'TERMINAL' && isAutoScroll && logEndRef.current) {
+        if (activeTab === 'KERNEL_STREAM' && isAutoScroll && logEndRef.current) {
             logEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
     }, [logs, activeTab, isAutoScroll]);
@@ -261,6 +303,9 @@ export const SystemHealthView: React.FC = () => {
         
         // CLI Mapping to Tools
         switch (cmd) {
+            case 'help':
+                debugService.log('INFO', 'CLI', 'HELP', 'Available: clear, refresh_keys, optimize, diagnose, nuke_storage, reload');
+                break;
             case 'clear': executeRepair('CLEAR_LOGS'); break;
             case 'refresh_keys': executeRepair('REFRESH_KEYS'); break;
             case 'optimize': executeRepair('OPTIMIZE_MEMORY'); break;
@@ -286,6 +331,12 @@ export const SystemHealthView: React.FC = () => {
             return matchesFilter && matchesSearch;
         });
     }, [logs, logFilter, logSearch]);
+
+    const toggleUIElement = (id: string) => {
+        const current = uiMatrix[id];
+        const newStatus = current.status === 'DISABLED' ? 'ACTIVE' : 'DISABLED';
+        debugService.setUIStatus(id, newStatus);
+    };
 
     const getLevelBadge = (level: string) => {
         const baseClass = "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border";
@@ -317,7 +368,7 @@ export const SystemHealthView: React.FC = () => {
                     </div>
                     
                     <div className="flex bg-zinc-100 dark:bg-white/5 p-1 rounded-xl border border-black/5 dark:border-white/5 overflow-x-auto max-w-full">
-                        {['OVERVIEW', 'TERMINAL', 'MEMORY'].map((tab) => (
+                        {['OVERVIEW', 'KERNEL_STREAM', 'UI_MATRIX', 'MEMORY'].map((tab) => (
                             <button 
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)}
@@ -327,7 +378,7 @@ export const SystemHealthView: React.FC = () => {
                                     : 'text-neutral-500 hover:text-black dark:hover:text-white'
                                 }`}
                             >
-                                {tab}
+                                {tab.replace('_', ' ')}
                             </button>
                         ))}
                     </div>
@@ -457,8 +508,8 @@ export const SystemHealthView: React.FC = () => {
                     </div>
                 )}
 
-                {/* --- TERMINAL TAB --- */}
-                {activeTab === 'TERMINAL' && (
+                {/* --- KERNEL STREAM (TERMINAL) TAB --- */}
+                {activeTab === 'KERNEL_STREAM' && (
                     <div className="flex-1 bg-terminal-void rounded-[32px] border border-white/10 flex flex-col shadow-2xl relative overflow-hidden font-mono animate-slide-up terminal-scanlines">
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-cyan-500 z-10"></div>
                         
@@ -478,6 +529,7 @@ export const SystemHealthView: React.FC = () => {
                                     <option value="ERROR">ERROR</option>
                                     <option value="WARN">WARN</option>
                                     <option value="INFO">INFO</option>
+                                    <option value="TRACE">TRACE</option>
                                 </select>
                                 <button onClick={() => setIsAutoScroll(!isAutoScroll)} className={`p-1.5 rounded border transition-all ${!isAutoScroll ? 'bg-amber-500/20 border-amber-500/50 text-amber-500' : 'border-white/10 text-neutral-500 hover:text-white'}`}>{isAutoScroll ? <Pause size={10} /> : <Play size={10} />}</button>
                                 <button onClick={() => executeRepair('CLEAR_LOGS')} className="p-1.5 rounded border border-white/10 text-neutral-500 hover:text-red-500 transition-all"><Trash2 size={10}/></button>
@@ -525,6 +577,35 @@ export const SystemHealthView: React.FC = () => {
                                     <ArrowRight size={14} />
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- UI MATRIX TAB --- */}
+                {activeTab === 'UI_MATRIX' && (
+                    <div className="flex-1 overflow-y-auto p-6 md:p-8 relative z-20 bg-[#0a0a0b] rounded-[32px] border border-white/5 shadow-2xl animate-slide-up">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3">
+                                <LayoutGrid size={18} className="text-accent" />
+                                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">INTERFACE_INTEGRITY_MATRIX</h3>
+                            </div>
+                            <div className="flex items-center gap-2 text-[9px] text-neutral-500 font-mono">
+                                <Info size={12} className="text-accent" />
+                                <span>RED = Disabled | YELLOW = Unstable | GREEN = Nominal</span>
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {Object.values(uiMatrix).map((el: any) => (
+                                <UIElementNode 
+                                    key={el.id}
+                                    id={el.id}
+                                    status={el.status}
+                                    errors={el.errorCount}
+                                    usage={el.usageCount}
+                                    onToggle={() => toggleUIElement(el.id)}
+                                />
+                            ))}
                         </div>
                     </div>
                 )}

@@ -1,7 +1,7 @@
 
 import { LogEntry, LogLevel } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { UI_ID, FN_ID } from '../constants/registry';
+import { UI_ID, FN_ID, UI_REGISTRY } from '../constants/registry';
 
 const MAX_LOGS = 200;
 
@@ -11,19 +11,111 @@ interface PerformanceMetric {
     timestamp: number;
 }
 
+export type UIStatus = 'ACTIVE' | 'UNSTABLE' | 'DISABLED';
+
+interface UIElementState {
+    id: string;
+    status: UIStatus;
+    errorCount: number;
+    usageCount: number;
+    lastUsed: string | null;
+}
+
 class DebugService {
     private logs: LogEntry[] = [];
     private listeners: ((logs: LogEntry[]) => void)[] = [];
+    private uiListeners: ((state: Record<string, UIElementState>) => void)[] = [];
     private metrics: PerformanceMetric[] = [];
+    
+    // UI Matrix State
+    private uiState: Record<string, UIElementState> = {};
+    private lastInteractionId: string | null = null;
 
     constructor() {
-        this.log('INFO', 'KERNEL', 'BOOT', 'System Reliability Monitor v13.5 Active (HARDCODED MODE).');
+        this.log('INFO', 'KERNEL', 'BOOT', 'System Reliability Monitor v13.5 Active.');
+        this.initializeUIMatrix();
     }
 
-    // STRICT ACTION LOGGING
-    public logAction(uiId: UI_ID, fnId: FN_ID, result: string = 'OK', payload?: any) {
-        this.log('TRACE', 'INTERACTION', fnId, `[${uiId}] executed. Result: ${result}`, payload);
+    private initializeUIMatrix() {
+        // Hydrate from Registry
+        Object.values(UI_REGISTRY).forEach(id => {
+            this.uiState[id] = {
+                id,
+                status: 'ACTIVE',
+                errorCount: 0,
+                usageCount: 0,
+                lastUsed: null
+            };
+        });
     }
+
+    // STRICT ACTION LOGGING WITH INTERCEPTOR
+    public logAction(uiId: UI_ID, fnId: FN_ID, result: string = 'OK', payload?: any): boolean {
+        // 1. Check if Element is Disabled
+        const element = this.uiState[uiId];
+        if (element && element.status === 'DISABLED') {
+            this.log('WARN', 'UI_GATEKEEPER', 'BLOCKED', `Interaction with ${uiId} blocked by System Mechanic.`);
+            return false; // Signal to caller to stop
+        }
+
+        // 2. Track Interaction
+        this.lastInteractionId = uiId;
+        if (element) {
+            element.usageCount++;
+            element.lastUsed = new Date().toISOString();
+            this.notifyUI();
+        }
+
+        this.log('TRACE', 'INTERACTION', fnId, `[${uiId}] executed. Result: ${result}`, payload);
+        return true;
+    }
+
+    // Called when an error occurs to blame the last UI element
+    public reportUIError(errorContext: string) {
+        if (this.lastInteractionId && this.uiState[this.lastInteractionId]) {
+            const el = this.uiState[this.lastInteractionId];
+            el.errorCount++;
+            
+            // Auto-flag malfunction
+            if (el.errorCount >= 3 && el.status !== 'DISABLED') {
+                el.status = 'UNSTABLE';
+                this.log('WARN', 'MECHANIC', 'AUTO_FLAG', `UI Element ${el.id} flagged UNSTABLE due to high error rate.`);
+            }
+            this.notifyUI();
+        }
+    }
+
+    // MECHANIC CONTROLS
+    public setUIStatus(id: string, status: UIStatus) {
+        if (this.uiState[id]) {
+            this.uiState[id].status = status;
+            // Reset error count if re-activated
+            if (status === 'ACTIVE') this.uiState[id].errorCount = 0;
+            this.notifyUI();
+            this.log('INFO', 'MECHANIC', 'OVERRIDE', `UI Element ${id} set to ${status}`);
+        }
+    }
+
+    public getUIMatrix() {
+        return this.uiState;
+    }
+
+    public runGhostScan() {
+        let issuesFound = 0;
+        Object.values(this.uiState).forEach(el => {
+            if (el.usageCount === 0 && el.status === 'ACTIVE') {
+                // Determine if it's a ghost (registered but never used) - purely informational
+            }
+            if (el.errorCount > 0 && el.status === 'ACTIVE') {
+                el.status = 'UNSTABLE';
+                issuesFound++;
+            }
+        });
+        this.notifyUI();
+        return issuesFound;
+    }
+
+    // --- STANDARD LOGGING ---
 
     log(level: LogLevel, layer: string, code: string, message: string, payload: any = {}) {
         const entry: LogEntry = {
@@ -33,10 +125,9 @@ class DebugService {
             level,
             code,
             message,
-            payload: JSON.parse(JSON.stringify(payload || {})) // Safety detach
+            payload: JSON.parse(JSON.stringify(payload || {}))
         };
 
-        // Console mirroring
         const isDev = (import.meta as any).env?.DEV;
         if (isDev || level === 'ERROR') {
             const style = level === 'ERROR' ? 'color: #ef4444; font-weight: bold' : 'color: #00f0ff';
@@ -80,20 +171,31 @@ class DebugService {
         };
     }
 
+    subscribeUI(callback: (state: Record<string, UIElementState>) => void) {
+        this.uiListeners.push(callback);
+        return () => {
+            this.uiListeners = this.uiListeners.filter(l => l !== callback);
+        };
+    }
+
     private notify() {
         this.listeners.forEach(l => l(this.logs));
+    }
+
+    private notifyUI() {
+        this.uiListeners.forEach(l => l({ ...this.uiState }));
     }
 
     clear() {
         this.logs = [];
         this.metrics = [];
+        // Do not clear UI Matrix state as that is persistent for the session
         this.log('INFO', 'OPS', 'CLEAN', 'System logs purged manually.');
         this.notify();
     }
 
     runSelfDiagnosis(keyManager?: any) {
         this.log('INFO', 'SELF_CHECK', 'INIT', 'Running comprehensive system audit...');
-        // (Existing diagnosis logic kept but wrapped in strict logging)
         if (keyManager) {
             const providers = keyManager.getAllProviderStatuses();
             this.log('INFO', 'SELF_CHECK', 'KEYS_OK', `Providers: ${providers.length}`);

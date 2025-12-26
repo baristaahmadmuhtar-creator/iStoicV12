@@ -15,6 +15,11 @@ import { DEFAULT_USER_PERSONA } from '../../services/persona';
 import { debugService } from '../../services/debugService';
 import { KEY_MANAGER } from '../../services/geminiService';
 import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
+import { type FeatureID } from '../../constants';
+
+interface SettingsViewProps {
+    onNavigate?: (feature: FeatureID) => void;
+}
 
 interface ToolConfig {
     search: boolean;
@@ -159,7 +164,7 @@ const ToolRow: React.FC<{
 
 // --- MAIN VIEW ---
 
-const SettingsView: React.FC = () => {
+const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const { lockVault } = useVault();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -285,9 +290,9 @@ const SettingsView: React.FC = () => {
         }
     };
 
-    const toggleDebugConsole = () => {
-        debugService.logAction(UI_REGISTRY.DEBUG_TOGGLE, FN_REGISTRY.TRIGGER_DEBUG, 'CLICK');
-        window.dispatchEvent(new Event('istoic-toggle-debug'));
+    const openKernelStream = () => {
+        debugService.logAction(UI_REGISTRY.MECH_BTN_SCAN, FN_REGISTRY.NAVIGATE_TO_FEATURE, 'KERNEL_STREAM');
+        if (onNavigate) onNavigate('system');
     };
 
     return (
@@ -468,13 +473,13 @@ const SettingsView: React.FC = () => {
                             <div className="p-4 bg-zinc-900 rounded-[24px] border border-white/10 space-y-4">
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-1">
-                                        <h4 className="text-xs font-black text-white uppercase tracking-wider">Debug Console</h4>
-                                        <p className="text-[9px] text-neutral-500">View real-time kernel logs.</p>
+                                        <h4 className="text-xs font-black text-white uppercase tracking-wider">Kernel Stream</h4>
+                                        <p className="text-[9px] text-neutral-500">Access full system diagnostics.</p>
                                     </div>
-                                    <button onClick={toggleDebugConsole} className="px-4 py-2 bg-white/10 hover:bg-accent hover:text-black text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">TOGGLE_VIEW</button>
+                                    <button onClick={openKernelStream} className="px-4 py-2 bg-white/10 hover:bg-accent hover:text-black text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">OPEN_KERNEL_STREAM</button>
                                 </div>
                                 <div className="h-[1px] bg-white/5"></div>
-                                <button onClick={() => { debugService.runSelfDiagnosis(KEY_MANAGER); alert("Diagnosis Initiated. Check Debug Console."); }} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[9px] font-mono text-neutral-400 hover:text-white transition-all uppercase tracking-widest border border-white/5">RUN_SELF_DIAGNOSIS_PROTOCOL</button>
+                                <button onClick={() => { debugService.runSelfDiagnosis(KEY_MANAGER); alert("Diagnosis Initiated. Check Kernel Stream."); }} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[9px] font-mono text-neutral-400 hover:text-white transition-all uppercase tracking-widest border border-white/5">RUN_SELF_DIAGNOSIS_PROTOCOL</button>
                             </div>
                         </SettingsSection>
                     </div>

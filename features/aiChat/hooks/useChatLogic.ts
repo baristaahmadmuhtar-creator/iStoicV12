@@ -29,7 +29,8 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     [threads, activeThreadId]);
 
     const activeModel = useMemo(() => {
-        const id = activeThread?.model_id || 'gemini-3-pro-preview';
+        // DEFAULT CHANGE: auto-best (Hydra) is now the default instead of gemini-3-pro
+        const id = activeThread?.model_id || 'auto-best';
         return MODEL_CATALOG.find(m => m.id === id) || MODEL_CATALOG[0];
     }, [activeThread]);
 
@@ -49,7 +50,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             id: uuidv4(),
             title: `SESSION_${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
             persona,
-            model_id: 'gemini-3-pro-preview',
+            model_id: 'auto-best', // Default new chats to Hydra
             messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
             updated: new Date().toISOString(),
             isPinned: false
@@ -87,7 +88,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 id: newId,
                 title: userMsg ? userMsg.slice(0, 30).toUpperCase() : 'IMAGE_ANALYSIS',
                 persona: personaMode,
-                model_id: 'gemini-3-pro-preview',
+                model_id: 'auto-best', // Default
                 messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
                 updated: new Date().toISOString(),
                 isPinned: false

@@ -18,6 +18,7 @@ export const UI_REGISTRY = {
     SIDEBAR_BTN_SYSTEM: 'UI_SIDEBAR_BTN_SYSTEM',
     SIDEBAR_BTN_SETTINGS: 'UI_SIDEBAR_BTN_SETTINGS',
     SIDEBAR_BTN_LOGO: 'UI_SIDEBAR_BTN_LOGO',
+    SIDEBAR_BTN_TOGGLE: 'UI_SIDEBAR_BTN_TOGGLE', // Added
 
     // DASHBOARD
     DASHBOARD_BTN_SYSTEM_STATUS: 'UI_DASHBOARD_BTN_SYSTEM_STATUS',
@@ -34,6 +35,7 @@ export const UI_REGISTRY = {
     CHAT_BTN_HISTORY: 'UI_CHAT_BTN_HISTORY',
     CHAT_BTN_LIVE_TOGGLE: 'UI_CHAT_BTN_LIVE_TOGGLE',
     CHAT_BTN_SCROLL_DOWN: 'UI_CHAT_BTN_SCROLL_DOWN',
+    CHAT_BTN_DELETE: 'UI_CHAT_BTN_DELETE',
     CHAT_INPUT_SEND: 'UI_CHAT_INPUT_SEND',
     CHAT_INPUT_ATTACH: 'UI_CHAT_INPUT_ATTACH',
     CHAT_INPUT_MIC: 'UI_CHAT_INPUT_MIC',
@@ -84,6 +86,7 @@ export const UI_REGISTRY = {
 export const FN_REGISTRY = {
     // NAVIGATION
     NAVIGATE_TO_FEATURE: 'FN_NAVIGATE_TO_FEATURE',
+    UI_TOGGLE_SIDEBAR: 'FN_UI_TOGGLE_SIDEBAR', // Added
     
     // DASHBOARD ACTIONS
     OPEN_SYSTEM_MECHANIC: 'FN_OPEN_SYSTEM_MECHANIC',
@@ -95,6 +98,7 @@ export const FN_REGISTRY = {
     CHAT_TOGGLE_LIVE: 'FN_CHAT_TOGGLE_LIVE',
     CHAT_LOAD_HISTORY: 'FN_CHAT_LOAD_HISTORY',
     CHAT_SELECT_MODEL: 'FN_CHAT_SELECT_MODEL',
+    CHAT_DELETE_SESSION: 'FN_CHAT_DELETE_SESSION',
     
     // NOTES ACTIONS
     NOTE_CREATE: 'FN_NOTE_CREATE',
@@ -148,6 +152,7 @@ export const COMPLETE_UI_MAP: Record<UI_ID, UIMetadata> = {
     [UI_REGISTRY.SIDEBAR_BTN_SYSTEM]: { label: 'Nav System', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Navigate to System' },
     [UI_REGISTRY.SIDEBAR_BTN_SETTINGS]: { label: 'Nav Settings', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Navigate to Settings' },
     [UI_REGISTRY.SIDEBAR_BTN_LOGO]: { label: 'Logo Home', event: 'CLICK', fn: FN_REGISTRY.NAVIGATE_TO_FEATURE, desc: 'Navigate Home via Logo' },
+    [UI_REGISTRY.SIDEBAR_BTN_TOGGLE]: { label: 'Toggle Sidebar', event: 'CLICK', fn: FN_REGISTRY.UI_TOGGLE_SIDEBAR, desc: 'Expand/Collapse Sidebar' },
 
     // DASHBOARD
     [UI_REGISTRY.DASHBOARD_BTN_SYSTEM_STATUS]: { label: 'System Uptime', event: 'CLICK', fn: FN_REGISTRY.OPEN_SYSTEM_MECHANIC, desc: 'Open System Status' },
@@ -164,6 +169,7 @@ export const COMPLETE_UI_MAP: Record<UI_ID, UIMetadata> = {
     [UI_REGISTRY.CHAT_BTN_HISTORY]: { label: 'History', event: 'CLICK', fn: FN_REGISTRY.CHAT_LOAD_HISTORY, desc: 'Open Chat History' },
     [UI_REGISTRY.CHAT_BTN_LIVE_TOGGLE]: { label: 'Live Link', event: 'CLICK', fn: FN_REGISTRY.CHAT_TOGGLE_LIVE, desc: 'Toggle Voice Mode' },
     [UI_REGISTRY.CHAT_BTN_SCROLL_DOWN]: { label: 'Scroll Down', event: 'CLICK', fn: FN_REGISTRY.CHAT_LOAD_HISTORY, desc: 'Scroll to bottom' },
+    [UI_REGISTRY.CHAT_BTN_DELETE]: { label: 'Delete Thread', event: 'CLICK', fn: FN_REGISTRY.CHAT_DELETE_SESSION, desc: 'Delete Chat Session' },
     [UI_REGISTRY.CHAT_INPUT_SEND]: { label: 'Send Msg', event: 'CLICK', fn: FN_REGISTRY.CHAT_SEND_MESSAGE, desc: 'Send Text Message' },
     [UI_REGISTRY.CHAT_INPUT_ATTACH]: { label: 'Attach', event: 'CLICK', fn: FN_REGISTRY.CHAT_SEND_MESSAGE, desc: 'Attach Image' },
     [UI_REGISTRY.CHAT_INPUT_MIC]: { label: 'Mic Input', event: 'CLICK', fn: FN_REGISTRY.CHAT_SEND_MESSAGE, desc: 'Dictate Message' },

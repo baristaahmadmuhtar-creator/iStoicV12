@@ -46,14 +46,7 @@ const App: React.FC = () => {
   const chatLogic = useChatLogic(notes, setNotes);
   
   // FIX BUG #4: Check if Live Mode is active to hide navigation
-  // Assuming chatLogic exposes isLiveMode or we derive it from activeThread state if needed
-  // For this fix, we assume chatLogic needs to expose it or we check a global state
-  // Based on AIChatView, isLiveMode is local there, but for App-level hiding, we check the global store or context
-  // Fallback: If chatLogic doesn't expose it directly, we assume the view handles fullscreen, 
-  // BUT the request explicitly asks to unmount MobileNav here.
-  // We will assume chatLogic has been updated to expose 'isLiveModeActive' or similar, 
-  // otherwise we simply check if the user is on the chat screen and the overlay is active.
-  const isLiveSessionActive = chatLogic.isLiveModeActive || false; // Ensure this exists in your hook logic
+  const isLiveSessionActive = chatLogic.isLiveModeActive || false; 
 
   const hexToRgb = (hex: string) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -155,7 +148,7 @@ const App: React.FC = () => {
       case 'chat': return <ErrorBoundary viewName="NEURAL_LINK"><AIChatView chatLogic={chatLogic} /></ErrorBoundary>;
       case 'tools': return <ErrorBoundary viewName="NEURAL_ARSENAL"><AIToolsView /></ErrorBoundary>;
       case 'system': return <ErrorBoundary viewName="SYSTEM_HEALTH"><SystemHealthView /></ErrorBoundary>;
-      case 'settings': return <ErrorBoundary viewName="CORE_CONFIG"><SettingsView /></ErrorBoundary>;
+      case 'settings': return <ErrorBoundary viewName="CORE_CONFIG"><SettingsView onNavigate={setActiveFeature} /></ErrorBoundary>;
       default: return <ErrorBoundary viewName="UNKNOWN_MODULE"><DashboardView onNavigate={setActiveFeature} /></ErrorBoundary>;
     }
   };
@@ -169,7 +162,6 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 relative h-full overflow-hidden bg-zinc-50 dark:bg-black min-w-0">
-        {/* FIX BUG #3: Added huge bottom padding (pb-32 md:pb-40) so content scrolls ABOVE the floating nav */}
         <div id="main-scroll-container" className="h-full w-full overflow-y-auto custom-scroll pb-safe scroll-smooth">
           <div className="min-h-full pb-32 md:pb-40">
             {renderContent()}
@@ -177,7 +169,6 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* FIX BUG #4: Conditional Rendering - Unmount Nav completely in Live Mode */}
       {!isLiveSessionActive && (
         <MobileNav 
           activeFeature={activeFeature} 

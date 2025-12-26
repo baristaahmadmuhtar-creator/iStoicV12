@@ -1,12 +1,10 @@
 
-import React, { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { type Note } from '../../types';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { 
-  Radio, ChevronDown, Sparkles, Zap, 
-  Flame, Brain, Activity, Fingerprint, Layers, Command,
-  ArrowRight, Search, Palette, Code, GraduationCap, Lightbulb, Music,
-  History, Settings2, LayoutTemplate, ArrowDown, CircuitBoard, Infinity, Eraser
+  Radio, ChevronDown, Flame, Brain, ArrowRight, Palette, Code, 
+  GraduationCap, Lightbulb, History, Layers, Infinity, ArrowDown
 } from 'lucide-react';
 
 import { useNeuralLinkSession } from './hooks/useNeuralLinkSession';
@@ -74,8 +72,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     
     const { isFeatureEnabled } = useFeatures();
     const isLiveLinkEnabled = isFeatureEnabled('LIVE_LINK');
-    const isOmniRaceEnabled = isFeatureEnabled('OMNI_RACE');
-
+    
     const { isInputFocused, shouldShowNav } = useNavigationIntelligence();
     const isMobileNavVisible = shouldShowNav && (!isInputFocused || window.innerWidth > 768);
     
@@ -93,39 +90,12 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         isVaultSynced,
         setIsVaultSynced,
         isVaultConfigEnabled, 
-        isAutoSpeak,
-        setIsAutoSpeak,
         setIsLiveModeActive,
         setGlobalModelId 
     } = chatLogic;
 
-    const handleModelPickerOpen = () => {
-        debugService.logAction(UI_REGISTRY.CHAT_BTN_MODEL_PICKER, FN_REGISTRY.CHAT_SELECT_MODEL, 'OPEN');
-        setShowModelPicker(true);
-    };
-
-    const handleHistoryOpen = () => {
-        debugService.logAction(UI_REGISTRY.CHAT_BTN_HISTORY, FN_REGISTRY.CHAT_LOAD_HISTORY, 'OPEN');
-        setShowHistoryDrawer(true);
-    };
-
-    const handleLiveToggle = () => {
-        if (!isLiveLinkEnabled) {
-            alert("FEATURE_DISABLED: Live Link disabled in System Mechanic to save resources.");
-            return;
-        }
-        debugService.logAction(UI_REGISTRY.CHAT_BTN_LIVE_TOGGLE, FN_REGISTRY.CHAT_TOGGLE_LIVE, isLiveMode ? 'STOP' : 'START');
-        toggleLiveMode();
-    };
-
-    const handleVaultToggle = useCallback(() => {
-        if (!isVaultConfigEnabled || isTransitioning) return;
-        if (isVaultSynced) {
-            setIsVaultSynced(false);
-        } else {
-            setShowPinModal(true);
-        }
-    }, [isVaultSynced, isTransitioning, setIsVaultSynced, isVaultConfigEnabled]);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const isAutoScrolling = useRef(true);
 
     const {
         isLiveMode,
@@ -137,13 +107,8 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     } = useNeuralLinkSession(personaMode, notes, setNotes);
 
     useEffect(() => {
-        if (setIsLiveModeActive) {
-            setIsLiveModeActive(isLiveMode);
-        }
+        if (setIsLiveModeActive) setIsLiveModeActive(isLiveMode);
     }, [isLiveMode, setIsLiveModeActive]);
-
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const isAutoScrolling = useRef(true);
 
     const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
         if (messagesEndRef.current) {
@@ -153,16 +118,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         }
     }, []);
 
-    const handleScrollBtnClick = () => {
-        debugService.logAction(UI_REGISTRY.CHAT_BTN_SCROLL_DOWN, FN_REGISTRY.CHAT_LOAD_HISTORY, 'SCROLL_BOTTOM');
-        scrollToBottom();
-    };
-
-    const handleSuggestionClick = (prompt: string, type: string) => {
-        debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, type);
-        setInput(prompt);
-    };
-
     useEffect(() => {
         const container = document.getElementById('main-scroll-container');
         if (!container) return;
@@ -170,9 +125,8 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         const handleScroll = () => {
             const { scrollTop, scrollHeight, clientHeight } = container;
             const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-            const threshold = 150; 
             
-            if (distanceToBottom > threshold) {
+            if (distanceToBottom > 300) {
                 isAutoScrolling.current = false;
                 setShowScrollBtn(true);
             } else {
@@ -186,14 +140,35 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     }, []);
 
     useEffect(() => {
-        if (!messagesEndRef.current) return;
         if (isAutoScrolling.current) {
-            const timeout = setTimeout(() => {
-                scrollToBottom(isLoading ? 'auto' : 'smooth');
-            }, 100);
-            return () => clearTimeout(timeout);
+            scrollToBottom(isLoading ? 'auto' : 'smooth');
         }
     }, [activeThread?.messages, isLoading, scrollToBottom]);
+
+    const handleModelPickerOpen = () => {
+        debugService.logAction(UI_REGISTRY.CHAT_BTN_MODEL_PICKER, FN_REGISTRY.CHAT_SELECT_MODEL, 'OPEN');
+        setShowModelPicker(true);
+    };
+
+    const handleHistoryOpen = () => {
+        debugService.logAction(UI_REGISTRY.CHAT_BTN_HISTORY, FN_REGISTRY.CHAT_LOAD_HISTORY, 'OPEN');
+        setShowHistoryDrawer(true);
+    };
+
+    const handleLiveToggle = () => {
+        if (!isLiveLinkEnabled) {
+            alert("FEATURE_DISABLED: Live Link disabled in System Mechanic.");
+            return;
+        }
+        debugService.logAction(UI_REGISTRY.CHAT_BTN_LIVE_TOGGLE, FN_REGISTRY.CHAT_TOGGLE_LIVE, isLiveMode ? 'STOP' : 'START');
+        toggleLiveMode();
+    };
+
+    const handleVaultToggle = useCallback(() => {
+        if (!isVaultConfigEnabled || isTransitioning) return;
+        if (isVaultSynced) setIsVaultSynced(false);
+        else setShowPinModal(true);
+    }, [isVaultSynced, isTransitioning, setIsVaultSynced, isVaultConfigEnabled]);
 
     const changePersona = async (target: 'hanisah' | 'stoic') => {
         if (personaMode === target || isTransitioning) return;
@@ -208,12 +183,9 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     };
 
     const showEmptyState = !activeThread || activeThread.messages.length <= 1;
-    
-    const isAutoBestSelected = activeModel?.id === 'auto-best';
-    const isHydraActive = isAutoBestSelected && isOmniRaceEnabled;
-    const effectiveModelName = isHydraActive ? 'HYDRA_OMNI' : (isAutoBestSelected ? 'GEMINI FLASH (FB)' : activeModel?.name || 'GEMINI PRO');
+    const isHydraActive = activeModel?.id === 'auto-best';
+    const effectiveModelName = isHydraActive ? 'HYDRA_OMNI (MELSA)' : (activeModel?.name || 'GEMINI PRO');
 
-    // Dynamic Persona Styling
     const personaColor = personaMode === 'hanisah' ? 'text-orange-500' : 'text-cyan-500';
     const personaGlow = personaMode === 'hanisah' ? 'from-orange-500/20 to-pink-500/5' : 'from-cyan-500/20 to-blue-500/5';
     const personaBorder = personaMode === 'hanisah' ? 'border-orange-500/20' : 'border-cyan-500/20';
@@ -226,11 +198,9 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                 onSuccess={() => setIsVaultSynced(true)} 
             />
 
-            {/* Dynamic Background Mesh */}
             <div className={`fixed inset-0 bg-gradient-to-b ${personaGlow} pointer-events-none transition-all duration-1000 opacity-20`}></div>
 
-            {/* MAIN CONTENT CONTAINER */}
-            <div className={`flex-1 flex flex-col relative z-10 w-full max-w-[1000px] mx-auto transition-all duration-500 ${isMobileNavVisible ? 'pb-36' : 'pb-28'}`}>
+            <div className={`flex-1 flex flex-col relative z-10 w-full max-w-[1000px] mx-auto transition-all duration-500 ${isMobileNavVisible ? 'pb-36' : 'pb-32'}`}>
                 
                 {/* 1. HUD HEADER */}
                 <div className="sticky top-4 z-40 w-full px-4 flex justify-center pointer-events-none">
@@ -241,8 +211,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                             : 'bg-white/80 dark:bg-[#0f0f11]/80 border-white/20 dark:border-white/10 ring-white/20 shadow-2xl'
                         }
                     `}>
-                        
-                        {/* Model & Persona Info */}
                         <button 
                             className="flex items-center gap-3 cursor-pointer group py-1.5 px-3 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-all" 
                             onClick={handleModelPickerOpen}
@@ -275,7 +243,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
 
                         <div className="h-6 w-[1px] bg-black/5 dark:bg-white/10"></div>
 
-                        {/* Actions */}
                         <div className="flex items-center gap-1 shrink-0">
                             <button 
                                 onClick={handleHistoryOpen}
@@ -307,8 +274,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                 <div className="flex-1 w-full relative min-h-0 flex flex-col px-4 md:px-0 mt-4">
                     {showEmptyState ? (
                         <div className="flex flex-col h-full justify-center w-full pb-20 pt-8 animate-fade-in">
-                            
-                            {/* Dynamic Hero Section */}
                             <div className="flex flex-col items-center text-center mb-12 relative">
                                 <button 
                                     onClick={togglePersona}
@@ -332,7 +297,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                 </div>
                             </div>
 
-                            {/* Suggestions Grid */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 w-full max-w-4xl mx-auto">
                                 {personaMode === 'hanisah' ? (
                                     <>
@@ -340,7 +304,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                             icon={<Palette />} 
                                             label="VISUAL_SYNTHESIS" 
                                             desc="Generate 8K visuals with Imagen 3." 
-                                            onClick={() => handleSuggestionClick("Generate a futuristic cyberpunk city with neon lights, 8k resolution.", 'GEN_IMG')} 
+                                            onClick={() => { 
+                                                debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'GEN_IMG'); 
+                                                sendMessage(undefined, undefined, "Generate a futuristic cyberpunk city with neon lights, 8k resolution."); 
+                                            }} 
                                             className="col-span-1 sm:col-span-2 md:col-span-1"
                                             accent="text-pink-500"
                                         />
@@ -348,7 +315,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                             icon={<Code />} 
                                             label="CODE_AUDIT" 
                                             desc="Debug & optimize algorithms." 
-                                            onClick={() => handleSuggestionClick("Review this code for performance bottlenecks and suggest optimizations.", 'CODE_AUDIT')} 
+                                            onClick={() => { 
+                                                debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'CODE_AUDIT'); 
+                                                sendMessage(undefined, undefined, "Review this code for performance bottlenecks and suggest optimizations."); 
+                                            }} 
                                             className="col-span-1 sm:col-span-2 md:col-span-2"
                                             accent="text-emerald-500"
                                         />
@@ -356,7 +326,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                             icon={<Layers />} 
                                             label="VAULT_SYNC" 
                                             desc="Connect active knowledge nodes." 
-                                            onClick={() => handleSuggestionClick("Analyze my recent notes about 'Project X' and summarize key insights.", 'VAULT_SYNC')} 
+                                            onClick={() => { 
+                                                debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'VAULT_SYNC'); 
+                                                sendMessage(undefined, undefined, "Analyze my recent notes about 'Project X' and summarize key insights."); 
+                                            }} 
                                             className="col-span-1 md:col-span-1"
                                             accent="text-blue-500"
                                         />
@@ -367,7 +340,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                             icon={<GraduationCap />} 
                                             label="STOIC_AUDIT" 
                                             desc="Analyze via Marcus Aurelius." 
-                                            onClick={() => handleSuggestionClick("I'm feeling overwhelmed by work. How would a Stoic approach this?", 'STOIC_AUDIT')} 
+                                            onClick={() => { 
+                                                debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'STOIC_AUDIT'); 
+                                                sendMessage(undefined, undefined, "I'm feeling overwhelmed by work. How would a Stoic approach this?"); 
+                                            }} 
                                             className="col-span-1 sm:col-span-2 md:col-span-2"
                                             accent="text-amber-500"
                                         />
@@ -375,7 +351,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                             icon={<Lightbulb />} 
                                             label="FIRST_PRINCIPLES" 
                                             desc="Deconstruct core truths." 
-                                            onClick={() => handleSuggestionClick("Help me deconstruct this problem using first principles thinking.", 'LOGIC_BREAKDOWN')} 
+                                            onClick={() => { 
+                                                debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'LOGIC_BREAKDOWN'); 
+                                                sendMessage(undefined, undefined, "Help me deconstruct this problem using first principles thinking."); 
+                                            }} 
                                             className="col-span-1"
                                             accent="text-cyan-500"
                                         />
@@ -383,7 +362,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                             icon={<Brain />} 
                                             label="BIAS_CHECK" 
                                             desc="Identify cognitive fallacies." 
-                                            onClick={() => handleSuggestionClick("Identify potential biases in this argument: [Insert Text]", 'BIAS_CHECK')} 
+                                            onClick={() => { 
+                                                debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'BIAS_CHECK'); 
+                                                sendMessage(undefined, undefined, "Identify potential biases in this argument: [Insert Text]"); 
+                                            }} 
                                             className="col-span-1"
                                             accent="text-purple-500"
                                         />
@@ -409,10 +391,9 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                     ${isMobileNavVisible ? 'mb-16 md:mb-0' : 'mb-2'}
                 `}>
                     <div className="w-full max-w-[1000px] pointer-events-auto relative">
-                        {/* Scroll To Bottom Button */}
                         {showScrollBtn && (
                             <button 
-                                onClick={handleScrollBtnClick}
+                                onClick={() => scrollToBottom()}
                                 className="absolute -top-16 right-0 z-20 w-10 h-10 rounded-full bg-white dark:bg-[#0a0a0b] shadow-xl border border-black/10 dark:border-white/10 flex items-center justify-center text-accent hover:scale-110 active:scale-95 transition-all animate-bounce"
                             >
                                 <ArrowDown size={18} strokeWidth={2.5} />
@@ -438,7 +419,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
 
             </div>
 
-            {/* OVERLAYS */}
             <ModelPicker 
                 isOpen={showModelPicker} 
                 onClose={() => setShowModelPicker(false)}

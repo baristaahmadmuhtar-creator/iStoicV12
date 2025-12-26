@@ -6,7 +6,7 @@ import { noteTools, visualTools, searchTools } from "./geminiService";
 import { GLOBAL_VAULT, Provider } from "./hydraVault"; 
 import { mechanicTools } from "../features/mechanic/mechanicTools";
 import { streamOpenAICompatible } from "./providerEngine";
-import { OMNI_KERNEL } from "./omniRace"; 
+import { runMelsaRace } from "./melsaOmni"; // NEW IMPORT
 import { type ModelMetadata } from "../types";
 
 export const MODEL_CATALOG: ModelMetadata[] = [
@@ -21,10 +21,10 @@ export const MODEL_CATALOG: ModelMetadata[] = [
   {
     id: 'auto-best',
     name: 'Auto Pilot (Hydra)',
-    category: 'GEMINI_2_5',
+    category: 'GEMINI_2_5', 
     provider: 'GEMINI',
-    description: 'Omni-Race Protocol: Races all providers simultaneously. Fastest successful engine wins.',
-    specs: { context: 'AUTO', speed: 'INSTANT', intelligence: 9.8 }
+    description: 'Melsa Engine: No Mercy Omni-Race. Fastest winner takes all. Uncensored Logic.',
+    specs: { context: 'AUTO', speed: 'INSTANT', intelligence: 9.8 } 
   },
   { 
     id: 'gemini-3-flash-preview', 
@@ -106,24 +106,30 @@ export class HanisahKernel {
   async *streamExecute(msg: string, initialModelId: string, context?: string, imageData?: { data: string, mimeType: string }, configOverride?: any): AsyncGenerator<StreamChunk> {
     const systemPrompt = configOverride?.systemInstruction || HANISAH_BRAIN.getSystemInstruction('hanisah', context);
     
-    // CRITICAL FIX: Defined mutable currentModelId to be used in the logic loop
     let currentModelId = initialModelId;
 
-    // --- OMNI RACE LOGIC with FEATURE FLAG CHECK ---
+    // --- NEW OMNI RACE LOGIC (MELSA DEWA) ---
     if (initialModelId === 'auto-best') {
         const isEnabled = this.isOmniRaceEnabled();
         
         if (!isEnabled) {
-            // FIX: If disabled, explicit fallback message and model reassignment
             yield { text: `\n\n> 🛑 *Omni-Race disabled by Protocol. Switching to Single-Core (Gemini Flash)...*\n\n` };
             currentModelId = 'gemini-2.5-flash'; 
-        } else if (imageData) {
-            yield { text: `\n\n> ⚠️ *Visual Input detected. Falling back to Gemini Vision...*` };
-            currentModelId = 'gemini-2.5-flash';
         } else {
-            yield* OMNI_KERNEL.raceStream(msg, systemPrompt, context);
-            this.updateHistory(msg, "[Omni-Race Response]"); 
-            return;
+            // Melsa Engine: Non-Streaming Logic wrapped in Generator
+            yield { text: "> *Initializing Melsa Omni-Race (No Mercy Mode)...*\n\n" };
+            try {
+                // Determine image data format for Melsa
+                const melsaImg = imageData ? { data: imageData.data, mimeType: imageData.mimeType } : null;
+                
+                const response = await runMelsaRace(msg, melsaImg);
+                yield { text: response };
+                this.updateHistory(msg, response);
+                return;
+            } catch (e: any) {
+                yield { text: `\n\n> ⚠️ *Melsa Engine Error: ${e.message}*` };
+                currentModelId = 'gemini-2.5-flash'; // Fallback
+            }
         }
     }
 
@@ -137,7 +143,7 @@ export class HanisahKernel {
         const key = GLOBAL_VAULT.getKey(provider as Provider);
 
         if (!key) {
-            yield { text: `\n\n> ⚠️ *Node ${provider} offline. Mencoba jalur alternatif...*` };
+            yield { text: `\n\n> ⚠️ *Node ${provider} offline (No Key). Mencoba jalur alternatif...*` };
             currentModelId = 'gemini-2.5-flash';
             continue;
         }
@@ -153,8 +159,11 @@ export class HanisahKernel {
                 if (activeTools.length > 0) config.tools = activeTools;
                 if (isThinking) config.thinkingConfig = { thinkingBudget: 4096 };
 
+                // Validate history content to prevent 400 errors from empty text parts
+                const cleanHistory = this.history.filter(h => h.content && h.content.trim() !== "");
+                
                 const contents = [
-                    ...this.history.map(h => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }] })), 
+                    ...cleanHistory.map(h => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }] })), 
                     { role: 'user', parts: imageData ? [{ inlineData: imageData }, { text: msg }] : [{ text: msg }] }
                 ];
 
@@ -182,12 +191,9 @@ export class HanisahKernel {
             GLOBAL_VAULT.reportFailure(provider as Provider, key, err);
             const isQuota = JSON.stringify(err).includes('429') || JSON.stringify(err).includes('resource_exhausted') || JSON.stringify(err).includes('limit');
             const isBalance = JSON.stringify(err).includes('402');
-
-            // If it's a fatal error with the model ID (like sending auto-best to Gemini), fallback immediately
             const isBadModel = JSON.stringify(err).includes('404') || JSON.stringify(err).includes('not found') || JSON.stringify(err).includes('400');
 
             if (isQuota || isBalance || isBadModel) {
-                // FALLBACK LOGIC: If we are already on Flash, we can't fall back further easily.
                 if (currentModelId === 'gemini-2.5-flash') {
                      yield { text: `\n\n> ⛔ *Jalur Darurat (Flash) juga gagal. Pesan tidak terkirim.*` };
                      throw err; 
@@ -200,10 +206,12 @@ export class HanisahKernel {
             throw err;
         }
     }
+    // If loop ends without success (e.g. key exhaustion), throw to trigger error UI
+    throw new Error("All connection attempts failed. Please check API keys or network status.");
   }
 
-  async execute(msg: string, modelId: string, context?: string): Promise<StreamChunk> {
-    const it = this.streamExecute(msg, modelId, context);
+  async execute(msg: string, modelId: string, context?: string, imageData?: { data: string, mimeType: string }, configOverride?: any): Promise<StreamChunk> {
+    const it = this.streamExecute(msg, modelId, context, imageData, configOverride);
     let fullText = "";
     let finalChunk: StreamChunk = {};
     for await (const chunk of it) {
@@ -216,6 +224,7 @@ export class HanisahKernel {
   }
 
   private updateHistory(u: string, a: string) {
+    if (!u || !a) return; // Prevent empty history
     this.history.push({ role: 'user', content: u }, { role: 'assistant', content: a });
     if (this.history.length > 6) this.history = this.history.slice(-6);
   }

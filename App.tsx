@@ -44,7 +44,9 @@ const App: React.FC = () => {
   
   const [notes, setNotes] = useLocalStorage<Note[]>('notes', []);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
-  const [registryValid, setRegistryValid] = useState<boolean>(false);
+  // OPTIMISTIC INITIALIZATION: Start true to prevent "System Halt" flash on load.
+  // The useEffect below will verify and set to false if critical integrity fails.
+  const [registryValid, setRegistryValid] = useState<boolean>(true);
 
   // Neural Chat Global State
   const chatLogic = useChatLogic(notes, setNotes);

@@ -32,6 +32,14 @@ const FONTS = [
     { label: 'Serif', value: 'Playfair Display, serif' },
 ];
 
+const WRITER_SYSTEM_PROMPT = `
+[ROLE: HANISAH_WRITER_MODULE]
+You are an expert editor and writing assistant.
+Your task is to rewrite, edit, or generate text based ONLY on the user's instructions.
+DO NOT engage in small talk. DO NOT use the "Hanisah" persona (no "Sayang", no emojis unless requested).
+Output ONLY the requested text.
+`;
+
 const ToolbarButton: React.FC<{ onClick: (e: React.MouseEvent) => void; icon: React.ReactNode; isActive?: boolean; ariaLabel: string; className?: string; label?: string }> = ({ onClick, icon, isActive, ariaLabel, className, label }) => (
     <button 
         onMouseDown={(e) => { e.preventDefault(); onClick(e); }} 
@@ -311,7 +319,8 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
       const contextText = selectedText || editorRef.current?.innerText || "";
       const contextLabel = selectedText ? "SELECTED_TEXT" : "FULL_DOCUMENT";
       const prompt = `[ROLE: HANISAH_WRITER_MODULE] TASK: ${finalInstruction} CONTEXT (${contextLabel}): """${contextText}""" OUTPUT_DIRECTIVE: Return ONLY the revised/generated text. LANGUAGE_TARGET: ${TRANSLATIONS[currentLang].meta.label}`;
-      const response = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview', "Writer Assistant");
+      // Pass writer system prompt override to prevent persona leakage
+      const response = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview', "Writer Assistant", undefined, { systemInstruction: WRITER_SYSTEM_PROMPT });
       setHanisahResult(response.text || "Output generation failed.");
     } catch (error) {
       setHanisahResult("Neural processing error.");

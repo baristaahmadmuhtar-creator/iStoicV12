@@ -28,24 +28,22 @@ class StoicLogicKernel {
     const systemPrompt = HANISAH_BRAIN.getSystemInstruction('stoic', context);
     
     // FIX 404: If modelId is 'auto-best' (Omni-Race Virtual ID), map it to a concrete model.
-    // For Stoic persona, we default to the requested global default (Llama 3.3) for speed + reasoning.
     let effectiveModelId = modelId;
     if (effectiveModelId === 'auto-best') {
         effectiveModelId = 'llama-3.3-70b-versatile'; 
     }
 
     // Stoic Retry Logic: Try requested model, then fallback to Gemini Flash if it fails
+    // This helps mitigate 429 errors on Pro/Flash-8b by falling back to the standard, high-quota Flash model.
     const plan = [effectiveModelId, 'gemini-2.5-flash'];
     
     // Remove duplicates if effectiveModelId IS Flash
     if (effectiveModelId === 'gemini-2.5-flash') plan.pop();
 
     for (const currentModelId of plan) {
-        // SAFE FALLBACK: If lookup fails, default to a concrete model (Gemini Flash), NOT index 0 (which might be auto-best)
         let selectedModel = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-2.5-flash');
         
         if (!selectedModel) {
-             // If even Flash is missing from catalog (impossible), hardcode it to prevent crash
              selectedModel = { id: 'gemini-2.5-flash', name: 'Gemini Flash (Fallback)', category: 'GEMINI_2_5', provider: 'GEMINI', description: 'Fallback', specs: { context: '1M', speed: 'INSTANT', intelligence: 9 } };
         }
 
@@ -53,7 +51,6 @@ class StoicLogicKernel {
         const startTime = Date.now();
 
         if (!key) {
-            // If we can't get a key for the preferred model, skip to fallback loop iteration
             continue;
         }
 
@@ -65,10 +62,15 @@ class StoicLogicKernel {
             const config: any = { 
                 systemInstruction: systemPrompt, 
                 temperature: 0.1, // Stoic precision
-                tools: activeTools 
             };
 
-            // Only Gemini Pro models support 'thinkingConfig' properly
+            // FIX 400: Only add tools if array is not empty
+            if (activeTools.length > 0) {
+                config.tools = activeTools;
+            }
+
+            // Only Gemini Pro/Thinking models support 'thinkingConfig'.
+            // Do not use thinkingConfig with tools if the specific model version doesn't support it (2.5 Pro does).
             if (selectedModel.specs.speed === 'THINKING' || selectedModel.id.includes('pro')) {
                config.thinkingConfig = { thinkingBudget: 1024 }; 
             }
@@ -104,7 +106,6 @@ class StoicLogicKernel {
 
           } else {
             // Support for non-Gemini models (Groq, DeepSeek, etc.) via providerEngine
-            // This prevents Stoic from crashing if user selects Groq/DeepSeek
             const activeTools = this.getActiveTools();
             
             // Filter out Google Search if not Gemini, as others don't support it natively in this kernel structure
@@ -126,14 +127,16 @@ class StoicLogicKernel {
             return;
           }
         } catch (err: any) {
-          debugService.log('ERROR', 'STOIC_KERNEL', 'EXEC_FAIL', `Model ${selectedModel.id} failed: ${err.message}`);
+          debugService.log('ERROR', 'STOIC_KERNEL', 'EXEC_FAIL', `Model ${selectedModel.id} failed: ${JSON.stringify(err)}`);
           KEY_MANAGER.reportFailure(selectedModel.provider, err);
           
-          // If this was the last plan item, yield error
+          // If this was the last fallback in the plan, yield error
           if (currentModelId === plan[plan.length - 1]) {
-             yield { text: `\n\n> *The logical flow has been disrupted. We must pause.*`, metadata: { status: 'error' } };
+             const isRateLimit = JSON.stringify(err).includes('429');
+             const errMsg = isRateLimit ? "System capacity limits reached. Please wait." : "Logical flow disrupted.";
+             yield { text: `\n\n> *${errMsg}*`, metadata: { status: 'error' } };
           } else {
-             yield { text: `\n\n> *A temporary interruption. Re-aligning logic...*\n\n` };
+             yield { text: `\n\n> *Re-aligning logic stream...*\n\n` };
           }
         }
     }
@@ -141,8 +144,6 @@ class StoicLogicKernel {
 
   async execute(msg: string, modelId: string, context?: string): Promise<any> {
     const startTime = Date.now();
-    
-    // FIX 404: Virtual ID Resolution
     let effectiveModelId = modelId;
     if (effectiveModelId === 'auto-best') effectiveModelId = 'llama-3.3-70b-versatile';
 
@@ -160,8 +161,11 @@ class StoicLogicKernel {
         const config: any = { 
             systemInstruction: systemPrompt, 
             temperature: 0.1,
-            tools: activeTools 
         };
+
+        if (activeTools.length > 0) {
+            config.tools = activeTools;
+        }
 
         if (selectedModel.specs.speed === 'THINKING' || selectedModel.id.includes('pro')) {
            config.thinkingConfig = { thinkingBudget: 1024 }; 
@@ -192,6 +196,7 @@ class StoicLogicKernel {
           metadata: { provider: 'GEMINI', model: selectedModel.name, latency: Date.now() - startTime, status: 'success' as const }
         };
       }
+      // Basic fallback for non-streaming execution on other providers
       return { text: "Stoic connection is optimized for Gemini nodes only in non-streaming mode.", metadata: { status: 'error' as const } };
     } catch (err: any) {
       debugService.log('ERROR', 'STOIC_KERNEL', 'SYS-01', err.message);

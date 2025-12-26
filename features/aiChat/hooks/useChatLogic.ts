@@ -74,8 +74,8 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         setThreads(prev => prev.map(t => t.id === id ? { ...t, isPinned: !t.isPinned } : t));
     }, [setThreads]);
 
-    const sendMessage = async (e?: React.FormEvent, attachment?: { data: string, mimeType: string }) => {
-        const userMsg = input.trim();
+    const sendMessage = async (e?: React.FormEvent, attachment?: { data: string, mimeType: string }, textOverride?: string) => {
+        const userMsg = textOverride !== undefined ? textOverride : input.trim();
         // Allow empty message if there is an attachment
         if ((!userMsg && !attachment) || isLoading) return;
 
@@ -143,6 +143,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             updated: now 
         } : t));
         
+        // Reset input immediately
         setInput('');
         setIsLoading(true);
 
@@ -195,6 +196,11 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 } : t));
             }
 
+            // Fallback for empty responses (silent failures)
+            if (!accumulatedText && !currentFunctionCall) {
+                throw new Error("No data received from Neural Node.");
+            }
+
             if (isAutoSpeak && accumulatedText && !currentFunctionCall) {
                 speakWithHanisah(accumulatedText.replace(/[*#_`]/g, ''), personaMode === 'hanisah' ? 'Hanisah' : 'Fenrir');
             }
@@ -229,10 +235,11 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 }
             }
         } catch (err: any) {
+             console.error("Chat Execution Error:", err);
              setThreads(prev => prev.map(t => t.id === currentThreadId ? { 
                 ...t, 
                 messages: t.messages.map(m => m.id === modelMessageId ? {
-                    ...m, text: `⚠️ **CRITICAL KERNEL FAILURE**: Sistem tidak dapat memulihkan koneksi.\n\n_Manual Reboot Required._`, metadata: { status: 'error' }
+                    ...m, text: `⚠️ **SYSTEM FAILURE**: ${err.message || 'Connection terminated unexpectedly.'}`, metadata: { status: 'error' }
                 } : m)
             } : t));
         } finally {

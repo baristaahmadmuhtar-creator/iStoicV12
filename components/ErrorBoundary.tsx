@@ -1,5 +1,5 @@
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Terminal, ShieldAlert, ZapOff, Copy, Check } from 'lucide-react';
 import { debugService } from '../services/debugService';
 import { KEY_MANAGER } from '../services/geminiService';
@@ -21,7 +21,7 @@ interface State {
  * "Fokus pada apa yang ada di depan mata Anda sekarang." — Marcus Aurelius.
  * Menangani kegagalan sistem dengan ketenangan stoik.
  */
-export class ErrorBoundary extends Component<Props, State> {
+export class ErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,

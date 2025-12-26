@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, memo } from 'react';
-import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, Paperclip, X, Image as ImageIcon, Flame, Brain, CornerDownLeft, Clipboard, ShieldCheck, FileText, Square } from 'lucide-react';
+import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, Paperclip, X, Image as ImageIcon, Flame, Brain, CornerDownLeft, Clipboard, ShieldCheck, FileText, Square, Globe } from 'lucide-react';
 import { TRANSLATIONS, getLang } from '../../../services/i18n';
 import { debugService } from '../../../services/debugService';
 import { UI_REGISTRY, FN_REGISTRY } from '../../../constants/registry';
@@ -19,7 +19,9 @@ interface ChatInputProps {
   personaMode?: 'hanisah' | 'stoic';
   isVaultEnabled?: boolean;
   onTogglePersona?: () => void;
-  variant?: 'hero' | 'standard'; // Added variant prop definition from usage in AIChatView
+  variant?: 'hero' | 'standard';
+  isDeepSearchEnabled?: boolean;
+  onToggleDeepSearch?: () => void;
 }
 
 const MAX_CHARS = 4000;
@@ -38,7 +40,9 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   personaMode = 'hanisah',
   isVaultEnabled = true,
   onTogglePersona,
-  variant = 'standard'
+  variant = 'standard',
+  isDeepSearchEnabled = false,
+  onToggleDeepSearch
 }) => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -310,6 +314,15 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} accept="image/*" />
 
                 <div className="w-[1px] h-4 bg-black/10 dark:bg-white/10 mx-1"></div>
+
+                <button 
+                    onClick={onToggleDeepSearch}
+                    aria-label={isDeepSearchEnabled ? "Deep Search Active" : "Enable Deep Search"}
+                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${isDeepSearchEnabled ? 'text-blue-500 bg-blue-500/10 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
+                    title="Deep Search"
+                >
+                    <Globe size={16} />
+                </button>
 
                 <button 
                     onClick={onToggleVaultSync}

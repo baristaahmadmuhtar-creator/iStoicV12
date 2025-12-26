@@ -61,51 +61,52 @@ export const executeNeuralTool = async (
                 is_archived: false
             };
             setNotes([newNote, ...updatedNotes]);
-            return `SUCCESS: Catatan baru "${newNote.title}" telah dibuat. ID: ${newNote.id}`;
+            return `SUCCESS: Created note "${newNote.title}" (ID: ${newNote.id}).`;
         }
 
         if (action === 'UPDATE' && id) {
-            const noteExists = updatedNotes.some(n => n.id === id);
-            if (!noteExists) return `ERROR: Node ${id} tidak ditemukan.`;
+            const noteIndex = updatedNotes.findIndex(n => n.id === id);
+            if (noteIndex === -1) return `ERROR: Note ID ${id} not found.`;
 
             let actionStatus = "Updated";
-
-            updatedNotes = updatedNotes.map(n => {
-                if (n.id === id) {
-                    let noteTasks = [...(n.tasks || [])];
-                    
-                    if (taskAction === 'ADD' && taskContent) {
-                        noteTasks.push({ id: uuidv4(), text: taskContent, isCompleted: false, dueDate: taskDueDate });
-                        actionStatus = "Task added";
-                    } else if (taskAction === 'TOGGLE' && taskContent) {
-                        const targetTask = noteTasks.find(t => t.text.toLowerCase().includes(taskContent.toLowerCase()));
-                        if (targetTask) {
-                            targetTask.isCompleted = !targetTask.isCompleted;
-                            actionStatus = "Task toggled";
-                        }
-                    }
-
-                    return { 
-                        ...n, 
-                        title: title || n.title, 
-                        content: content || n.content, 
-                        tags: tags || n.tags,
-                        tasks: noteTasks, 
-                        updated: new Date().toISOString() 
-                    };
+            const note = updatedNotes[noteIndex];
+            
+            // Task Logic
+            let noteTasks = [...(note.tasks || [])];
+            if (taskAction === 'ADD' && taskContent) {
+                noteTasks.push({ id: uuidv4(), text: taskContent, isCompleted: false, dueDate: taskDueDate });
+                actionStatus = "Task added";
+            } else if (taskAction === 'TOGGLE' && taskContent) {
+                const targetTask = noteTasks.find(t => t.text.toLowerCase().includes(taskContent.toLowerCase()));
+                if (targetTask) {
+                    targetTask.isCompleted = !targetTask.isCompleted;
+                    actionStatus = "Task toggled";
                 }
-                return n;
-            });
+            }
+
+            // Safe Merge: Only update fields if provided in args
+            updatedNotes[noteIndex] = {
+                ...note,
+                title: title !== undefined ? title : note.title,
+                content: content !== undefined ? content : note.content,
+                tags: tags !== undefined ? tags : note.tags,
+                tasks: noteTasks,
+                updated: new Date().toISOString()
+            };
+            
             setNotes(updatedNotes);
-            return `SUCCESS: ${actionStatus} pada node ${id}.`;
+            return `SUCCESS: ${actionStatus} on note "${updatedNotes[noteIndex].title}".`;
         }
 
         if (action === 'APPEND' && id && appendContent) {
             const noteIndex = updatedNotes.findIndex(n => n.id === id);
-            if (noteIndex === -1) return `ERROR: Node ${id} tidak ditemukan.`;
+            if (noteIndex === -1) return `ERROR: Note ID ${id} not found.`;
             
             const note = updatedNotes[noteIndex];
-            const newContent = note.content ? `${note.content}\n\n${appendContent}` : appendContent;
+            // Intelligent spacing for append
+            const newContent = note.content 
+                ? `${note.content}\n\n${appendContent}` 
+                : appendContent;
             
             updatedNotes[noteIndex] = {
                 ...note,
@@ -113,12 +114,12 @@ export const executeNeuralTool = async (
                 updated: new Date().toISOString()
             };
             setNotes(updatedNotes);
-            return `SUCCESS: Konten ditambahkan ke catatan "${note.title}".`;
+            return `SUCCESS: Appended content to "${note.title}".`;
         }
 
         if (action === 'DELETE' && id) {
             setNotes(updatedNotes.filter(n => n.id !== id));
-            return `SUCCESS: Node data ${id} telah dihapus permanen.`;
+            return `SUCCESS: Note ${id} deleted permanently.`;
         }
     }
 
@@ -131,19 +132,31 @@ export const executeNeuralTool = async (
             n.tags?.some(t => t.toLowerCase().includes(query))
         ).slice(0, 5); // Limit results to top 5
 
-        if (matches.length === 0) return "SEARCH_RESULT: Tidak ada catatan yang cocok.";
+        if (matches.length === 0) return "SEARCH_RESULT: No matching notes found.";
 
         const resultStr = matches.map(n => 
-            `- ID: ${n.id}\n  Title: ${n.title}\n  Snippet: ${n.content.slice(0, 100)}...`
+            `- ID: ${n.id}\n  Title: ${n.title}\n  Snippet: ${n.content.slice(0, 100).replace(/\n/g, ' ')}...`
         ).join('\n');
 
-        return `SEARCH_RESULT:\n${resultStr}\n\n(Gunakan tool 'read_note' dengan ID untuk membaca selengkapnya)`;
+        return `SEARCH_RESULT:\n${resultStr}\n\n(Use 'read_note' with ID to see full content)`;
     }
 
     if (name === 'read_note') {
         const note = notes.find(n => n.id === args.id);
-        if (!note) return "ERROR: Catatan tidak ditemukan.";
-        return `NOTE_CONTENT (ID: ${note.id}):\nTitle: ${note.title}\nFull Content:\n${note.content}\nTags: ${note.tags?.join(', ')}`;
+        if (!note) return "ERROR: Note ID not found.";
+        
+        // Clean HTML tags for AI consumption if content contains HTML
+        const cleanContent = note.content.replace(/<[^>]*>/g, '');
+        const tasksStr = note.tasks?.map(t => `[${t.isCompleted ? 'x' : ' '}] ${t.text}`).join('\n') || "No tasks";
+
+        return JSON.stringify({
+            id: note.id,
+            title: note.title,
+            content: cleanContent,
+            tags: note.tags,
+            tasks: tasksStr,
+            last_updated: note.updated
+        }, null, 2);
     }
 
     // --- 3. DEEP SEARCH (The Bridge) ---
@@ -154,7 +167,7 @@ export const executeNeuralTool = async (
     // --- 4. VISUAL GENERATION ---
     if (name === 'generate_visual') {
         const imgUrl = await generateImage(args.prompt);
-        return imgUrl ? `!!IMG:[${args.prompt}]!!` : "ERROR: Gagal mensintesis visual.";
+        return imgUrl ? `!!IMG:[${args.prompt}]!!` : "ERROR: Failed to synthesize visual.";
     }
 
     // --- 5. SYSTEM MECHANIC ---

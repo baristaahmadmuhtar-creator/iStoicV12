@@ -5,7 +5,7 @@ import useLocalStorage from '../../hooks/useLocalStorage';
 import { 
   Radio, ChevronDown, Flame, Brain, ArrowRight, Palette, Code, 
   GraduationCap, Lightbulb, History, Layers, Infinity, ArrowDown,
-  Terminal
+  Terminal, Sparkles as SparklesIcon
 } from 'lucide-react';
 
 import { useNeuralLinkSession } from './hooks/useNeuralLinkSession';
@@ -30,32 +30,36 @@ const SuggestionCard: React.FC<{
     desc: string, 
     onClick: () => void, 
     className?: string, 
-    accent?: string 
-}> = ({ icon, label, desc, onClick, className, accent = "text-neutral-400 group-hover:text-accent" }) => (
+    accent?: string,
+    delay?: number
+}> = ({ icon, label, desc, onClick, className, accent = "text-neutral-400 group-hover:text-accent", delay = 0 }) => (
     <button 
         onClick={onClick}
+        style={{ animationDelay: `${delay}ms` }}
         className={`
             relative overflow-hidden group 
-            bg-white/60 dark:bg-white/[0.03] backdrop-blur-xl
+            bg-white/60 dark:bg-[#0f0f11]/60 backdrop-blur-xl
             border border-black/5 dark:border-white/5
             rounded-[24px] p-5 text-left 
-            transition-all duration-300 ease-out
-            hover:bg-white/80 dark:hover:bg-white/[0.06]
-            hover:border-accent/30 hover:shadow-[0_15px_30px_-10px_rgba(var(--accent-rgb),0.15)]
+            transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]
+            hover:bg-white dark:hover:bg-white/[0.08]
+            hover:border-accent/30 hover:shadow-[0_10px_30px_-10px_rgba(var(--accent-rgb),0.15)]
             hover:-translate-y-1 active:scale-[0.98]
-            flex flex-col justify-between h-full min-h-[140px]
+            flex flex-col justify-between h-full min-h-[130px]
             animate-slide-up ring-1 ring-transparent hover:ring-accent/10
             ${className}
         `}
     >
+        <div className="absolute inset-0 bg-gradient-to-br from-transparent to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+        
         <div className="relative z-10 w-full flex flex-col h-full">
             <div className="mb-auto flex justify-between items-start">
-                <div className={`w-10 h-10 rounded-[14px] bg-zinc-50 dark:bg-white/5 flex items-center justify-center transition-all duration-500 group-hover:scale-110 ${accent} group-hover:bg-accent/10 border border-black/5 dark:border-white/5 shadow-sm`}>
+                <div className={`w-10 h-10 rounded-2xl bg-zinc-50 dark:bg-white/5 flex items-center justify-center transition-all duration-500 group-hover:scale-110 ${accent} group-hover:bg-accent/10 border border-black/5 dark:border-white/5 shadow-sm`}>
                     {React.cloneElement(icon as React.ReactElement<any>, { size: 18, strokeWidth: 2 })}
                 </div>
-                <ArrowRight size={14} className="text-accent/50 -rotate-45 group-hover:rotate-0 transition-transform opacity-0 group-hover:opacity-100" />
+                <ArrowRight size={14} className="text-accent/50 -rotate-45 group-hover:rotate-0 transition-transform duration-300 opacity-0 group-hover:opacity-100" />
             </div>
-            <div className="mt-4 space-y-1.5">
+            <div className="mt-4 space-y-1">
                 <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-700 dark:text-neutral-300 group-hover:text-accent transition-colors">{label}</h4>
                 <p className="text-[10px] text-neutral-500 font-medium leading-relaxed line-clamp-2 pr-2 opacity-80 group-hover:opacity-100">{desc}</p>
             </div>
@@ -86,14 +90,16 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         personaMode,
         handleNewChat,
         sendMessage,
-        stopGeneration, // Destructured here
+        stopGeneration, 
         togglePinThread,
         renameThread,
         isVaultSynced,
         setIsVaultSynced,
         isVaultConfigEnabled, 
         setIsLiveModeActive,
-        setGlobalModelId 
+        setGlobalModelId,
+        isDeepSearchEnabled,
+        setIsDeepSearchEnabled
     } = chatLogic;
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -111,6 +117,13 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     useEffect(() => {
         if (setIsLiveModeActive) setIsLiveModeActive(isLiveMode);
     }, [isLiveMode, setIsLiveModeActive]);
+
+    useEffect(() => {
+        if (!isLiveLinkEnabled && isLiveMode) {
+            console.warn("Live Link feature disabled by system. Terminating session.");
+            toggleLiveMode();
+        }
+    }, [isLiveLinkEnabled, isLiveMode, toggleLiveMode]);
 
     const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
         if (messagesEndRef.current) {
@@ -183,14 +196,13 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         changePersona(target);
     };
 
-    // CRITICAL: Robust empty state check.
     const showEmptyState = !isLoading && (!activeThreadId || !activeThread || activeThread.messages.length <= 1);
     
     const isHydraActive = activeModel?.id === 'auto-best';
     const effectiveModelName = isHydraActive ? 'HYDRA_OMNI (MELSA)' : (activeModel?.name || 'GEMINI PRO');
 
     const personaColor = personaMode === 'hanisah' ? 'text-orange-500' : 'text-cyan-500';
-    const personaGlow = personaMode === 'hanisah' ? 'from-orange-500/20 to-pink-500/5' : 'from-cyan-500/20 to-blue-500/5';
+    const personaGlow = personaMode === 'hanisah' ? 'from-orange-500/20 via-pink-500/5 to-transparent' : 'from-cyan-500/20 via-blue-500/5 to-transparent';
     const personaBorder = personaMode === 'hanisah' ? 'border-orange-500/20' : 'border-cyan-500/20';
 
     return (
@@ -203,15 +215,15 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
 
             <div className={`fixed inset-0 bg-gradient-to-b ${personaGlow} pointer-events-none transition-all duration-1000 opacity-20`}></div>
 
-            <div className={`flex-1 flex flex-col relative z-10 w-full max-w-[1000px] mx-auto transition-all duration-500 ${isMobileNavVisible ? 'pb-36' : 'pb-32'}`}>
+            <div className={`flex-1 flex flex-col relative z-10 w-full max-w-5xl mx-auto transition-all duration-500 ${isMobileNavVisible ? 'pb-36' : 'pb-32'}`}>
                 
                 {/* 1. HUD HEADER */}
                 <div className="sticky top-4 z-40 w-full px-4 flex justify-center pointer-events-none">
                     <div className={`
-                        pointer-events-auto backdrop-blur-xl border rounded-full p-1.5 pl-2 pr-1.5 flex items-center justify-between gap-3 shadow-lg ring-1 transition-all duration-500
+                        pointer-events-auto backdrop-blur-xl border rounded-full p-1.5 pl-2 pr-1.5 flex items-center justify-between gap-3 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.1)] ring-1 transition-all duration-500
                         ${isHydraActive 
                             ? 'bg-black/80 dark:bg-zinc-900/80 border-emerald-500/30 ring-emerald-500/20 shadow-emerald-500/10' 
-                            : 'bg-white/80 dark:bg-[#0f0f11]/80 border-white/20 dark:border-white/10 ring-white/20 shadow-2xl'
+                            : 'bg-white/80 dark:bg-[#0f0f11]/80 border-white/40 dark:border-white/10 ring-black/5 dark:ring-white/5'
                         }
                     `}>
                         <button 
@@ -232,11 +244,11 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                 }
                             </div>
                             <div className="flex flex-col overflow-hidden text-left">
-                                <span className={`text-[8px] font-black uppercase tracking-widest leading-none mb-0.5 ${isHydraActive ? 'text-emerald-500' : 'text-neutral-500 group-hover:text-black dark:group-hover:text-white transition-colors'}`}>
+                                <span className={`text-[7px] font-black uppercase tracking-widest leading-none mb-0.5 ${isHydraActive ? 'text-emerald-500' : 'text-neutral-500 group-hover:text-black dark:group-hover:text-white transition-colors'}`}>
                                     {isHydraActive ? 'HYDRA_OMNI' : `${personaMode.toUpperCase()}`}
                                 </span>
                                 <div className="flex items-center gap-1">
-                                    <span className="text-[10px] font-bold uppercase leading-none max-w-[120px] sm:max-w-[160px] truncate text-black dark:text-white">
+                                    <span className="text-[10px] font-bold uppercase leading-none max-w-[100px] sm:max-w-[160px] truncate text-black dark:text-white">
                                         {effectiveModelName}
                                     </span>
                                     <ChevronDown size={10} className="text-neutral-400 shrink-0 opacity-50 group-hover:opacity-100" />
@@ -244,15 +256,15 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                             </div>
                         </button>
 
-                        <div className="h-6 w-[1px] bg-black/5 dark:bg-white/10"></div>
+                        <div className="h-5 w-[1px] bg-black/5 dark:bg-white/10"></div>
 
                         <div className="flex items-center gap-1 shrink-0">
                             <button 
                                 onClick={handleHistoryOpen}
-                                className="w-9 h-9 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-neutral-400 hover:text-black dark:hover:text-white transition-all flex items-center justify-center active:scale-95"
+                                className="w-9 h-9 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-neutral-400 hover:text-black dark:hover:text-white transition-all flex items-center justify-center active:scale-95 group"
                                 title="Neural Logs"
                             >
-                                <History size={16} strokeWidth={2} />
+                                <History size={16} strokeWidth={2} className="group-hover:rotate-12 transition-transform" />
                             </button>
 
                             <button 
@@ -274,33 +286,36 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                 </div>
 
                 {/* 2. CHAT AREA */}
-                <div className="flex-1 w-full relative min-h-0 flex flex-col px-4 md:px-0 mt-4">
+                <div className="flex-1 w-full relative min-h-0 flex flex-col px-4 md:px-0 mt-2">
                     {showEmptyState ? (
                         <div className="flex flex-col h-full justify-center w-full pb-20 pt-8 animate-fade-in">
                             <div className="flex flex-col items-center text-center mb-10 relative">
                                 <button 
                                     onClick={togglePersona}
-                                    className={`relative w-28 h-28 mb-8 flex items-center justify-center group cursor-pointer active:scale-95 transition-transform duration-300`}
+                                    className={`relative w-24 h-24 md:w-28 md:h-28 mb-6 md:mb-8 flex items-center justify-center group cursor-pointer active:scale-95 transition-transform duration-300`}
                                 >
-                                    <div className={`absolute inset-0 rounded-[32px] bg-gradient-to-br opacity-20 blur-xl group-hover:opacity-40 transition-opacity duration-500 ${personaMode === 'hanisah' ? 'from-orange-500 to-pink-500' : 'from-cyan-500 to-blue-500'}`}></div>
-                                    <div className={`relative w-full h-full rounded-[32px] flex items-center justify-center shadow-2xl border bg-white/50 dark:bg-white/5 backdrop-blur-xl transition-all duration-500 group-hover:rotate-3 ${personaBorder} ${personaColor}`}>
-                                        {personaMode === 'hanisah' ? <Flame size={48} strokeWidth={1.5} /> : <Brain size={48} strokeWidth={1.5} />}
+                                    <div className={`absolute inset-0 rounded-[32px] bg-gradient-to-br opacity-30 blur-2xl group-hover:opacity-50 transition-opacity duration-500 ${personaMode === 'hanisah' ? 'from-orange-500 to-pink-500' : 'from-cyan-500 to-blue-500'}`}></div>
+                                    <div className={`relative w-full h-full rounded-[32px] flex items-center justify-center shadow-2xl border bg-white dark:bg-[#0f0f11] backdrop-blur-xl transition-all duration-500 group-hover:rotate-3 ${personaBorder} ${personaColor}`}>
+                                        {personaMode === 'hanisah' ? <Flame size={40} strokeWidth={1.5} className="md:w-12 md:h-12" /> : <Brain size={40} strokeWidth={1.5} className="md:w-12 md:h-12" />}
+                                    </div>
+                                    <div className="absolute -bottom-2 px-3 py-1 bg-black/80 dark:bg-white/10 backdrop-blur-md rounded-full text-[8px] font-black text-white uppercase tracking-widest border border-white/10 opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+                                        SWITCH_CORE
                                     </div>
                                 </button>
 
-                                <h2 className="text-5xl md:text-7xl font-black italic tracking-tighter text-black dark:text-white mb-3 uppercase leading-none drop-shadow-sm select-none">
+                                <h2 className="text-4xl sm:text-5xl md:text-7xl font-black italic tracking-tighter text-black dark:text-white mb-2 uppercase leading-none drop-shadow-sm select-none">
                                     {personaMode === 'hanisah' ? 'HANISAH' : 'STOIC'} <span className="text-transparent bg-clip-text bg-gradient-to-r from-neutral-400 to-neutral-600">OS</span>
                                 </h2>
                                 
-                                <div className="flex items-center gap-3 px-4 py-1.5 rounded-full border border-black/5 dark:border-white/5 bg-white/50 dark:bg-white/5 backdrop-blur-sm mb-8">
-                                    <span className={`w-1.5 h-1.5 rounded-full ${personaMode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500'} animate-pulse shadow-[0_0_8px_currentColor]`}></span>
+                                <div className="flex items-center gap-2 mb-8 opacity-70">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${personaMode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500'} animate-pulse`}></span>
                                     <p className="text-[9px] tech-mono font-bold text-neutral-500 uppercase tracking-[0.25em]">
                                         {personaMode === 'hanisah' ? 'HEURISTIC_ENGINE_READY' : 'LOGIC_KERNEL_ACTIVE'}
                                     </p>
                                 </div>
 
                                 {/* HERO INPUT (Replaces Fixed Footer in Empty State) */}
-                                <div className="w-full max-w-2xl px-4 animate-slide-up" style={{ animationDelay: '100ms' }}>
+                                <div className="w-full max-w-2xl px-4 animate-slide-up relative z-20" style={{ animationDelay: '100ms' }}>
                                     <ChatInput 
                                         input={input}
                                         setInput={setInput}
@@ -316,18 +331,21 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                         isVaultEnabled={isVaultConfigEnabled}
                                         onTogglePersona={() => changePersona(personaMode === 'hanisah' ? 'stoic' : 'hanisah')}
                                         variant="hero"
+                                        isDeepSearchEnabled={isDeepSearchEnabled}
+                                        onToggleDeepSearch={() => setIsDeepSearchEnabled(!isDeepSearchEnabled)}
                                     />
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 w-full max-w-4xl mx-auto px-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full max-w-5xl mx-auto px-4">
                                 <SuggestionCard 
-                                    icon={<Palette />} 
+                                    icon={<SparklesIcon />} 
                                     label="VISUAL_SYNTHESIS" 
-                                    desc="Generate visuals with Imagen 3." 
+                                    desc="Generate high-fidelity visuals." 
                                     onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'GEN_IMG'); setInput("Generate a futuristic cyberpunk city with neon lights."); }} 
                                     className="col-span-1"
                                     accent="text-pink-500"
+                                    delay={150}
                                 />
                                 <SuggestionCard 
                                     icon={<Code />} 
@@ -336,6 +354,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                     onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'CODE_AUDIT'); setInput("Analyze this algorithm for complexity: [Paste Code]"); }} 
                                     className="col-span-1"
                                     accent="text-emerald-500"
+                                    delay={200}
                                 />
                                 <SuggestionCard 
                                     icon={<Layers />} 
@@ -344,6 +363,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                     onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'VAULT_SYNC'); setInput("Summarize my active vault entries."); }} 
                                     className="col-span-1"
                                     accent="text-blue-500"
+                                    delay={250}
                                 />
                                 <SuggestionCard 
                                     icon={<GraduationCap />} 
@@ -352,6 +372,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                     onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'STOIC_AUDIT'); setInput("Help me approach this problem stoically."); }} 
                                     className="col-span-1"
                                     accent="text-amber-500"
+                                    delay={300}
                                 />
                             </div>
                         </div>
@@ -399,6 +420,8 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                 isVaultEnabled={isVaultConfigEnabled}
                                 onTogglePersona={() => changePersona(personaMode === 'hanisah' ? 'stoic' : 'hanisah')}
                                 variant="standard"
+                                isDeepSearchEnabled={isDeepSearchEnabled}
+                                onToggleDeepSearch={() => setIsDeepSearchEnabled(!isDeepSearchEnabled)}
                             />
                         </div>
                     </div>

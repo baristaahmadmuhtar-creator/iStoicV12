@@ -21,6 +21,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isLiveModeActive, setIsLiveModeActive] = useState(false);
+    const [isDeepSearchEnabled, setIsDeepSearchEnabled] = useState(false);
 
     // PERSISTENT REF: To prevent race condition during thread creation
     const pendingThreadId = useRef<string | null>(null);
@@ -71,6 +72,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         
         setThreads(prev => [newThread, ...prev]);
         setActiveThreadId(newId);
+        setIsDeepSearchEnabled(false); // Reset search on new chat
         
         console.debug(`[CHAT_LOGIC] New session created: ${newId} (Persona: ${persona})`);
         return newThread;
@@ -103,7 +105,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         // DIAGNOSTIC LOG START
         const transmissionId = uuidv4().slice(0,8);
         console.group(`🧠 NEURAL_LINK_TRANSMISSION: ${transmissionId}`);
-        console.log("Payload:", { userMsg, attachment: !!attachment, model: activeModel.id });
+        console.log("Payload:", { userMsg, attachment: !!attachment, model: activeModel.id, deepSearch: isDeepSearchEnabled });
 
         // 1. ATOMIC SESSION INITIALIZATION
         if (!targetId || !targetThread) {
@@ -162,13 +164,16 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             }
 
             const kernel = personaMode === 'hanisah' ? HANISAH_KERNEL : STOIC_KERNEL;
-            // Updated to pass signal via configOverride or direct arg if refactored, currently simulating abort by breaking loop + network abort
+            
             const stream = kernel.streamExecute(
                 userMsg || "Proceed with attachment analysis.", 
                 activeModel.id, 
                 noteContext, 
                 attachment,
-                { signal } // Pass signal to kernel config
+                { 
+                    signal,
+                    deepSearch: isDeepSearchEnabled // Pass the toggle state
+                } 
             );
             
             let accumulatedText = "";
@@ -185,12 +190,11 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                     chunkCount++;
                 }
 
-                // HANDLE TOOL CALLS (Fix for Empty Response error)
+                // HANDLE TOOL CALLS
                 if (chunk.functionCall) {
                     const toolName = chunk.functionCall.name;
                     console.log(`[${transmissionId}] Tool Call Detected: ${toolName}`);
                     
-                    // Display tool execution in chat
                     accumulatedText += `\n\n> ⚙️ **EXECUTING:** ${toolName.replace(/_/g, ' ').toUpperCase()}...\n`;
                     
                     try {
@@ -202,7 +206,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                     chunkCount++;
                 }
 
-                // Periodic UI update to reduce render thrashing but keep it responsive
+                // Periodic UI update
                 setThreads(prev => prev.map(t => t.id === targetId ? {
                     ...t,
                     messages: t.messages.map(m => m.id === modelMessageId ? {
@@ -237,9 +241,8 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
             if (err.message === "ABORTED_BY_USER" || err.name === "AbortError") {
                 errorText = `\n\n> 🛑 **INTERRUPTED**: _Stream halted by operator._`;
-                status = 'success'; // Treat manual stop as a valid state, not an error state
+                status = 'success';
                 
-                // Append text instead of replacing if we have some content
                 setThreads(prev => prev.map(t => t.id === targetId ? {
                     ...t,
                     messages: t.messages.map(m => m.id === modelMessageId ? {
@@ -248,7 +251,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                         metadata: { ...m.metadata, status: 'success' }
                     } : m)
                 } : t));
-                return; // Exit early
+                return; 
             }
             
             setThreads(prev => prev.map(t => t.id === targetId ? { 
@@ -276,6 +279,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         isVaultConfigEnabled: vaultEnabled,
         isAutoSpeak, setIsAutoSpeak,
         isLiveModeActive, setIsLiveModeActive, 
+        isDeepSearchEnabled, setIsDeepSearchEnabled, // Export Search State
         input, setInput,
         isLoading,
         activeModel,
@@ -285,6 +289,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         renameThread,
         togglePinThread,
         sendMessage,
-        stopGeneration // Exported function
+        stopGeneration 
     };
 };

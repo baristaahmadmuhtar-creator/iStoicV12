@@ -13,7 +13,8 @@ import { type LogEntry } from '../../types';
 import Markdown from 'react-markdown';
 import { executeMechanicTool } from '../mechanic/mechanicTools';
 import { IntegrityMatrix } from './components/IntegrityMatrix';
-import { useFeatures } from '../../contexts/FeatureContext'; // Updated Import
+import { useFeatures } from '../../contexts/FeatureContext';
+import useLocalStorage from '../../hooks/useLocalStorage';
 
 // --- HELPER: JSON TREE VIEW ---
 const JsonTree: React.FC<{ data: any; level?: number }> = ({ data, level = 0 }) => {
@@ -66,7 +67,10 @@ export const SystemHealthView: React.FC = () => {
     const [logFilter, setLogFilter] = useState<string>('ALL');
     const [logSearch, setLogSearch] = useState<string>('');
     const [isAutoScroll, setIsAutoScroll] = useState(true);
-    const [isStreamFrozen, setIsStreamFrozen] = useState(false); // TRUE PAUSE STATE
+    
+    // PERSISTENT STREAM FREEZE STATE
+    const [isStreamFrozen, setIsStreamFrozen] = useLocalStorage<boolean>('kernel_stream_paused', false);
+    
     const [cliInput, setCliInput] = useState('');
     const logEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -127,17 +131,17 @@ export const SystemHealthView: React.FC = () => {
 
     // --- REALTIME & STREAM CONTROL LOGIC ---
     useEffect(() => {
-        // 1. Log Subscription with Freeze Capability
+        // 1. Initial Data Fetch (Always load current state on mount)
+        setLogs(debugService.getLogs()); 
+        calcStorage();
+        updateStorageList();
+
+        // 2. Log Subscription with Freeze Capability
         const unsubscribeLogs = debugService.subscribe((newLogs) => {
             if (!isStreamFrozen) {
                 setLogs(newLogs);
             }
         });
-
-        // 2. Initial Data Fetch
-        setLogs(debugService.getLogs()); // Ensure logs are loaded immediately
-        calcStorage();
-        updateStorageList();
         
         // 3. Auto Diagnostics Interval (Strict Toggle Control)
         let diagInterval: any = null;
@@ -153,23 +157,19 @@ export const SystemHealthView: React.FC = () => {
                 setProviders(KEY_MANAGER.getAllProviderStatuses());
                 calcStorage();
             }, 3000);
-        } else {
-            // Clear data visualization if OFF (Optional: user preference to see stale or clear)
-            // Here we keep stale data but stop updating
         }
 
         return () => { 
             unsubscribeLogs();
             if (diagInterval) clearInterval(diagInterval);
         };
-    }, [features.AUTO_DIAGNOSTICS, isStreamFrozen]); // Dependencies ensure real-time reaction
+    }, [features.AUTO_DIAGNOSTICS, isStreamFrozen]); 
 
     // Toggle Freeze Logic
     const toggleStreamFreeze = () => {
         if (isStreamFrozen) {
             // Unfreezing: Immediately sync with latest backend logs
             setLogs(debugService.getLogs());
-            // Optional: Re-enable autoscroll when unfreezing for UX
             setIsAutoScroll(true);
         }
         setIsStreamFrozen(!isStreamFrozen);

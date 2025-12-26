@@ -10,7 +10,8 @@ import {
     Clock, ShieldCheck, ShieldAlert, PowerOff, Database, HardDrive, 
     Server, Globe, Key, Sparkles, Box
 } from 'lucide-react';
-import { useFeatures } from '../contexts/FeatureContext'; // Import Feature Context
+import { useFeatures } from '../contexts/FeatureContext';
+import useLocalStorage from '../hooks/useLocalStorage';
 
 // --- HELPER: JSON TREE VIEW ---
 const JsonTree: React.FC<{ data: any; level?: number }> = ({ data, level = 0 }) => {
@@ -67,12 +68,15 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
     
     // UX States
     const [isExpanded, setIsExpanded] = useState(false);
-    const [isAutoScroll, setIsAutoScroll] = useState(true);
+    
+    // PERSISTENT PAUSE STATE
+    const [isFrozen, setIsFrozen] = useLocalStorage<boolean>('debug_console_frozen', false);
+    
     const [cliInput, setCliInput] = useState('');
     const bottomRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-    const { features } = useFeatures(); // Get Feature Flags
+    const { features } = useFeatures();
 
     // Initial Data Load
     useEffect(() => {
@@ -84,26 +88,26 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
         
         let statInterval: any = null;
 
-        // Respect AUTO_DIAGNOSTICS flag
         if (features.AUTO_DIAGNOSTICS) {
             statInterval = setInterval(() => {
                 setHealth(debugService.getSystemHealth());
                 setProviderStatuses(KEY_MANAGER.getAllProviderStatuses());
             }, 1000);
         } else {
-            // One-time fetch if auto polling is disabled
             setHealth(debugService.getSystemHealth());
         }
 
         const sub = debugService.subscribe((newLogs) => {
-            setLogs(newLogs);
+            if (!isFrozen) {
+                setLogs(newLogs);
+            }
         });
 
         return () => {
             if (statInterval) clearInterval(statInterval);
             sub();
         };
-    }, [isOpen, features.AUTO_DIAGNOSTICS]);
+    }, [isOpen, features.AUTO_DIAGNOSTICS, isFrozen]);
 
     const updateStorageList = () => {
         const keys = Object.keys(localStorage).filter(k => k.startsWith('app_') || k === 'chat_threads' || k === 'notes' || k.includes('config') || k.includes('voice'));
@@ -120,12 +124,12 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
         }
     };
 
-    // Auto-scroll logic
+    // Auto-scroll logic (Active only when NOT frozen)
     useEffect(() => {
-        if (isAutoScroll && activeTab === 'STREAM' && bottomRef.current) {
+        if (!isFrozen && activeTab === 'STREAM' && bottomRef.current) {
             bottomRef.current.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [logs, isAutoScroll, activeTab]);
+    }, [logs, isFrozen, activeTab]);
 
     const handleCLI = (e: React.FormEvent) => {
         e.preventDefault();
@@ -186,7 +190,7 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
             {/* HEADER */}
             <header className="h-14 px-4 flex items-center justify-between border-b border-white/10 bg-white/[0.02] shrink-0 relative z-20">
                 <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-[var(--accent-color)] animate-pulse shadow-[0_0_10px_var(--accent-color)]"></div>
+                    <div className={`w-2 h-2 rounded-full ${isFrozen ? 'bg-amber-500' : 'bg-[var(--accent-color)] animate-pulse'} shadow-[0_0_10px_currentColor]`}></div>
                     <span className="text-[10px] font-black tracking-[0.3em] uppercase text-white">
                         KERNEL_DEBUG <span className="text-[var(--accent-color)]">v13.5</span>
                     </span>
@@ -225,7 +229,7 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
                 {activeTab === 'STREAM' && (
                     <div className="flex flex-col h-full">
                         {/* Toolbar */}
-                        <div className="p-2 border-b border-white/5 flex gap-2 shrink-0">
+                        <div className="p-2 border-b border-white/5 flex gap-2 shrink-0 bg-white/[0.02]">
                             <div className="relative flex-1">
                                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-neutral-600" size={12} />
                                 <input 
@@ -247,10 +251,11 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
                                 <option value="TRACE">NETWORK</option>
                             </select>
                             <button 
-                                onClick={() => setIsAutoScroll(!isAutoScroll)} 
-                                className={`p-1.5 rounded-lg border transition-all ${!isAutoScroll ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' : 'border-white/5 text-neutral-600 hover:text-white'}`}
+                                onClick={() => setIsFrozen(!isFrozen)} 
+                                className={`p-1.5 rounded-lg border transition-all ${isFrozen ? 'bg-amber-500/20 border-amber-500 text-amber-500' : 'border-white/5 text-neutral-600 hover:text-white'}`}
+                                title={isFrozen ? "Resume Stream" : "Pause Stream"}
                             >
-                                {isAutoScroll ? <Pause size={14} /> : <Play size={14} />}
+                                {isFrozen ? <Play size={14} /> : <Pause size={14} />}
                             </button>
                             <button onClick={() => debugService.clear()} className="p-1.5 rounded-lg border border-white/5 text-neutral-600 hover:text-red-500 hover:border-red-500/30 transition-all">
                                 <Trash2 size={14} />
@@ -258,7 +263,7 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
                         </div>
 
                         {/* Logs */}
-                        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-2 space-y-1 custom-scroll">
+                        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-2 space-y-1 custom-scroll relative">
                             {filteredLogs.map((log) => (
                                 <div key={log.id} className="p-3 rounded-lg border border-white/5 hover:border-white/10 bg-white/[0.01] hover:bg-white/[0.03] transition-colors group">
                                     <div className="flex items-center gap-2 mb-1">
@@ -277,6 +282,11 @@ export const DebugConsole: React.FC<{ isOpen: boolean; onClose: () => void }> = 
                                     )}
                                 </div>
                             ))}
+                            {isFrozen && (
+                                <div className="sticky bottom-0 left-0 right-0 p-2 bg-amber-900/40 text-amber-500 text-[9px] font-black uppercase text-center border-t border-amber-500/30 backdrop-blur-md">
+                                    STREAM PAUSED - {debugService.getLogs().length - logs.length} NEW LOGS HIDDEN
+                                </div>
+                            )}
                             <div ref={bottomRef} />
                         </div>
                     </div>

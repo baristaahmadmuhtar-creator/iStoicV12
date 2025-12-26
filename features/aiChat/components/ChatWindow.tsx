@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { 
     Flame, Brain, ExternalLink, Sparkles, Cpu, Zap, Box, Globe, 
     Copy, Check, ChevronDown, Wind, CircuitBoard, ArrowRight,
-    Terminal, Clock, Image as ImageIcon, RefreshCw, Search
+    Terminal, Clock, Image as ImageIcon, RefreshCw, Search, MessagesSquare
 } from 'lucide-react';
 import { type ChatMessage } from '../../../types';
 import { generateImage } from '../../../services/geminiService';
@@ -36,33 +36,33 @@ const ThinkingAccordion = ({ content, isActive }: { content: string, isActive?: 
     useEffect(() => { if (isActive) setIsExpanded(true); }, [isActive]);
 
     return (
-        <div className={`my-3 rounded-xl overflow-hidden border transition-all duration-500 w-full group/thought ${
+        <div className={`my-2 rounded-xl overflow-hidden border transition-all duration-500 w-full group/thought ${
             isActive 
-            ? 'border-indigo-500/30 bg-indigo-500/5 shadow-[0_0_20px_rgba(99,102,241,0.1)]' 
-            : 'border-black/5 dark:border-white/5 bg-zinc-50/50 dark:bg-white/[0.02]'
+            ? 'border-indigo-500/30 bg-indigo-500/5 shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
+            : 'border-black/5 dark:border-white/5 bg-zinc-50/30 dark:bg-white/[0.02]'
         }`}>
             <button 
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="w-full flex items-center justify-between px-4 py-2.5 transition-colors cursor-pointer hover:bg-black/5 dark:hover:bg-white/5"
+                className="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer hover:bg-black/5 dark:hover:bg-white/5"
             >
-                <div className="flex items-center gap-3">
-                    <div className={`p-1.5 rounded-lg ${isActive ? 'bg-indigo-500/20 text-indigo-400 animate-pulse' : 'bg-black/5 dark:bg-white/10 text-neutral-500'}`}>
+                <div className="flex items-center gap-2.5">
+                    <div className={`p-1 rounded-md ${isActive ? 'bg-indigo-500/20 text-indigo-400 animate-pulse' : 'bg-black/5 dark:bg-white/10 text-neutral-500'}`}>
                         <CircuitBoard size={12} />
                     </div>
-                    <div className="flex flex-col items-start">
+                    <div className="flex items-baseline gap-2">
                         <span className={`text-[9px] font-black uppercase tracking-[0.2em] leading-none ${isActive ? 'text-indigo-400' : 'text-neutral-500'}`}>
-                            {isActive ? 'REASONING_ENGINE' : 'CHAIN_OF_THOUGHT'}
+                            {isActive ? 'REASONING' : 'THOUGHT_PROCESS'}
                         </span>
-                        {isActive && <span className="text-[8px] text-indigo-400/70 font-mono mt-0.5 animate-pulse">Calculating logic paths...</span>}
+                        {isActive && <span className="text-[8px] text-indigo-400/70 font-mono animate-pulse">Running logic...</span>}
                     </div>
                 </div>
                 <ChevronDown size={14} className={`text-neutral-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
             </button>
             
-            <div className={`transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden ${isExpanded ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                <div className="relative border-t border-black/5 dark:border-white/5 bg-zinc-100/50 dark:bg-[#050505]">
+            <div className={`transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden ${isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div className="relative border-t border-black/5 dark:border-white/5 bg-zinc-100/50 dark:bg-[#08080a]">
                     <div className="absolute top-0 left-0 bottom-0 w-[2px] bg-gradient-to-b from-indigo-500/50 to-transparent"></div>
-                    <div className="p-4 overflow-x-auto custom-scroll">
+                    <div className="p-3 pl-4 overflow-x-auto custom-scroll">
                         <pre className="text-[10px] font-mono leading-[1.6] text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap font-medium">
                             {content}
                             {isActive && <span className="inline-block w-1.5 h-3 ml-1 bg-indigo-500 animate-pulse align-middle"></span>}
@@ -79,9 +79,9 @@ const GroundingSources = ({ chunks }: { chunks: any[] }) => {
 
     return (
         <div className="mt-4 pt-3 border-t border-black/5 dark:border-white/5">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2.5">
                 <Search size={10} className="text-neutral-400" />
-                <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">SOURCES_VERIFIED</span>
+                <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">VERIFIED_SOURCES</span>
             </div>
             <div className="flex flex-wrap gap-2">
                 {chunks.map((chunk, idx) => {
@@ -95,15 +95,15 @@ const GroundingSources = ({ chunks }: { chunks: any[] }) => {
                             href={url} 
                             target="_blank" 
                             rel="noopener noreferrer" 
-                            className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-white/5 rounded-lg border border-black/5 dark:border-white/5 hover:border-accent/30 hover:bg-accent/5 transition-all group max-w-[200px]"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-white/5 rounded-lg border border-black/5 dark:border-white/5 hover:border-accent/30 hover:bg-accent/5 transition-all group max-w-full sm:max-w-[220px]"
                         >
-                            <div className="w-4 h-4 rounded-full bg-neutral-100 dark:bg-white/10 flex items-center justify-center text-[8px] font-bold text-neutral-500 shrink-0">
+                            <div className="w-4 h-4 rounded-full bg-neutral-100 dark:bg-white/10 flex items-center justify-center text-[8px] font-bold text-neutral-500 shrink-0 group-hover:text-accent transition-colors">
                                 {idx + 1}
                             </div>
-                            <span className="text-[9px] font-medium text-neutral-600 dark:text-neutral-300 truncate group-hover:text-accent transition-colors">
+                            <span className="text-[9px] font-medium text-neutral-600 dark:text-neutral-300 truncate group-hover:text-accent transition-colors flex-1">
                                 {title}
                             </span>
-                            <ExternalLink size={8} className="text-neutral-400 group-hover:text-accent ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <ExternalLink size={8} className="text-neutral-400 group-hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                         </a>
                     );
                 })}
@@ -132,7 +132,7 @@ const ImageGenerationCard = ({ prompt }: { prompt: string }) => {
     };
 
     return (
-        <div className="my-4 rounded-2xl overflow-hidden border border-accent/20 bg-accent/5 max-w-sm shadow-[0_0_20px_rgba(var(--accent-rgb),0.05)]">
+        <div className="my-4 rounded-2xl overflow-hidden border border-accent/20 bg-accent/5 max-w-sm shadow-[0_0_20px_rgba(var(--accent-rgb),0.05)] ring-1 ring-accent/10">
             <div className="p-3 border-b border-accent/10 flex items-center justify-between bg-accent/5">
                 <span className="text-[9px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
                     <ImageIcon size={12}/> GENERATIVE_PROMPT
@@ -141,7 +141,7 @@ const ImageGenerationCard = ({ prompt }: { prompt: string }) => {
             </div>
             
             <div className="p-4">
-                <p className="text-xs font-mono text-neutral-400 mb-4 line-clamp-3 italic">"{prompt}"</p>
+                <p className="text-[10px] md:text-xs font-mono text-neutral-500 mb-4 line-clamp-3 italic leading-relaxed">"{prompt}"</p>
                 
                 {status === 'DONE' && imageUrl ? (
                     <div className="relative group animate-slide-up">
@@ -160,7 +160,7 @@ const ImageGenerationCard = ({ prompt }: { prompt: string }) => {
                         {status === 'GENERATING' ? 'RENDERING...' : 'VISUALIZE NOW'}
                     </button>
                 )}
-                {status === 'ERROR' && <p className="text-[9px] text-red-400 mt-2 text-center font-bold">GENERATION FAILED.</p>}
+                {status === 'ERROR' && <p className="text-[9px] text-red-400 mt-2 text-center font-bold uppercase tracking-wider">GENERATION FAILED</p>}
             </div>
         </div>
     );
@@ -214,7 +214,6 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
     const isModel = msg.role === 'model';
     const isError = msg.metadata?.status === 'error';
     
-    // Parse Thinking Tags & Image Tags
     const { thought, content, imgPrompt } = useMemo(() => {
         let text = msg.text || '';
         let thoughtContent = null;
@@ -245,25 +244,28 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
 
     const accentColor = personaMode === 'hanisah' ? 'text-orange-500' : 'text-cyan-500';
     const accentBg = personaMode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500';
-    const glowClass = personaMode === 'hanisah' ? 'shadow-orange-500/10' : 'shadow-cyan-500/10';
+    
+    // Updated Bubble Styles
+    const userBubbleClass = "bg-zinc-100 dark:bg-white/10 text-black dark:text-white rounded-[24px] rounded-tr-sm border border-black/5 dark:border-white/5 shadow-sm";
+    const modelBubbleClass = `bg-white/60 dark:bg-[#121214]/90 backdrop-blur-md border border-white/20 dark:border-white/5 rounded-[24px] rounded-tl-none shadow-sm text-black dark:text-neutral-200`;
 
     return (
         <div className={`flex w-full mb-6 md:mb-8 ${isModel ? 'justify-start' : 'justify-end'} animate-slide-up px-1 group/msg`}>
             
-            {/* AI Avatar */}
+            {/* AI Avatar - Improved visual */}
             {isModel && (
-                <div className="hidden md:flex flex-col gap-2 mr-4 shrink-0 mt-1">
+                <div className="flex flex-col gap-2 mr-3 shrink-0 mt-1">
                     <div className={`
-                        w-9 h-9 rounded-xl flex items-center justify-center shadow-lg border border-white/10 transition-all duration-500 relative overflow-hidden
+                        w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center shadow-lg border border-white/10 transition-all duration-500 relative overflow-hidden
                         ${isError ? 'bg-red-500/10 text-red-500 border-red-500/20' : `bg-gradient-to-br from-${personaMode === 'hanisah' ? 'orange' : 'cyan'}-500/10 to-${personaMode === 'hanisah' ? 'pink' : 'blue'}-500/10 ${accentColor}`}
                     `}>
                         <div className={`absolute inset-0 opacity-20 ${isError ? 'bg-red-500' : accentBg} blur-md`}></div>
-                        {isError ? <Terminal size={16} /> : (personaMode === 'hanisah' ? <Flame size={16} fill="currentColor" className="relative z-10"/> : <Brain size={16} fill="currentColor" className="relative z-10"/>)}
+                        {isError ? <Terminal size={14} /> : (personaMode === 'hanisah' ? <Flame size={14} fill="currentColor" className="relative z-10"/> : <Brain size={14} fill="currentColor" className="relative z-10"/>)}
                     </div>
                 </div>
             )}
 
-            <div className={`relative max-w-[95%] md:max-w-[85%] lg:max-w-[80%] flex flex-col ${isModel ? 'items-start' : 'items-end'}`}>
+            <div className={`relative max-w-[85%] sm:max-w-[80%] lg:max-w-[75%] flex flex-col ${isModel ? 'items-start' : 'items-end'}`}>
                 
                 {/* Meta Header */}
                 {isModel && (
@@ -277,7 +279,7 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
                         {msg.metadata?.model && !isError && (
                             <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
                                 <ProviderIcon provider={msg.metadata?.provider} />
-                                <span className="text-[7px] font-bold text-neutral-500 uppercase tracking-wider truncate max-w-[150px]">
+                                <span className="text-[7px] font-bold text-neutral-500 uppercase tracking-wider truncate max-w-[120px]">
                                     {msg.metadata.model}
                                 </span>
                             </div>
@@ -287,11 +289,8 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
 
                 {/* Bubble Container */}
                 <div className={`
-                    relative px-5 py-4 md:px-6 md:py-5 shadow-sm overflow-hidden text-sm md:text-base leading-relaxed
-                    ${isModel 
-                        ? `bg-white/60 dark:bg-[#121214]/90 backdrop-blur-md border border-white/20 dark:border-white/5 rounded-[24px] rounded-tl-none ${glowClass} text-black dark:text-neutral-200` 
-                        : 'bg-zinc-100 dark:bg-[#1a1a1c] text-black dark:text-white rounded-[24px] rounded-tr-sm border border-black/5 dark:border-white/5 shadow-md'
-                    }
+                    relative px-5 py-4 md:px-6 md:py-5 overflow-hidden text-sm md:text-[15px] leading-relaxed
+                    ${isModel ? modelBubbleClass : userBubbleClass}
                     ${isError ? 'border-red-500/20 bg-red-500/5' : ''}
                 `}>
                     {(content || isLoading || thought) && (
@@ -302,7 +301,7 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
                                 <div className={`prose dark:prose-invert prose-sm max-w-none break-words min-w-0 font-sans tracking-wide
                                     ${isModel 
                                         ? 'prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-p:text-neutral-700 dark:prose-p:text-neutral-300 prose-strong:text-black dark:prose-strong:text-white' 
-                                        : 'prose-p:text-black/95 dark:prose-p:text-white/95'
+                                        : 'prose-p:text-black dark:prose-p:text-white'
                                     }
                                     prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-lg prose-code:before:content-none prose-code:after:content-none
                                     prose-blockquote:border-l-4 prose-blockquote:border-accent prose-blockquote:bg-black/5 dark:prose-blockquote:bg-white/5 prose-blockquote:py-1 prose-blockquote:px-4 prose-blockquote:rounded-r-xl prose-blockquote:not-italic
@@ -333,7 +332,7 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
                                 </div>
                             ) : isLoading && !thought && !imgPrompt && (
                                 <div className="flex items-center gap-3 py-1">
-                                    <div className="flex gap-1">
+                                    <div className="flex gap-1.5">
                                         <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce"></div>
                                         <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce delay-75"></div>
                                         <div className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce delay-150"></div>

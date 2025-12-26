@@ -3,13 +3,13 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   FileText, Search, Plus, CheckSquare, 
   Archive, FolderOpen, Database, 
-  ListTodo, ArrowUpRight, Hash, Pin, Trash2, X, Filter
+  ListTodo, ArrowUpRight, Hash, Pin, Trash2, X, Filter, BrainCircuit
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { type Note } from '../../types';
 import { AdvancedEditor } from './AdvancedEditor';
 import { NoteBatchActions } from './NoteBatchActions';
-// STRICT REGISTRY
+import { NoteAgentConsole } from './NoteAgentConsole';
 import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
 import { debugService } from '../../services/debugService';
 
@@ -27,6 +27,9 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
   const [filterType, setFilterType] = useState<'all' | 'archived'>('all');
   const [editorFontSize, setEditorFontSize] = useState(16);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  
+  // NEW: Agent Console State
+  const [showAgentConsole, setShowAgentConsole] = useState(false);
 
   // Safety check: if active note is deleted externally
   useEffect(() => {
@@ -87,8 +90,6 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
   const handleToggleBatchMode = () => {
       debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, isSelectionMode ? 'OFF' : 'ON');
       setIsSelectionMode(!isSelectionMode);
-      // Don't clear selections when toggling mode off/on immediately, 
-      // but if turning off, user usually expects to exit selection flow.
       if (isSelectionMode) setSelectedIds(new Set()); 
   };
 
@@ -121,7 +122,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       }
   };
 
-  const handleSaveNote = useCallback((title: string, content: string, tasks?: any[]) => {
+  const handleSaveNote = useCallback((title: string, content: string, tasks?: any[], tags?: string[]) => {
     if (!activeNoteId) return;
     setNotes(prevNotes => prevNotes.map(n => {
       if (n.id === activeNoteId) {
@@ -130,6 +131,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
              content, 
              title: title.trim() || 'Untitled Note', 
              tasks: tasks || n.tasks, 
+             tags: tags || n.tags,
              updated: new Date().toISOString() 
          };
       }
@@ -138,7 +140,6 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
   }, [activeNoteId, setNotes]);
 
   const handleBackFromEditor = useCallback(() => {
-      // Auto-cleanup empty notes
       if (activeNoteId) {
           const current = notes.find(n => n.id === activeNoteId);
           if (current) {
@@ -180,10 +181,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
   const batchDelete = useCallback(() => {
     const count = selectedIds.size;
     if (count === 0) return;
-
-    // Capture IDs for the closure
     const idsToDelete = new Set(selectedIds);
-
     const confirmPurge = window.confirm(
         `⚠️ SYSTEM PURGE PROTOCOL\n\nYou are about to PERMANENTLY DELETE ${count} selected item(s).\n\nThis is a destructive action. Data will be unrecoverable.\n\nProceed with purge?`
     );
@@ -193,8 +191,6 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
         setNotes(prevNotes => prevNotes.filter(n => !idsToDelete.has(n.id)));
         setSelectedIds(new Set());
         setIsSelectionMode(false);
-    } else {
-        debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'PURGE_CANCELLED');
     }
   }, [selectedIds, setNotes]);
 
@@ -220,22 +216,40 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       setIsSelectionMode(false);
   }, [notes, selectedIds, setNotes]);
 
-  // Robust Select All / Deselect All logic
   const handleSelectAll = useCallback(() => {
       const visibleIds = filteredNotes.map(n => n.id);
       const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
       
       const newSet = new Set(selectedIds);
-      
       if (allVisibleSelected) {
-          // Deselect only the currently visible ones
           visibleIds.forEach(id => newSet.delete(id));
       } else {
-          // Select all currently visible ones
           visibleIds.forEach(id => newSet.add(id));
       }
       setSelectedIds(newSet);
   }, [filteredNotes, selectedIds]);
+
+  // --- AGENT HANDLERS ---
+  const handleAgentApply = (updates: Partial<Note>[]) => {
+      setNotes(prev => prev.map(n => {
+          const update = updates.find(u => u.id === n.id);
+          return update ? { ...n, ...update, updated: new Date().toISOString() } : n;
+      }));
+  };
+
+  const handleAgentTasks = (tasks: any[]) => {
+      const newNote: Note = {
+          id: uuidv4(),
+          title: `AUTO-TASKS ${new Date().toLocaleDateString()}`,
+          content: 'Tasks extracted from recent notes.',
+          tags: ['AUTO', 'TASKS'],
+          created: new Date().toISOString(),
+          updated: new Date().toISOString(),
+          tasks: tasks.map(t => ({ id: uuidv4(), text: t.text, isCompleted: false })),
+          is_pinned: true
+      };
+      setNotes(prev => [newNote, ...prev]);
+  };
 
   return (
     <div className="h-[calc(100dvh-2rem)] md:h-[calc(100vh-2rem)] flex flex-col animate-fade-in bg-noise overflow-hidden">
@@ -258,6 +272,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
 
           {/* Controls */}
           <div className="flex items-center gap-3 w-full xl:w-auto animate-slide-down" style={{ animationDelay: '100ms' }}>
+               
                {/* Search Bar */}
                <div className={`relative transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${isSearchFocused ? 'flex-1 xl:w-96' : 'flex-1 xl:w-64'}`}>
                   <input 
@@ -279,6 +294,15 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
 
                {/* Action Buttons */}
                <div className="flex items-center gap-2">
+                   {/* Agent Button */}
+                   <button 
+                     onClick={() => setShowAgentConsole(true)}
+                     className="w-12 h-12 flex items-center justify-center rounded-xl border bg-purple-500/10 text-purple-500 border-purple-500/20 hover:bg-purple-500 hover:text-white transition-all shadow-lg hover:shadow-purple-500/20"
+                     title="Neural Agents"
+                   >
+                      <BrainCircuit size={20} />
+                   </button>
+
                    <button 
                      onClick={handleToggleBatchMode}
                      className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-all ${isSelectionMode ? 'bg-accent text-black border-accent shadow-[0_0_15px_var(--accent-glow)]' : 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white'}`}
@@ -305,7 +329,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
           </div>
       </div>
 
-      {/* FILTER BAR INDICATOR (If Archive or Search active) */}
+      {/* FILTER BAR INDICATOR */}
       {(filterType === 'archived' || searchQuery) && (
           <div className="px-4 md:px-8 lg:px-12 pb-4 flex items-center gap-2 animate-fade-in">
               <div className="h-[1px] bg-black/5 dark:bg-white/10 flex-1"></div>
@@ -353,23 +377,19 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                                   }
                               `}
                           >
-                              {/* Selection Circle */}
                               {isSelectionMode && (
                                   <div className={`absolute top-6 right-6 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all z-20 ${isSelected ? 'bg-accent border-accent text-black' : 'border-neutral-400 bg-transparent'}`}>
                                       {isSelected && <CheckSquare size={12} strokeWidth={3} />}
                                   </div>
                               )}
 
-                              {/* Pin Badge */}
                               {n.is_pinned && !isSelectionMode && (
                                   <div className="absolute top-6 right-6 text-accent animate-pulse">
                                       <Pin size={16} fill="currentColor" />
                                   </div>
                               )}
 
-                              {/* Card Content */}
                               <div className="space-y-4">
-                                  {/* Icon & Title */}
                                   <div className="flex items-start gap-4">
                                       <div className={`
                                           w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-all duration-500 border
@@ -389,12 +409,10 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                                       </div>
                                   </div>
 
-                                  {/* Preview */}
                                   <p className="text-[11px] text-neutral-600 dark:text-neutral-400 font-medium leading-relaxed line-clamp-3">
                                       {n.content.replace(/<[^>]*>/g, ' ').slice(0, 150) || "No preview data available."}
                                   </p>
 
-                                  {/* Task Bar */}
                                   {totalTasks > 0 && (
                                       <div className="space-y-1.5 pt-1">
                                           <div className="flex justify-between items-center text-[8px] font-black uppercase tracking-widest text-neutral-500">
@@ -407,20 +425,15 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                                       </div>
                                   )}
 
-                                  {/* Tags & Badges */}
                                   <div className="flex flex-wrap gap-2 pt-2 opacity-60 group-hover:opacity-100 transition-opacity">
                                       {n.tags?.map((tag, i) => (
                                           <span key={i} className="px-2 py-1 rounded bg-zinc-100 dark:bg-white/5 border border-black/5 dark:border-white/5 text-[8px] font-bold uppercase text-neutral-500 flex items-center gap-1">
                                               <Hash size={8} /> {tag}
                                           </span>
                                       ))}
-                                      {n.content.length > 500 && (
-                                          <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[8px] font-bold uppercase">LONG_READ</span>
-                                      )}
                                   </div>
                               </div>
 
-                              {/* Hover Action Overlay (Desktop) - Quick Delete */}
                               {!isSelectionMode && (
                                   <div className="absolute top-6 right-6 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0 hidden md:flex z-20">
                                       {!n.is_pinned && (
@@ -453,12 +466,12 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
               <div className="flex flex-col h-full max-w-[1400px] mx-auto w-full p-0 md:p-6 lg:p-8">
                   <div className="flex-1 bg-white dark:bg-[#0f0f11] rounded-none md:rounded-[48px] border-x-0 md:border border-black/5 dark:border-white/5 shadow-2xl overflow-hidden relative flex flex-col md:ring-1 ring-white/10">
                       
-                      {/* Integrated Advanced Editor with Back Navigation passed down */}
                       <AdvancedEditor 
                           key={activeNoteId}
                           initialContent={activeNote?.content || ''}
                           initialTitle={activeNote?.title || ''}
                           initialTasks={activeNote?.tasks || []}
+                          initialTags={activeNote?.tags || []}
                           onSave={handleSaveNote}
                           onDelete={() => handleDeleteNote(activeNoteId!)}
                           onBack={handleBackFromEditor}
@@ -483,6 +496,14 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
           onArchiveSelected={batchArchive}
           onPinSelected={batchPin}
           onCancel={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
+      />
+
+      <NoteAgentConsole 
+          isOpen={showAgentConsole}
+          onClose={() => setShowAgentConsole(false)}
+          notes={notes}
+          onApplyUpdates={handleAgentApply}
+          onAddTasks={handleAgentTasks}
       />
     </div>
   );

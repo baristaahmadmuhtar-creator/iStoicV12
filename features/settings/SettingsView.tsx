@@ -5,7 +5,7 @@ import {
     Shield, Trash2, Cpu, Languages, Palette, Layout, Save, CheckCircle2, 
     Volume2, Mic2, Moon, Sun, Monitor, X, Check, HelpCircle, RefreshCw,
     Terminal, UserCheck, Sparkles, MessageSquare, ChevronRight, Activity, Zap, Globe, User, UserRound, Play, Info,
-    Flame, Brain, DatabaseZap, Image as ImageIcon, HardDrive, Download, Upload, FileJson, Edit3, Undo2, Loader2
+    Flame, Brain, DatabaseZap, Image as ImageIcon, HardDrive, Download, Upload, FileJson, Edit3, Undo2
 } from 'lucide-react';
 import { THEME_COLORS } from '../../App';
 import { speakWithHanisah } from '../../services/elevenLabsService';
@@ -168,7 +168,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const { lockVault } = useVault();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Config State - REACTIVE
+    // Config State
     const [persistedLanguage, setPersistedLanguage] = useLocalStorage<LanguageCode>('app_language', 'id');
     const [persistedTheme, setPersistedTheme] = useLocalStorage<string>('app_theme', 'cyan');
     const [persistedColorScheme, setPersistedColorScheme] = useLocalStorage<'system' | 'light' | 'dark'>('app_color_scheme', 'system');
@@ -188,7 +188,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const [persistedHanisahTools, setPersistedHanisahTools] = useLocalStorage<ToolConfig>('hanisah_tools_config', { search: true, vault: true, visual: true });
     const [persistedStoicTools, setPersistedStoicTools] = useLocalStorage<ToolConfig>('stoic_tools_config', { search: true, vault: true, visual: false });
     
-    // Local UI State (For buffering changes before "Saving")
+    // Local UI State
     const [language, setLanguage] = useState(persistedLanguage);
     const [theme, setTheme] = useState(persistedTheme);
     const [colorScheme, setColorScheme] = useState(persistedColorScheme);
@@ -205,7 +205,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     // Editor Modal State
     const [editingPersona, setEditingPersona] = useState<'hanisah' | 'stoic' | null>(null);
 
-    // Text Resources (Dynamic)
+    // Text Resources
     const t = TRANSLATIONS[language].settings;
     const defaultPrompts = TRANSLATIONS[language].prompts;
 
@@ -214,10 +214,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const handleSave = () => {
         debugService.logAction(UI_REGISTRY.SETTINGS_BTN_SAVE, FN_REGISTRY.SAVE_CONFIG, 'START');
         setIsSaving(true);
-        
-        // Simulate System Reconfiguration delay for UX
         setTimeout(() => {
-            // Updating these triggers the custom event in useLocalStorage, which updates App.tsx and other views INSTANTLY.
             setPersistedLanguage(language);
             setPersistedTheme(theme);
             setPersistedColorScheme(colorScheme);
@@ -227,14 +224,21 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
             setPersistedStoicTools(stoicTools);
             setUserPersona(localPersona);
             
+            // Note: Prompts are saved immediately via modal, but this confirms the sync
+            
             if ((!hanisahTools.vault && persistedHanisahTools.vault) || (!stoicTools.vault && persistedStoicTools.vault)) {
                 lockVault();
             }
             
             setIsSaving(false);
             setSaveSuccess(true);
-            setTimeout(() => setSaveSuccess(false), 2000);
-        }, 1500);
+            
+            if (language !== persistedLanguage) {
+                window.location.reload();
+            } else {
+                setTimeout(() => setSaveSuccess(false), 2000);
+            }
+        }, 800);
     };
 
     const handleBackup = () => {
@@ -294,18 +298,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     return (
         <div className="min-h-full flex flex-col p-4 md:p-12 lg:p-16 pb-40 animate-fade-in overflow-x-hidden bg-noise">
              
-             {/* CONFIGURATION OVERLAY */}
-             {isSaving && (
-                 <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center animate-fade-in">
-                     <div className="relative">
-                         <div className="w-32 h-32 rounded-full border-4 border-accent/20 border-t-accent animate-spin"></div>
-                         <Activity size={32} className="text-accent absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
-                     </div>
-                     <h2 className="mt-8 text-2xl font-black text-white uppercase italic tracking-tighter animate-pulse">RECONFIGURING SYSTEM MATRIX...</h2>
-                     <p className="mt-2 text-xs font-mono text-accent uppercase tracking-[0.3em]">APPLYING GLOBAL UPDATES</p>
-                 </div>
-             )}
-
              {/* EDIT MODAL */}
              <PromptEditorModal 
                 isOpen={!!editingPersona}
@@ -495,8 +487,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
 
                 <div className="space-y-6 pt-10 border-t border-black/5 dark:border-white/5">
                     <button onClick={handleSave} disabled={isSaving} className={`w-full py-6 md:py-8 rounded-[32px] font-black uppercase text-[12px] md:text-[14px] tracking-[0.5em] flex items-center justify-center gap-4 transition-all shadow-xl hover:scale-[1.01] active:scale-95 ${saveSuccess ? 'bg-emerald-600 text-white shadow-emerald-500/30' : 'bg-accent text-on-accent shadow-[0_0_30px_var(--accent-glow)]'}`}>
-                        {isSaving ? <Loader2 className="animate-spin" size={24} /> : saveSuccess ? <CheckCircle2 size={24} /> : <Zap size={24} />}
-                        {isSaving ? "RECONFIGURING..." : saveSuccess ? t.saved || "UPDATED" : t.save}
+                        {isSaving ? <RefreshCw className="animate-spin" size={24} /> : saveSuccess ? <CheckCircle2 size={24} /> : <Zap size={24} />}
+                        {isSaving ? "SYNCING..." : saveSuccess ? t.saved || "UPDATED" : t.save}
                     </button>
 
                     <button onClick={() => { debugService.logAction(UI_REGISTRY.SETTINGS_BTN_RESET, FN_REGISTRY.RESET_SYSTEM, 'CONFIRM'); if(confirm("Hapus semua data kognitif permanen?")) { localStorage.clear(); window.location.reload(); } }} className="w-full py-5 rounded-[28px] border border-red-500/20 bg-red-500/5 text-red-500 text-[10px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-3 hover:bg-red-500 hover:text-white transition-all shadow-inner">

@@ -323,7 +323,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
             {/* Right Actions & Status */}
             <div className="flex items-center gap-3">
                 {/* Character Counter */}
-                <div className={`text-[9px] tech-mono font-bold transition-colors ${charCountColor} hidden sm:block ${input.length > 0 ? 'opacity-100' : 'opacity-0'}`}>
+                <div className={`text-[9px] tech-mono font-bold transition-colors ${charCountColor} hidden sm:block`}>
                     {input.length} <span className="opacity-40">/ {MAX_CHARS}</span>
                 </div>
 

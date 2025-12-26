@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   FileText, Search, Plus, CheckSquare, 
   Archive, FolderOpen, Database, 
-  ListTodo, ArrowUpRight, Hash, Pin, Trash2, X, Filter
+  ListTodo, ArrowUpRight, Hash, Pin, Trash2, X
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { type Note } from '../../types';
@@ -87,9 +87,6 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
   const handleToggleBatchMode = () => {
       debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, isSelectionMode ? 'OFF' : 'ON');
       setIsSelectionMode(!isSelectionMode);
-      // Don't clear selections when toggling mode off/on immediately, 
-      // but if turning off, user usually expects to exit selection flow.
-      if (isSelectionMode) setSelectedIds(new Set()); 
   };
 
   const handleNoteClick = (n: Note) => {
@@ -104,20 +101,9 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
 
   const handleDeleteItem = (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
-      e.preventDefault();
-      
-      const confirmDelete = window.confirm(
-          "⚠️ PERMANENT DELETION\n\nAre you sure you want to delete this note? This action CANNOT be undone."
-      );
-
-      if (confirmDelete) {
-          if (debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, id)) {
-              setNotes(prevNotes => prevNotes.filter(n => n.id !== id));
-              if (activeNoteId === id) {
-                  setActiveNoteId(null);
-                  setViewMode('grid');
-              }
-          }
+      // ENFORCED GATEKEEPER CHECK
+      if (debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, id)) {
+          handleDeleteNote(id);
       }
   };
 
@@ -137,36 +123,13 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
     }));
   }, [activeNoteId, setNotes]);
 
-  const handleBackFromEditor = useCallback(() => {
-      // Auto-cleanup empty notes
-      if (activeNoteId) {
-          const current = notes.find(n => n.id === activeNoteId);
-          if (current) {
-              const isEmpty = !current.title.trim() && (!current.content || current.content === '<div><br></div>') && (!current.tasks || current.tasks.length === 0);
-              if (isEmpty) {
-                  setNotes(prev => prev.filter(n => n.id !== activeNoteId));
-              }
-          }
-      }
-      setActiveNoteId(null);
-      setViewMode('grid');
-  }, [activeNoteId, notes, setNotes]);
-
   const handleDeleteNote = useCallback((id: string) => {
-      const confirmDelete = window.confirm(
-          "⚠️ PERMANENT DELETION\n\nAre you sure you want to delete this note? This action CANNOT be undone."
-      );
-
-      if (confirmDelete) {
-          debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, 'EXECUTE', { id });
+      if (confirm("Are you sure you want to delete this note permanently?")) {
           setNotes(prevNotes => prevNotes.filter(n => n.id !== id));
-          
           if (activeNoteId === id) {
               setActiveNoteId(null);
               setViewMode('grid');
           }
-      } else {
-          debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, 'CANCELLED');
       }
   }, [activeNoteId, setNotes]);
 
@@ -178,23 +141,11 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
   };
 
   const batchDelete = useCallback(() => {
-    const count = selectedIds.size;
-    if (count === 0) return;
-
-    // Capture IDs for the closure
-    const idsToDelete = new Set(selectedIds);
-
-    const confirmPurge = window.confirm(
-        `⚠️ SYSTEM PURGE PROTOCOL\n\nYou are about to PERMANENTLY DELETE ${count} selected item(s).\n\nThis is a destructive action. Data will be unrecoverable.\n\nProceed with purge?`
-    );
-
-    if (confirmPurge) {
-        debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'PURGE_EXECUTE', { count });
-        setNotes(prevNotes => prevNotes.filter(n => !idsToDelete.has(n.id)));
+    if (confirm(`PERMANENTLY DELETE ${selectedIds.size} ITEMS? This cannot be undone.`)) {
+        debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'DELETE_MANY');
+        setNotes(prevNotes => prevNotes.filter(n => !selectedIds.has(n.id)));
         setSelectedIds(new Set());
         setIsSelectionMode(false);
-    } else {
-        debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'PURGE_CANCELLED');
     }
   }, [selectedIds, setNotes]);
 
@@ -220,21 +171,15 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       setIsSelectionMode(false);
   }, [notes, selectedIds, setNotes]);
 
-  // Robust Select All / Deselect All logic
   const handleSelectAll = useCallback(() => {
       const visibleIds = filteredNotes.map(n => n.id);
       const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
       
-      const newSet = new Set(selectedIds);
-      
       if (allVisibleSelected) {
-          // Deselect only the currently visible ones
-          visibleIds.forEach(id => newSet.delete(id));
+          setSelectedIds(new Set());
       } else {
-          // Select all currently visible ones
-          visibleIds.forEach(id => newSet.add(id));
+          setSelectedIds(new Set(visibleIds));
       }
-      setSelectedIds(newSet);
   }, [filteredNotes, selectedIds]);
 
   return (
@@ -266,7 +211,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                      onChange={e => setSearchQuery(e.target.value)}
                      onFocus={handleSearchFocus}
                      onBlur={() => setIsSearchFocused(false)}
-                     placeholder={isSearchFocused ? "SEARCH VAULT..." : "SEARCH..."}
+                     placeholder={isSearchFocused ? "SEARCH BY TITLE, CONTENT, OR TAGS..." : "SEARCH..."}
                      className="w-full h-12 bg-white dark:bg-[#0f0f11] border border-black/5 dark:border-white/10 rounded-xl pl-11 pr-4 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:border-accent/50 focus:shadow-[0_0_30px_-10px_var(--accent-glow)] transition-all placeholder:text-neutral-500"
                   />
                   <Search className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isSearchFocused ? 'text-accent' : 'text-neutral-400'}`} size={16} />
@@ -289,10 +234,10 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                    
                    <button 
                      onClick={handleToggleFilter}
-                     className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-all ${filterType === 'archived' ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white'}`}
-                     title={filterType === 'all' ? "View Archive" : "Back to Active"}
+                     className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-all ${filterType === 'archived' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white'}`}
+                     title={filterType === 'all' ? "Show Archive" : "Show Active"}
                    >
-                      {filterType === 'archived' ? <Archive size={18} fill="currentColor" /> : <Archive size={18} />}
+                      <Archive size={18} />
                    </button>
 
                    <button 
@@ -305,27 +250,12 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
           </div>
       </div>
 
-      {/* FILTER BAR INDICATOR (If Archive or Search active) */}
-      {(filterType === 'archived' || searchQuery) && (
-          <div className="px-4 md:px-8 lg:px-12 pb-4 flex items-center gap-2 animate-fade-in">
-              <div className="h-[1px] bg-black/5 dark:bg-white/10 flex-1"></div>
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 dark:bg-white/5 border border-black/5 dark:border-white/5 text-[9px] font-black uppercase tracking-widest text-neutral-500">
-                  <Filter size={10} /> 
-                  {filterType === 'archived' && <span>ARCHIVE_MODE</span>}
-                  {filterType === 'archived' && searchQuery && <span>+</span>}
-                  {searchQuery && <span>SEARCH_RESULTS</span>}
-                  <span className="ml-1 text-accent">{filteredNotes.length} ITEMS</span>
-              </div>
-              <div className="h-[1px] bg-black/5 dark:bg-white/10 flex-1"></div>
-          </div>
-      )}
-
       {/* CONTENT GRID */}
       <div className="flex-1 overflow-y-auto custom-scroll px-4 md:px-8 lg:px-12 pb-32">
           {filteredNotes.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-neutral-400 opacity-40 gap-6 animate-fade-in">
                   <div className="w-32 h-32 rounded-[40px] bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center justify-center rotate-3">
-                      {filterType === 'archived' ? <Archive size={48} strokeWidth={1} /> : <FolderOpen size={48} strokeWidth={1} />}
+                      <FolderOpen size={48} strokeWidth={1} />
                   </div>
                   <div className="text-center space-y-2">
                       <p className="text-xs font-black uppercase tracking-[0.3em]">NO_RECORDS_FOUND</p>
@@ -461,7 +391,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                           initialTasks={activeNote?.tasks || []}
                           onSave={handleSaveNote}
                           onDelete={() => handleDeleteNote(activeNoteId!)}
-                          onBack={handleBackFromEditor}
+                          onBack={() => setViewMode('grid')}
                           language="en"
                           fontSize={editorFontSize}
                           onFontSizeChange={setEditorFontSize} 

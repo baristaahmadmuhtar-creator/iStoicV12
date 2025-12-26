@@ -36,21 +36,16 @@ export const THEME_COLORS: Record<string, string> = {
 const App: React.FC = () => {
   const [activeFeature, setActiveFeature] = useState<FeatureID>('dashboard');
   const [isTutorialComplete, setIsTutorialComplete] = useLocalStorage<boolean>('app_tutorial_complete', false);
-  
-  // REACTIVE SETTINGS: These now trigger re-renders instantly via the improved useLocalStorage
   const [theme] = useLocalStorage<string>('app_theme', 'cyan');
   const [colorScheme] = useLocalStorage<'system' | 'light' | 'dark'>('app_color_scheme', 'system');
-  const [language] = useLocalStorage<string>('app_language', 'id'); // Added to force text updates
-  
   const [notes, setNotes] = useLocalStorage<Note[]>('notes', []);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
-  // OPTIMISTIC INITIALIZATION: Start true to prevent "System Halt" flash on load.
-  // The useEffect below will verify and set to false if critical integrity fails.
-  const [registryValid, setRegistryValid] = useState<boolean>(true);
+  const [registryValid, setRegistryValid] = useState<boolean>(false);
 
   // Neural Chat Global State
   const chatLogic = useChatLogic(notes, setNotes);
   
+  // FIX BUG #4: Check if Live Mode is active to hide navigation
   const isLiveSessionActive = chatLogic.isLiveModeActive || false; 
 
   const hexToRgb = (hex: string) => {
@@ -90,7 +85,6 @@ const App: React.FC = () => {
       }
   }, []);
 
-  // Theme & Color Injection
   useEffect(() => {
     const root = document.documentElement;
     let activeScheme = colorScheme;
@@ -115,7 +109,7 @@ const App: React.FC = () => {
     
     const navAccent = targetColor === '#000000' ? '#ffffff' : targetColor;
     root.style.setProperty('--nav-accent', navAccent);
-  }, [theme, colorScheme]); // Reacts instantly to storage changes
+  }, [theme, colorScheme]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -147,23 +141,21 @@ const App: React.FC = () => {
       );
   }
 
-  // Key prop forces re-mount of views if language changes, ensuring all text updates
   const renderContent = () => {
     switch (activeFeature) {
-      case 'dashboard': return <ErrorBoundary viewName="DASHBOARD"><DashboardView key={language} onNavigate={setActiveFeature} /></ErrorBoundary>;
-      case 'notes': return <ErrorBoundary viewName="ARCHIVE_VAULT"><SmartNotesView key={language} notes={notes} setNotes={setNotes} /></ErrorBoundary>;
-      case 'chat': return <ErrorBoundary viewName="NEURAL_LINK"><AIChatView key={language} chatLogic={chatLogic} /></ErrorBoundary>;
-      case 'tools': return <ErrorBoundary viewName="NEURAL_ARSENAL"><AIToolsView key={language} /></ErrorBoundary>;
-      case 'system': return <ErrorBoundary viewName="SYSTEM_HEALTH"><SystemHealthView key={language} /></ErrorBoundary>;
-      case 'settings': return <ErrorBoundary viewName="CORE_CONFIG"><SettingsView key={language} onNavigate={setActiveFeature} /></ErrorBoundary>;
-      default: return <ErrorBoundary viewName="UNKNOWN_MODULE"><DashboardView key={language} onNavigate={setActiveFeature} /></ErrorBoundary>;
+      case 'dashboard': return <ErrorBoundary viewName="DASHBOARD"><DashboardView onNavigate={setActiveFeature} /></ErrorBoundary>;
+      case 'notes': return <ErrorBoundary viewName="ARCHIVE_VAULT"><SmartNotesView notes={notes} setNotes={setNotes} /></ErrorBoundary>;
+      case 'chat': return <ErrorBoundary viewName="NEURAL_LINK"><AIChatView chatLogic={chatLogic} /></ErrorBoundary>;
+      case 'tools': return <ErrorBoundary viewName="NEURAL_ARSENAL"><AIToolsView /></ErrorBoundary>;
+      case 'system': return <ErrorBoundary viewName="SYSTEM_HEALTH"><SystemHealthView /></ErrorBoundary>;
+      case 'settings': return <ErrorBoundary viewName="CORE_CONFIG"><SettingsView onNavigate={setActiveFeature} /></ErrorBoundary>;
+      default: return <ErrorBoundary viewName="UNKNOWN_MODULE"><DashboardView onNavigate={setActiveFeature} /></ErrorBoundary>;
     }
   };
 
   return (
     <div className="flex h-[100dvh] w-full text-black dark:text-white font-sans bg-zinc-50 dark:bg-black theme-transition overflow-hidden selection:bg-accent/30 selection:text-accent">
       <Sidebar 
-        key={`sidebar-${language}`} // Force sidebar re-render on lang change
         activeFeature={activeFeature} 
         setActiveFeature={setActiveFeature} 
         chatLogic={chatLogic}

@@ -1,65 +1,15 @@
 
 import { KEY_MANAGER } from "./geminiService";
 import { debugService } from "./debugService";
+import Groq from "groq-sdk";
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 
 export interface StandardMessage {
     role: string;
     content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
 }
 
-/**
- * Converts Google GenAI Tool format (FunctionDeclaration) to OpenAI Tool format.
- * Fixes 400 errors caused by sending incompatible schemas (e.g. UPPERCASE types).
- */
-function convertToolsToOpenAI(googleTools: any[]): any[] | undefined {
-    if (!googleTools || googleTools.length === 0) return undefined;
-
-    const openaiTools: any[] = [];
-
-    googleTools.forEach(toolBlock => {
-        // Google tools are wrapped in { functionDeclarations: [...] }
-        if (toolBlock.functionDeclarations) {
-            toolBlock.functionDeclarations.forEach((fd: any) => {
-                // Deep clone parameters to avoid mutating original and lower-case types
-                const parameters = JSON.parse(JSON.stringify(fd.parameters || {}));
-                
-                // Recursive function to lowercase types (Google uses 'STRING', OpenAI uses 'string')
-                const fixTypes = (schema: any) => {
-                    if (!schema) return;
-                    if (schema.type && typeof schema.type === 'string') {
-                        schema.type = schema.type.toLowerCase();
-                    }
-                    if (schema.properties) {
-                        for (const key in schema.properties) {
-                            fixTypes(schema.properties[key]);
-                        }
-                    }
-                    if (schema.items) {
-                        fixTypes(schema.items);
-                    }
-                };
-                fixTypes(parameters);
-
-                openaiTools.push({
-                    type: "function",
-                    function: {
-                        name: fd.name,
-                        description: fd.description,
-                        parameters: parameters
-                    }
-                });
-            });
-        }
-    });
-
-    return openaiTools.length > 0 ? openaiTools : undefined;
-}
-
-/**
- * Native Fetch Implementation for OpenAI-Compatible Streaming.
- * Bypasses CORS issues caused by SDK headers (x-stainless-timeout).
- */
 export async function* streamOpenAICompatible(
     provider: 'GROQ' | 'DEEPSEEK' | 'OPENAI' | 'XAI' | 'MISTRAL' | 'OPENROUTER',
     modelId: string,
@@ -80,129 +30,131 @@ export async function* streamOpenAICompatible(
         ...messages
     ];
 
-    const baseURLMap: Record<string, string> = {
-        'GROQ': 'https://api.groq.com/openai/v1/chat/completions',
-        'DEEPSEEK': 'https://api.deepseek.com/chat/completions',
-        'OPENAI': 'https://api.openai.com/v1/chat/completions',
-        'XAI': 'https://api.x.ai/v1/chat/completions',
-        'OPENROUTER': 'https://openrouter.ai/api/v1/chat/completions',
-        'MISTRAL': 'https://api.mistral.ai/v1/chat/completions'
-    };
-
-    const endpoint = baseURLMap[provider];
-    const headers: any = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-    };
-
-    if (provider === 'OPENROUTER') {
-        headers['HTTP-Referer'] = window.location.origin;
-        headers['X-Title'] = 'IStoicAI Platinum';
-    }
-
-    // Prepare Body
-    const body: any = {
-        model: modelId,
-        messages: fullMessages,
-        stream: true,
-        temperature: provider === 'DEEPSEEK' && modelId === 'deepseek-reasoner' ? undefined : 0.7
-    };
-
-    // Only attach tools if supported and available
-    // DeepSeek Reasoner does NOT support tools.
-    if (modelId !== 'deepseek-reasoner' && tools && tools.length > 0) {
-        const compatibleTools = convertToolsToOpenAI(tools);
-        if (compatibleTools) {
-            body.tools = compatibleTools;
-            body.tool_choice = "auto";
-        }
-    }
-
-    let response;
-    try {
-        response = await fetch(endpoint, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body)
-        });
-    } catch (e: any) {
-        throw new Error(`Network Error: ${e.message}`);
-    }
-
-    if (!response.ok) {
-        let errorText = "";
-        try { errorText = await response.text(); } catch {}
-        throw new Error(`API Error ${response.status}: ${errorText}`);
-    }
-
-    if (!response.body) throw new Error("No response body");
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    
-    // Tool Accumulator
+    // Tool Accumulator for Stream
     let toolCallAccumulator: any = {};
     let isAccumulatingTool = false;
 
-    try {
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+    // --- 1. GROQ SDK ---
+    if (provider === 'GROQ') {
+        try {
+            const groq = new Groq({ apiKey, dangerouslyAllowBrowser: true });
             
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || ""; // Keep incomplete line
+            // Groq requires tools to be undefined if empty array, otherwise it throws validation error
+            const requestOptions: any = {
+                messages: fullMessages,
+                model: modelId,
+                temperature: 0.6,
+                stream: true,
+            };
 
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed === 'data: [DONE]') continue;
-                if (trimmed.startsWith('data: ')) {
-                    try {
-                        const json = JSON.parse(trimmed.slice(6));
-                        const choice = json.choices?.[0];
-                        if (!choice) continue;
+            if (tools && tools.length > 0) {
+                requestOptions.tools = tools;
+                requestOptions.tool_choice = "auto";
+            }
 
-                        const delta = choice.delta;
+            const completionStream = await groq.chat.completions.create(requestOptions);
 
-                        // 1. Text Content
-                        if (delta?.content) {
-                            yield { text: delta.content };
+            for await (const chunk of completionStream) {
+                const delta = chunk.choices[0]?.delta;
+                
+                // 1. Text Content
+                if (delta?.content) {
+                    yield { text: delta.content };
+                }
+
+                // 2. Tool Calls (Accumulation)
+                if (delta?.tool_calls) {
+                    isAccumulatingTool = true;
+                    for (const tc of delta.tool_calls) {
+                        const idx = tc.index;
+                        if (!toolCallAccumulator[idx]) {
+                            toolCallAccumulator[idx] = { 
+                                name: tc.function?.name || "", 
+                                args: tc.function?.arguments || "",
+                                id: tc.id 
+                            };
+                        } else {
+                            if (tc.function?.arguments) toolCallAccumulator[idx].args += tc.function.arguments;
                         }
-
-                        // 2. Reasoning Content (DeepSeek R1)
-                        if ((delta as any)?.reasoning_content) {
-                            yield { text: `\n<think>${(delta as any).reasoning_content}</think>` };
-                        }
-
-                        // 3. Tool Calls
-                        if (delta?.tool_calls) {
-                            isAccumulatingTool = true;
-                            for (const tc of delta.tool_calls) {
-                                const idx = tc.index;
-                                if (!toolCallAccumulator[idx]) {
-                                    toolCallAccumulator[idx] = { 
-                                        name: tc.function?.name || "", 
-                                        args: tc.function?.arguments || "",
-                                        id: tc.id 
-                                    };
-                                } else {
-                                    if (tc.function?.arguments) toolCallAccumulator[idx].args += tc.function.arguments;
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        // Ignore parse errors for partial chunks
                     }
                 }
             }
+        } catch (error: any) {
+             throw error; 
         }
-    } finally {
-        reader.releaseLock();
     }
 
-    // Finalize Tool Calls
+    // --- 2. UNIVERSAL OPENAI-COMPATIBLE CLIENT (DEEPSEEK, MISTRAL, OPENROUTER, OPENAI) ---
+    if (provider === 'DEEPSEEK' || provider === 'OPENAI' || provider === 'XAI' || provider === 'OPENROUTER' || provider === 'MISTRAL') {
+        const baseURLMap: Record<string, string> = {
+            'DEEPSEEK': 'https://api.deepseek.com',
+            'OPENAI': 'https://api.openai.com/v1',
+            'XAI': 'https://api.x.ai/v1',
+            'OPENROUTER': 'https://openrouter.ai/api/v1',
+            'MISTRAL': 'https://api.mistral.ai/v1' 
+        };
+
+        const headers: any = {};
+        if (provider === 'OPENROUTER') {
+            headers['HTTP-Referer'] = window.location.origin;
+            headers['X-Title'] = 'IStoicAI Platinum';
+        }
+
+        try {
+            const openai = new OpenAI({
+                baseURL: baseURLMap[provider],
+                apiKey: apiKey,
+                dangerouslyAllowBrowser: true,
+                defaultHeaders: headers
+            });
+
+            const requestOptions: any = {
+                messages: fullMessages,
+                model: modelId,
+                stream: true,
+                temperature: provider === 'DEEPSEEK' && modelId === 'deepseek-reasoner' ? undefined : 0.7, 
+                max_tokens: provider === 'DEEPSEEK' ? 4000 : undefined
+            };
+
+            // DeepSeek Reasoner does NOT support tools (as of current API specs), V3 does.
+            if (modelId !== 'deepseek-reasoner' && tools && tools.length > 0) {
+                requestOptions.tools = tools;
+                requestOptions.tool_choice = "auto";
+            }
+
+            const stream = await openai.chat.completions.create(requestOptions);
+
+            for await (const chunk of stream) {
+                const delta = chunk.choices[0]?.delta;
+                
+                if (delta?.content) {
+                    yield { text: delta.content };
+                }
+
+                if (delta?.tool_calls) {
+                    isAccumulatingTool = true;
+                    for (const tc of delta.tool_calls) {
+                        const idx = tc.index;
+                        if (!toolCallAccumulator[idx]) {
+                            toolCallAccumulator[idx] = { 
+                                name: tc.function?.name || "", 
+                                args: tc.function?.arguments || "",
+                                id: tc.id 
+                            };
+                        } else {
+                            if (tc.function?.arguments) toolCallAccumulator[idx].args += tc.function.arguments;
+                        }
+                    }
+                }
+            }
+        } catch (error: any) {
+            throw error;
+        }
+    }
+
+    // --- FINALIZE TOOL CALLS ---
     if (isAccumulatingTool) {
+        // Iterate over accumulated calls and yield them
         for (const idx in toolCallAccumulator) {
             const tc = toolCallAccumulator[idx];
             try {
@@ -237,59 +189,49 @@ export async function analyzeMultiModalMedia(provider: string, modelId: string, 
         return response.text || "No response.";
     }
 
-    // --- OPENAI COMPATIBLE VISION ---
-    // Using fetch directly to avoid SDK header issues and reduce bundle size
+    // --- OPENAI COMPATIBLE VISION (GROQ, OPENROUTER, OPENAI) ---
     if (['GROQ', 'OPENAI', 'OPENROUTER'].includes(provider)) {
         const baseURLMap: Record<string, string> = {
-            'GROQ': 'https://api.groq.com/openai/v1/chat/completions',
-            'OPENAI': 'https://api.openai.com/v1/chat/completions',
-            'OPENROUTER': 'https://openrouter.ai/api/v1/chat/completions'
+            'GROQ': 'https://api.groq.com/openai/v1',
+            'OPENAI': 'https://api.openai.com/v1',
+            'OPENROUTER': 'https://openrouter.ai/api/v1'
         };
 
-        const headers: any = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-        };
-
+        const headers: any = {};
         if (provider === 'OPENROUTER') {
             headers['HTTP-Referer'] = window.location.origin;
             headers['X-Title'] = 'IStoicAI Platinum';
         }
 
-        const body = {
-            model: modelId,
-            messages: [
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: prompt },
-                        {
-                            type: "image_url",
-                            image_url: {
-                                url: `data:${mimeType};base64,${data}`
-                            }
-                        }
-                    ]
-                }
-            ],
-            max_tokens: 1024
-        };
-
         try {
-            const response = await fetch(baseURLMap[provider], {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(body)
+            const openai = new OpenAI({
+                baseURL: baseURLMap[provider],
+                apiKey: apiKey,
+                dangerouslyAllowBrowser: true,
+                defaultHeaders: headers
             });
 
-            if (!response.ok) {
-                const err = await response.text();
-                throw new Error(`Vision API Error: ${err}`);
-            }
+            const response = await openai.chat.completions.create({
+                model: modelId,
+                messages: [
+                    {
+                        role: "user",
+                        content: [
+                            { type: "text", text: prompt },
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: `data:${mimeType};base64,${data}`
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens: 1024
+            });
 
-            const json = await response.json();
             KEY_MANAGER.reportSuccess(provider);
-            return json.choices[0]?.message?.content || "No analysis generated.";
+            return response.choices[0]?.message?.content || "No analysis generated.";
         } catch (e: any) {
             console.error("Vision API Error:", e);
             KEY_MANAGER.reportFailure(provider, e);
@@ -331,39 +273,26 @@ export async function generateMultiModalImage(provider: string, modelId: string,
     }
 
     // --- OPENAI (DALL-E 3) ---
-    // Using fetch directly
     if (provider === 'OPENAI') {
         try {
+            const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
             let size = "1024x1024";
             if (modelId === 'dall-e-3') {
                 if (options?.aspectRatio === '16:9') size = "1792x1024";
                 else if (options?.aspectRatio === '9:16') size = "1024x1792";
             }
 
-            const response = await fetch("https://api.openai.com/v1/images/generations", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: modelId || "dall-e-3",
-                    prompt: prompt,
-                    n: 1,
-                    size: size,
-                    response_format: "b64_json",
-                    quality: "standard",
-                    style: "vivid"
-                })
+            const response = await openai.images.generate({
+                model: modelId || "dall-e-3",
+                prompt: prompt,
+                n: 1,
+                size: size as any,
+                response_format: "b64_json",
+                quality: "standard",
+                style: "vivid" 
             });
 
-            if (!response.ok) {
-                const err = await response.text();
-                throw new Error(`DALL-E Error: ${err}`);
-            }
-
-            const json = await response.json();
-            const b64 = json.data[0].b64_json;
+            const b64 = response.data[0].b64_json;
             if (b64) {
                 KEY_MANAGER.reportSuccess('OPENAI');
                 return `data:image/png;base64,${b64}`;

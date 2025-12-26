@@ -32,14 +32,6 @@ const FONTS = [
     { label: 'Serif', value: 'Playfair Display, serif' },
 ];
 
-const WRITER_SYSTEM_PROMPT = `
-[ROLE: HANISAH_WRITER_MODULE]
-You are an expert editor and writing assistant.
-Your task is to rewrite, edit, or generate text based ONLY on the user's instructions.
-DO NOT engage in small talk. DO NOT use the "Hanisah" persona (no "Sayang", no emojis unless requested).
-Output ONLY the requested text.
-`;
-
 const ToolbarButton: React.FC<{ onClick: (e: React.MouseEvent) => void; icon: React.ReactNode; isActive?: boolean; ariaLabel: string; className?: string; label?: string }> = ({ onClick, icon, isActive, ariaLabel, className, label }) => (
     <button 
         onMouseDown={(e) => { e.preventDefault(); onClick(e); }} 
@@ -161,7 +153,9 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
         // Detect Font
         const fontName = document.queryCommandValue('fontName');
         if(fontName) {
+            // Browser returns font name with quotes sometimes
             const cleanFont = fontName.replace(/['"]+/g, '');
+            // Try to match with our presets
             const matched = FONTS.find(f => f.value.includes(cleanFont));
             if(matched) setCurrentFont(matched.value);
         }
@@ -185,6 +179,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
     setSyncStatus('SAVED');
   }, [onSave]);
 
+  // Trigger auto save with current state
   const triggerAutoSave = useCallback(() => {
       setSyncStatus('SYNCING');
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -196,6 +191,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
       }, 800);
   }, [title, tasks, performSave]);
 
+  // Ensure tasks change triggers save
   useEffect(() => {
       if (tasks !== initialTasks) {
           triggerAutoSave();
@@ -228,6 +224,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
       }, 800);
   };
 
+  // Observer for Content Changes & Selection
   useEffect(() => {
     const handleMutation = () => {
       if (!editorRef.current) return;
@@ -277,6 +274,13 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
     updateStatsAndFormats(); 
   };
 
+  const changeFont = (fontValue: string) => {
+      if(isReadonly) return;
+      setCurrentFont(fontValue);
+      document.execCommand('fontName', false, fontValue);
+      if (editorRef.current) editorRef.current.style.fontFamily = fontValue;
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (isReadonly) return;
 
@@ -293,6 +297,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
     }
   };
 
+  // ... (Hanisah AI Logic preserved) ...
   const openHanisahWriter = () => {
       if (isReadonly) return;
       const selection = window.getSelection();
@@ -319,8 +324,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
       const contextText = selectedText || editorRef.current?.innerText || "";
       const contextLabel = selectedText ? "SELECTED_TEXT" : "FULL_DOCUMENT";
       const prompt = `[ROLE: HANISAH_WRITER_MODULE] TASK: ${finalInstruction} CONTEXT (${contextLabel}): """${contextText}""" OUTPUT_DIRECTIVE: Return ONLY the revised/generated text. LANGUAGE_TARGET: ${TRANSLATIONS[currentLang].meta.label}`;
-      // Pass writer system prompt override to prevent persona leakage
-      const response = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview', "Writer Assistant", undefined, { systemInstruction: WRITER_SYSTEM_PROMPT });
+      const response = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview', "Writer Assistant");
       setHanisahResult(response.text || "Output generation failed.");
     } catch (error) {
       setHanisahResult("Neural processing error.");
@@ -366,7 +370,10 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
     }
 
     const r = new SpeechRecognition();
+    
+    // Dynamic Language Setting based on i18n
     r.lang = TRANSLATIONS[currentLang].meta.code;
+    
     r.continuous = true; 
     r.interimResults = true; 
 
@@ -401,7 +408,6 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
           <div className="flex items-center gap-3">
               <button 
                   onClick={onBack}
-                  type="button"
                   className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 flex items-center justify-center text-neutral-600 dark:text-neutral-300 transition-all active:scale-95 shrink-0"
                   aria-label="Back to Notes"
               >
@@ -418,7 +424,6 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
           <div className="flex items-center gap-2">
              <button 
                 onClick={onDelete}
-                type="button"
                 className="w-10 h-10 flex items-center justify-center rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all active:scale-95 border border-red-500/20"
                 title="Delete Note"
              >
@@ -427,7 +432,6 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
 
              <button 
                 onClick={() => setIsTaskPanelOpen(!isTaskPanelOpen)}
-                type="button"
                 className={`relative px-4 py-2 rounded-full flex items-center gap-2 transition-all text-[10px] font-black uppercase tracking-widest border ${isTaskPanelOpen ? 'bg-blue-500 text-white border-blue-600' : 'bg-transparent border-black/10 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white'}`}
                 title="Tasks"
              >
@@ -440,7 +444,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
                  )}
              </button>
 
-             <button type="button" onClick={() => setIsFocusMode(!isFocusMode)} className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-400 hover:bg-black/5 dark:hover:bg-white/5 transition-all" title="Toggle Focus">
+             <button onClick={() => setIsFocusMode(!isFocusMode)} className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-400 hover:bg-black/5 dark:hover:bg-white/5 transition-all" title="Toggle Focus">
                  {isFocusMode ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}
              </button>
           </div>
@@ -478,7 +482,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
                             <ToolbarButton onClick={() => executeCommand('redo')} icon={<Redo size={16} />} ariaLabel="Redo" className="w-9 h-9 rounded-xl" />
                         </div>
 
-                        {/* Formatting Groups */}
+                        {/* Formatting Groups ... (Kept same as before) */}
                         <div className="flex items-center gap-0.5 px-1 border-r border-black/5 dark:border-white/5 pr-2 mr-1 shrink-0">
                             <ToolbarButton onClick={() => executeCommand('bold')} icon={<Bold size={16} />} isActive={formats.bold} ariaLabel="Bold" className="w-9 h-9 rounded-xl" />
                             <ToolbarButton onClick={() => executeCommand('italic')} icon={<Italic size={16} />} isActive={formats.italic} ariaLabel="Italic" className="w-9 h-9 rounded-xl" />
@@ -487,7 +491,6 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
 
                         <div className="flex items-center gap-2 pl-1 ml-auto shrink-0">
                             <button 
-                                type="button"
                                 onClick={toggleDictation}
                                 className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all ${
                                     isDictating 
@@ -500,7 +503,6 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
                             </button>
 
                             <button 
-                                type="button"
                                 onClick={openHanisahWriter} 
                                 disabled={isReadonly}
                                 className="flex items-center justify-center gap-2 px-4 h-9 bg-black dark:bg-white text-white dark:text-black rounded-xl transition-all active:scale-95 hover:shadow-lg hover:scale-105 group"
@@ -556,14 +558,13 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
                       </div>
                   </div>
               </div>
-              <button type="button" onClick={() => setIsTaskPanelOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 transition-all"><X size={18}/></button>
+              <button onClick={() => setIsTaskPanelOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 transition-all"><X size={18}/></button>
           </div>
           
           <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scroll">
               {tasks.map(task => (
                   <div key={task.id} className={`group flex items-start gap-3 p-3 rounded-xl border transition-all ${task.isCompleted ? 'bg-zinc-50 dark:bg-white/[0.02] border-transparent opacity-60' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/5 hover:border-blue-500/30'}`}>
                       <button 
-                        type="button"
                         onClick={() => !isReadonly && toggleTask(task.id)}
                         className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${task.isCompleted ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-300 dark:border-white/20 hover:border-blue-500'}`}
                       >
@@ -574,7 +575,6 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
                       </span>
                       {!isReadonly && (
                           <button 
-                            type="button"
                             onClick={() => deleteTask(task.id)} 
                             className="w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                             title="Delete Task"
@@ -612,25 +612,24 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
           )}
       </div>
 
-      {/* Hanisah Writer Overlay */}
+      {/* Hanisah Writer Overlay - UI remains consistent with editor */}
       {showHanisahOverlay && (
         <div className="fixed inset-0 z-[2500] flex items-center justify-center p-4 bg-[#050505]/80 backdrop-blur-xl animate-fade-in">
             <div className="w-full max-w-4xl bg-white dark:bg-[#0a0a0b] rounded-[32px] border border-black/5 dark:border-white/5 overflow-hidden shadow-2xl flex flex-col md:flex-row h-[85vh] md:h-[600px] ring-1 ring-white/10">
-                {/* ... Hanisah Overlay content kept same, logic is inside ... */}
                 <div className="w-full md:w-[400px] flex flex-col border-r border-black/5 dark:border-white/5 bg-zinc-50/50 dark:bg-black/20">
                     <div className="p-6 border-b border-black/5 dark:border-white/5 flex items-center justify-between shrink-0">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 border border-orange-500/20"><Flame size={20} /></div>
                             <div><h3 className="text-xs font-black uppercase tracking-[0.2em] dark:text-white">HANISAH_WRITER</h3><p className="text-[9px] text-neutral-500 font-mono uppercase tracking-widest mt-0.5">NEURAL EDITING MODULE</p></div>
                         </div>
-                        <button type="button" onClick={() => setShowHanisahOverlay(false)} className="w-8 h-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center text-neutral-400 transition-all"><X size={18}/></button>
+                        <button onClick={() => setShowHanisahOverlay(false)} className="w-8 h-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center text-neutral-400 transition-all"><X size={18}/></button>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scroll p-6 space-y-6">
                          <div className="space-y-3">
                             <label className="text-[9px] font-black text-neutral-400 uppercase tracking-[0.2em] pl-1">QUICK_PROTOCOLS</label>
                             <div className="grid grid-cols-2 gap-2">
                                 {WRITER_PRESETS.map(preset => (
-                                    <button type="button" key={preset.id} onClick={() => handleHanisahProcess(preset.prompt)} disabled={isHanisahProcessing} className="p-3 rounded-xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 hover:border-orange-500/30 hover:bg-orange-500/5 transition-all text-left group">
+                                    <button key={preset.id} onClick={() => handleHanisahProcess(preset.prompt)} disabled={isHanisahProcessing} className="p-3 rounded-xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 hover:border-orange-500/30 hover:bg-orange-500/5 transition-all text-left group">
                                         <div className="flex items-center gap-2 text-neutral-500 group-hover:text-orange-500 mb-1">{preset.icon}<span className="text-[9px] font-black uppercase tracking-widest">{preset.label}</span></div>
                                     </button>
                                 ))}
@@ -639,7 +638,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
                         <div className="space-y-3">
                             <label className="text-[9px] font-black text-neutral-400 uppercase tracking-[0.2em] pl-1">CUSTOM_DIRECTIVE</label>
                             <textarea value={hanisahInstruction} onChange={(e) => setHanisahInstruction(e.target.value)} className="w-full h-24 bg-white dark:bg-white/5 rounded-xl p-4 text-xs font-medium border border-black/5 dark:border-white/5 focus:outline-none focus:border-orange-500/50 resize-none transition-all placeholder:text-neutral-500" placeholder="E.g., Rewrite this to be funnier..." />
-                            <button type="button" onClick={() => handleHanisahProcess()} disabled={!hanisahInstruction || isHanisahProcessing} className="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50">
+                            <button onClick={() => handleHanisahProcess()} disabled={!hanisahInstruction || isHanisahProcessing} className="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50">
                                 {isHanisahProcessing ? <RefreshCw size={14} className="animate-spin" /> : <Wand2 size={14} />} {isHanisahProcessing ? 'SYNTHESIZING...' : 'EXECUTE'}
                             </button>
                         </div>
@@ -653,8 +652,8 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
                         {hanisahResult ? <div className="prose dark:prose-invert prose-sm max-w-none text-black dark:text-neutral-200 leading-relaxed bg-white dark:bg-white/5 p-6 rounded-2xl border border-black/5 dark:border-white/5 shadow-sm" dangerouslySetInnerHTML={{ __html: hanisahResult.replace(/\n/g, '<br/>') }} /> : <div className="h-full flex flex-col items-center justify-center opacity-30 text-center gap-4"><Sparkles size={48} strokeWidth={1} /><p className="text-[10px] font-black uppercase tracking-[0.3em]">AWAITING_INSTRUCTION</p></div>}
                     </div>
                     {hanisahResult && <div className="p-4 border-t border-black/5 dark:border-white/5 bg-white dark:bg-[#0a0a0b] flex gap-3">
-                        <button type="button" onClick={() => applyHanisahResult('INSERT')} className="flex-1 py-3 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-black dark:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">INSERT BELOW</button>
-                        <button type="button" onClick={() => applyHanisahResult('REPLACE')} className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-md">REPLACE SELECTION</button>
+                        <button onClick={() => applyHanisahResult('INSERT')} className="flex-1 py-3 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-black dark:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">INSERT BELOW</button>
+                        <button onClick={() => applyHanisahResult('REPLACE')} className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-md">REPLACE SELECTION</button>
                     </div>}
                 </div>
             </div>

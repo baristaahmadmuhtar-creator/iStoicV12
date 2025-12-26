@@ -3,7 +3,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { VaultProvider } from './contexts/VaultContext';
-import { FeatureProvider } from './contexts/FeatureContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -13,10 +12,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <FeatureProvider>
-      <VaultProvider>
-          <App />
-      </VaultProvider>
-    </FeatureProvider>
+    <VaultProvider>
+        <App />
+    </VaultProvider>
   </React.StrictMode>
 );

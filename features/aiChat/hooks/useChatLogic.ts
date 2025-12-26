@@ -13,10 +13,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     const [threads, setThreads] = useLocalStorage<ChatThread[]>('chat_threads', []);
     const [activeThreadId, setActiveThreadId] = useLocalStorage<string | null>('active_thread_id', null);
     
-    // NEW: Global Model Preference (Persists user choice across sessions/new chats)
-    // Updated default to Groq Llama 3.3 as requested
-    const [globalModelId, setGlobalModelId] = useLocalStorage<string>('global_model_preference', 'llama-3.3-70b-versatile');
-
     // SECURITY: Use Global Context
     const { isVaultUnlocked, lockVault, unlockVault, isVaultConfigEnabled } = useVault();
     
@@ -33,10 +29,9 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     [threads, activeThreadId]);
 
     const activeModel = useMemo(() => {
-        // PRIORITY: Active Thread Model -> Global Preference -> Default
-        const id = activeThread?.model_id || globalModelId || 'llama-3.3-70b-versatile';
-        return MODEL_CATALOG.find(m => m.id === id) || MODEL_CATALOG.find(m => m.id === 'llama-3.3-70b-versatile') || MODEL_CATALOG[0];
-    }, [activeThread, globalModelId]);
+        const id = activeThread?.model_id || 'gemini-3-pro-preview';
+        return MODEL_CATALOG.find(m => m.id === id) || MODEL_CATALOG[0];
+    }, [activeThread]);
 
     // UPDATED: Default to 'stoic' if no thread is active
     const personaMode = activeThread?.persona || 'stoic';
@@ -54,8 +49,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             id: uuidv4(),
             title: `SESSION_${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
             persona,
-            // CRITICAL FIX: Use the user's globally selected model instead of forcing auto-best
-            model_id: globalModelId, 
+            model_id: 'gemini-3-pro-preview',
             messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
             updated: new Date().toISOString(),
             isPinned: false
@@ -64,7 +58,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         setThreads(prev => [newThread, ...prev]);
         setActiveThreadId(newThread.id);
         return newThread; // Return for immediate usage
-    }, [setActiveThreadId, setThreads, globalModelId]);
+    }, [setActiveThreadId, setThreads]);
 
     const renameThread = useCallback(async (id: string, newTitle: string) => {
         setThreads(prev => prev.map(t => t.id === id ? { ...t, title: newTitle, updated: new Date().toISOString() } : t));
@@ -74,15 +68,15 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         setThreads(prev => prev.map(t => t.id === id ? { ...t, isPinned: !t.isPinned } : t));
     }, [setThreads]);
 
-    const sendMessage = async (e?: React.FormEvent, attachment?: { data: string, mimeType: string }, textOverride?: string) => {
-        const userMsg = textOverride !== undefined ? textOverride : input.trim();
+    const sendMessage = async (e?: React.FormEvent, attachment?: { data: string, mimeType: string }) => {
+        const userMsg = input.trim();
         // Allow empty message if there is an attachment
         if ((!userMsg && !attachment) || isLoading) return;
 
         let currentThreadId = activeThreadId;
         let effectiveThread = activeThread;
 
-        // 1. AUTO-INITIALIZATION: If no thread exists, create one immediately using current preferences
+        // 1. AUTO-INITIALIZATION: If no thread exists, create one immediately
         if (!currentThreadId || !effectiveThread) {
             const welcome = personaMode === 'hanisah' 
                 ? "⚡ **HANISAH PLATINUM ONLINE.**\n\n*Halo Sayang, aku sudah siap. Apa yang bisa kubantu hari ini?*" 
@@ -93,8 +87,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 id: newId,
                 title: userMsg ? userMsg.slice(0, 30).toUpperCase() : 'IMAGE_ANALYSIS',
                 persona: personaMode,
-                // CRITICAL FIX: Ensure the FIRST message uses the selected global model
-                model_id: globalModelId, 
+                model_id: 'gemini-3-pro-preview',
                 messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
                 updated: new Date().toISOString(),
                 isPinned: false
@@ -125,14 +118,11 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
         // Create Placeholder for AI Message
         const modelMessageId = uuidv4();
-        // Determine model info for metadata
-        const currentModel = MODEL_CATALOG.find(m => m.id === effectiveThread.model_id) || activeModel;
-        
         const initialModelMessage: ChatMessage = { 
             id: modelMessageId, 
             role: 'model', 
             text: '', 
-            metadata: { status: 'success', model: currentModel.name, provider: currentModel.provider } 
+            metadata: { status: 'success', model: activeModel.name, provider: activeModel.provider } 
         };
 
         // Update thread with new messages AND update the timestamp so it bumps to top
@@ -143,7 +133,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             updated: now 
         } : t));
         
-        // Reset input immediately
         setInput('');
         setIsLoading(true);
 
@@ -196,11 +185,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 } : t));
             }
 
-            // Fallback for empty responses (silent failures)
-            if (!accumulatedText && !currentFunctionCall) {
-                throw new Error("No data received from Neural Node.");
-            }
-
             if (isAutoSpeak && accumulatedText && !currentFunctionCall) {
                 speakWithHanisah(accumulatedText.replace(/[*#_`]/g, ''), personaMode === 'hanisah' ? 'Hanisah' : 'Fenrir');
             }
@@ -235,11 +219,10 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 }
             }
         } catch (err: any) {
-             console.error("Chat Execution Error:", err);
              setThreads(prev => prev.map(t => t.id === currentThreadId ? { 
                 ...t, 
                 messages: t.messages.map(m => m.id === modelMessageId ? {
-                    ...m, text: `⚠️ **SYSTEM FAILURE**: ${err.message || 'Connection terminated unexpectedly.'}`, metadata: { status: 'error' }
+                    ...m, text: `⚠️ **CRITICAL KERNEL FAILURE**: Sistem tidak dapat memulihkan koneksi.\n\n_Manual Reboot Required._`, metadata: { status: 'error' }
                 } : m)
             } : t));
         } finally {
@@ -258,7 +241,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         input, setInput,
         isLoading,
         activeModel,
-        setGlobalModelId, // Export this setter for UI
         personaMode,
         handleNewChat,
         renameThread,

@@ -6,7 +6,7 @@ import {
   Radio, ChevronDown, Sparkles, Zap, 
   Flame, Brain, Activity, Fingerprint, Layers, Command,
   ArrowRight, Search, Palette, Code, GraduationCap, Lightbulb, Music,
-  History, Settings2, LayoutTemplate, ArrowDown, CircuitBoard, Infinity
+  History, Settings2, LayoutTemplate, ArrowDown, CircuitBoard, Infinity, Eraser
 } from 'lucide-react';
 
 import { useNeuralLinkSession } from './hooks/useNeuralLinkSession';
@@ -19,7 +19,7 @@ import { VaultPinModal } from '../../components/VaultPinModal';
 import { useNavigationIntelligence } from '../../hooks/useNavigationIntelligence';
 import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
 import { debugService } from '../../services/debugService';
-import { useFeatures } from '../../contexts/FeatureContext'; // Import Feature Hook
+import { useFeatures } from '../../contexts/FeatureContext';
 
 interface AIChatViewProps {
     chatLogic: any;
@@ -37,30 +37,28 @@ const SuggestionCard: React.FC<{
         onClick={onClick}
         className={`
             relative overflow-hidden group 
-            bg-white/80 dark:bg-[#0f0f11]/80 backdrop-blur-md
-            border border-black/5 dark:border-white/5 
+            bg-white/60 dark:bg-white/[0.03] backdrop-blur-xl
+            border border-black/5 dark:border-white/5
             rounded-[24px] p-5 text-left 
             transition-all duration-300 ease-out
-            hover:border-accent/30 hover:shadow-[0_10px_30px_-10px_rgba(var(--accent-rgb),0.15)] hover:-translate-y-1 active:scale-[0.98]
-            flex flex-col justify-between h-full min-h-[120px] md:min-h-[140px]
-            animate-slide-up
+            hover:bg-white/80 dark:hover:bg-white/[0.06]
+            hover:border-accent/30 hover:shadow-[0_15px_30px_-10px_rgba(var(--accent-rgb),0.15)]
+            hover:-translate-y-1 active:scale-[0.98]
+            flex flex-col justify-between h-full min-h-[140px]
+            animate-slide-up ring-1 ring-transparent hover:ring-accent/10
             ${className}
         `}
     >
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none mix-blend-overlay"></div>
-        <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-x-2 group-hover:translate-x-0">
-            <ArrowRight size={14} className="text-accent" />
-        </div>
-        
-        <div className="relative z-10 w-full">
-            <div className="mb-4">
-                <div className={`w-10 h-10 rounded-xl bg-zinc-50 dark:bg-white/5 flex items-center justify-center transition-all duration-300 group-hover:scale-110 ${accent} group-hover:bg-accent/10 border border-black/5 dark:border-white/5 shadow-sm`}>
-                    {icon}
+        <div className="relative z-10 w-full flex flex-col h-full">
+            <div className="mb-auto flex justify-between items-start">
+                <div className={`w-10 h-10 rounded-[14px] bg-zinc-50 dark:bg-white/5 flex items-center justify-center transition-all duration-500 group-hover:scale-110 ${accent} group-hover:bg-accent/10 border border-black/5 dark:border-white/5 shadow-sm`}>
+                    {React.cloneElement(icon as React.ReactElement<any>, { size: 18, strokeWidth: 2 })}
                 </div>
+                <ArrowRight size={14} className="text-accent/50 -rotate-45 group-hover:rotate-0 transition-transform opacity-0 group-hover:opacity-100" />
             </div>
-            <div>
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-black dark:text-white mb-1.5 group-hover:text-accent transition-colors">{label}</h4>
-                <p className="text-[10px] text-neutral-500 font-medium leading-relaxed line-clamp-2 group-hover:text-neutral-400 transition-colors">{desc}</p>
+            <div className="mt-4 space-y-1.5">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-700 dark:text-neutral-300 group-hover:text-accent transition-colors">{label}</h4>
+                <p className="text-[10px] text-neutral-500 font-medium leading-relaxed line-clamp-2 pr-2 opacity-80 group-hover:opacity-100">{desc}</p>
             </div>
         </div>
     </button>
@@ -74,11 +72,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const [isTransitioning, setIsTransitioning] = useState(false); 
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     
-    // Feature Flags
     const { isFeatureEnabled } = useFeatures();
     const isLiveLinkEnabled = isFeatureEnabled('LIVE_LINK');
+    const isOmniRaceEnabled = isFeatureEnabled('OMNI_RACE');
 
-    // Mobile Intelligence
     const { isInputFocused, shouldShowNav } = useNavigationIntelligence();
     const isMobileNavVisible = shouldShowNav && (!isInputFocused || window.innerWidth > 768);
     
@@ -98,10 +95,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         isVaultConfigEnabled, 
         isAutoSpeak,
         setIsAutoSpeak,
-        setIsLiveModeActive
+        setIsLiveModeActive,
+        setGlobalModelId 
     } = chatLogic;
 
-    // Strict Handlers
     const handleModelPickerOpen = () => {
         debugService.logAction(UI_REGISTRY.CHAT_BTN_MODEL_PICKER, FN_REGISTRY.CHAT_SELECT_MODEL, 'OPEN');
         setShowModelPicker(true);
@@ -139,7 +136,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         analyser
     } = useNeuralLinkSession(personaMode, notes, setNotes);
 
-    // Sync Live Mode State to Global Logic
     useEffect(() => {
         if (setIsLiveModeActive) {
             setIsLiveModeActive(isLiveMode);
@@ -174,8 +170,9 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         const handleScroll = () => {
             const { scrollTop, scrollHeight, clientHeight } = container;
             const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+            const threshold = 150; 
             
-            if (distanceToBottom > 300) {
+            if (distanceToBottom > threshold) {
                 isAutoScrolling.current = false;
                 setShowScrollBtn(true);
             } else {
@@ -184,24 +181,19 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
             }
         };
 
-        container.addEventListener('scroll', handleScroll);
+        container.addEventListener('scroll', handleScroll, { passive: true });
         return () => container.removeEventListener('scroll', handleScroll);
     }, []);
 
     useEffect(() => {
         if (!messagesEndRef.current) return;
         if (isAutoScrolling.current) {
-            requestAnimationFrame(() => {
+            const timeout = setTimeout(() => {
                 scrollToBottom(isLoading ? 'auto' : 'smooth');
-            });
+            }, 100);
+            return () => clearTimeout(timeout);
         }
     }, [activeThread?.messages, isLoading, scrollToBottom]);
-
-    useLayoutEffect(() => {
-        if (messagesEndRef.current && activeThread) {
-            scrollToBottom('auto');
-        }
-    }, [activeThreadId, activeThread?.messages.length, scrollToBottom]);
 
     const changePersona = async (target: 'hanisah' | 'stoic') => {
         if (personaMode === target || isTransitioning) return;
@@ -216,143 +208,154 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     };
 
     const showEmptyState = !activeThread || activeThread.messages.length <= 1;
-    const isAutoBest = activeModel?.id === 'auto-best';
+    
+    const isAutoBestSelected = activeModel?.id === 'auto-best';
+    const isHydraActive = isAutoBestSelected && isOmniRaceEnabled;
+    const effectiveModelName = isHydraActive ? 'HYDRA_OMNI' : (isAutoBestSelected ? 'GEMINI FLASH (FB)' : activeModel?.name || 'GEMINI PRO');
+
+    // Dynamic Persona Styling
+    const personaColor = personaMode === 'hanisah' ? 'text-orange-500' : 'text-cyan-500';
+    const personaGlow = personaMode === 'hanisah' ? 'from-orange-500/20 to-pink-500/5' : 'from-cyan-500/20 to-blue-500/5';
+    const personaBorder = personaMode === 'hanisah' ? 'border-orange-500/20' : 'border-cyan-500/20';
 
     return (
-        <div className="min-h-full flex flex-col relative w-full bg-noise animate-fade-in">
+        <div className="min-h-full flex flex-col relative w-full bg-noise animate-fade-in transition-colors duration-1000">
             <VaultPinModal 
                 isOpen={showPinModal} 
                 onClose={() => setShowPinModal(false)} 
                 onSuccess={() => setIsVaultSynced(true)} 
             />
 
+            {/* Dynamic Background Mesh */}
+            <div className={`fixed inset-0 bg-gradient-to-b ${personaGlow} pointer-events-none transition-all duration-1000 opacity-20`}></div>
+
             {/* MAIN CONTENT CONTAINER */}
-            <div className={`flex-1 flex flex-col relative z-10 w-full max-w-[1000px] mx-auto px-4 md:px-6 transition-all duration-500 ${isMobileNavVisible ? 'pb-36' : 'pb-28'}`}>
+            <div className={`flex-1 flex flex-col relative z-10 w-full max-w-[1000px] mx-auto transition-all duration-500 ${isMobileNavVisible ? 'pb-36' : 'pb-28'}`}>
                 
-                {/* 1. FLOATING HEADER */}
-                <header className="sticky top-2 md:top-6 z-40 mb-2 transition-all duration-300 ease-out flex justify-center w-full">
+                {/* 1. HUD HEADER */}
+                <div className="sticky top-4 z-40 w-full px-4 flex justify-center pointer-events-none">
                     <div className={`
-                        backdrop-blur-xl border rounded-full p-1.5 pl-4 pr-1.5 flex items-center justify-between gap-6 shadow-lg ring-1 transition-all duration-500 max-w-[95%] sm:max-w-none
-                        ${isAutoBest 
-                            ? 'bg-black/80 dark:bg-white/10 border-emerald-500/30 ring-emerald-500/20 shadow-emerald-500/10' 
-                            : 'bg-white/80 dark:bg-[#0f0f11]/80 border-black/5 dark:border-white/10 ring-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.08)]'
+                        pointer-events-auto backdrop-blur-xl border rounded-full p-1.5 pl-2 pr-1.5 flex items-center justify-between gap-3 shadow-lg ring-1 transition-all duration-500
+                        ${isHydraActive 
+                            ? 'bg-black/80 dark:bg-zinc-900/80 border-emerald-500/30 ring-emerald-500/20 shadow-emerald-500/10' 
+                            : 'bg-white/80 dark:bg-[#0f0f11]/80 border-white/20 dark:border-white/10 ring-white/20 shadow-2xl'
                         }
                     `}>
                         
                         {/* Model & Persona Info */}
                         <button 
-                            className="flex items-center gap-3 cursor-pointer group py-1 hover:opacity-80 transition-opacity" 
+                            className="flex items-center gap-3 cursor-pointer group py-1.5 px-3 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-all" 
                             onClick={handleModelPickerOpen}
                             title="Switch AI Model"
                         >
                             <div className={`
-                                w-7 h-7 rounded-full flex items-center justify-center transition-colors border border-black/5 dark:border-white/5 shrink-0
-                                ${isAutoBest 
-                                    ? 'bg-gradient-to-br from-emerald-400 to-cyan-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.4)]' 
-                                    : personaMode === 'hanisah' ? 'bg-orange-500/10 text-orange-500' : 'bg-cyan-500/10 text-cyan-500'
+                                w-7 h-7 rounded-full flex items-center justify-center transition-colors border shrink-0 relative overflow-hidden
+                                ${isHydraActive 
+                                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
+                                    : `${personaMode === 'hanisah' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' : 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20'}`
                                 }
                             `}>
-                                {isAutoBest ? <Infinity size={14} /> : (personaMode === 'hanisah' ? <Flame size={12} fill="currentColor" /> : <Brain size={12} fill="currentColor" />)}
+                                {isHydraActive 
+                                    ? <Infinity size={14} className="animate-pulse" /> 
+                                    : (personaMode === 'hanisah' ? <Flame size={14} fill="currentColor" /> : <Brain size={14} fill="currentColor" />)
+                                }
                             </div>
                             <div className="flex flex-col overflow-hidden text-left">
-                                <span className={`text-[7px] font-black uppercase tracking-[0.2em] transition-colors truncate ${isAutoBest ? 'text-emerald-500' : 'text-neutral-400 group-hover:text-accent'}`}>
-                                    {isAutoBest ? 'HYDRA_ENGINE' : `${personaMode.toUpperCase()} // SYSTEM`}
+                                <span className={`text-[8px] font-black uppercase tracking-widest leading-none mb-0.5 ${isHydraActive ? 'text-emerald-500' : 'text-neutral-500 group-hover:text-black dark:group-hover:text-white transition-colors'}`}>
+                                    {isHydraActive ? 'HYDRA_OMNI' : `${personaMode.toUpperCase()}`}
                                 </span>
-                                <div className="flex items-center gap-1.5">
-                                    <span className={`text-[10px] font-bold uppercase leading-none max-w-[100px] sm:max-w-[120px] truncate tracking-wide ${isAutoBest ? 'text-white' : 'text-black dark:text-white'}`}>
-                                        {activeModel?.name || 'GEMINI PRO'}
+                                <div className="flex items-center gap-1">
+                                    <span className="text-[10px] font-bold uppercase leading-none max-w-[120px] sm:max-w-[160px] truncate text-black dark:text-white">
+                                        {effectiveModelName}
                                     </span>
-                                    <ChevronDown size={10} className="text-neutral-400 shrink-0" />
+                                    <ChevronDown size={10} className="text-neutral-400 shrink-0 opacity-50 group-hover:opacity-100" />
                                 </div>
                             </div>
                         </button>
 
-                        {/* Divider */}
-                        <div className="h-5 w-[1px] bg-black/10 dark:bg-white/10 hidden sm:block"></div>
+                        <div className="h-6 w-[1px] bg-black/5 dark:bg-white/10"></div>
 
                         {/* Actions */}
                         <div className="flex items-center gap-1 shrink-0">
                             <button 
                                 onClick={handleHistoryOpen}
-                                className="w-8 h-8 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-neutral-500 hover:text-black dark:hover:text-white transition-all flex items-center justify-center active:scale-95"
-                                title="History Log"
+                                className="w-9 h-9 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-neutral-400 hover:text-black dark:hover:text-white transition-all flex items-center justify-center active:scale-95"
+                                title="Neural Logs"
                             >
-                                <History size={14} strokeWidth={2} />
+                                <History size={16} strokeWidth={2} />
                             </button>
 
                             <button 
                                 onClick={handleLiveToggle}
-                                className={`w-8 h-8 rounded-full transition-all flex items-center justify-center active:scale-95 ${
+                                className={`w-9 h-9 rounded-full transition-all flex items-center justify-center active:scale-95 ${
                                     !isLiveLinkEnabled 
                                     ? 'opacity-30 cursor-not-allowed text-neutral-500' 
                                     : isLiveMode 
                                         ? 'bg-red-500 text-white shadow-lg animate-pulse' 
-                                        : 'text-neutral-500 hover:text-red-500 hover:bg-red-500/10'
+                                        : 'text-neutral-400 hover:text-red-500 hover:bg-red-500/10'
                                 }`}
                                 title={!isLiveLinkEnabled ? "Live Link Disabled" : "Initialize Neural Link"}
                                 disabled={!isLiveLinkEnabled}
                             >
-                                <Radio size={14} strokeWidth={2} />
+                                <Radio size={16} strokeWidth={2} />
                             </button>
                         </div>
                     </div>
-                </header>
+                </div>
 
                 {/* 2. CHAT AREA */}
-                <div className="flex-1 w-full relative min-h-0 flex flex-col">
+                <div className="flex-1 w-full relative min-h-0 flex flex-col px-4 md:px-0 mt-4">
                     {showEmptyState ? (
-                        <div className="flex flex-col h-full justify-center max-w-4xl mx-auto w-full pb-20 pt-8 animate-fade-in">
+                        <div className="flex flex-col h-full justify-center w-full pb-20 pt-8 animate-fade-in">
                             
                             {/* Dynamic Hero Section */}
-                            <div className="flex flex-col items-center text-center mb-10 md:mb-16 relative">
-                                {/* Ambient Glow */}
-                                <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[250px] md:w-[350px] h-[250px] md:h-[350px] rounded-full blur-[100px] opacity-20 pointer-events-none transition-colors duration-700 ${personaMode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500'}`}></div>
-
-                                <div className={`relative w-20 h-20 md:w-28 md:h-28 mb-6 md:mb-8 flex items-center justify-center group cursor-pointer`} onClick={togglePersona}>
-                                    <div className={`absolute inset-0 rounded-full bg-gradient-to-br opacity-10 blur-xl group-hover:opacity-25 transition-opacity duration-500 ${personaMode === 'hanisah' ? 'from-orange-500 to-pink-500' : 'from-cyan-500 to-blue-500'}`}></div>
-                                    <div className={`relative w-20 h-20 md:w-28 md:h-28 rounded-full flex items-center justify-center shadow-2xl border border-white/10 bg-white/5 backdrop-blur-md transition-all duration-500 group-hover:scale-105 group-hover:rotate-3 ${personaMode === 'hanisah' ? 'text-orange-500' : 'text-cyan-500'}`}>
-                                        {personaMode === 'hanisah' ? <Flame size={40} strokeWidth={1} /> : <Brain size={40} strokeWidth={1} />}
+                            <div className="flex flex-col items-center text-center mb-12 relative">
+                                <button 
+                                    onClick={togglePersona}
+                                    className={`relative w-28 h-28 mb-8 flex items-center justify-center group cursor-pointer active:scale-95 transition-transform duration-300`}
+                                >
+                                    <div className={`absolute inset-0 rounded-[32px] bg-gradient-to-br opacity-20 blur-xl group-hover:opacity-40 transition-opacity duration-500 ${personaMode === 'hanisah' ? 'from-orange-500 to-pink-500' : 'from-cyan-500 to-blue-500'}`}></div>
+                                    <div className={`relative w-full h-full rounded-[32px] flex items-center justify-center shadow-2xl border bg-white/50 dark:bg-white/5 backdrop-blur-xl transition-all duration-500 group-hover:rotate-3 ${personaBorder} ${personaColor}`}>
+                                        {personaMode === 'hanisah' ? <Flame size={48} strokeWidth={1.5} /> : <Brain size={48} strokeWidth={1.5} />}
                                     </div>
-                                    {/* Orbit Ring */}
-                                    <div className="absolute inset-[-8px] md:inset-[-12px] rounded-full border border-dashed border-black/5 dark:border-white/5 animate-spin-slow pointer-events-none opacity-50"></div>
-                                </div>
+                                </button>
 
-                                <h2 className="text-4xl md:text-7xl font-black italic tracking-tighter text-black dark:text-white mb-4 uppercase leading-none drop-shadow-sm">
+                                <h2 className="text-5xl md:text-7xl font-black italic tracking-tighter text-black dark:text-white mb-3 uppercase leading-none drop-shadow-sm select-none">
                                     {personaMode === 'hanisah' ? 'HANISAH' : 'STOIC'} <span className="text-transparent bg-clip-text bg-gradient-to-r from-neutral-400 to-neutral-600">OS</span>
                                 </h2>
-                                <div className="flex items-center gap-4">
-                                    <div className="h-[1px] w-8 bg-black/10 dark:bg-white/10"></div>
-                                    <p className="text-[9px] md:text-[10px] tech-mono font-bold text-neutral-500 uppercase tracking-[0.3em]">
-                                        NEURAL INTERFACE READY
+                                
+                                <div className="flex items-center gap-3 px-4 py-1.5 rounded-full border border-black/5 dark:border-white/5 bg-white/50 dark:bg-white/5 backdrop-blur-sm">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${personaMode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500'} animate-pulse shadow-[0_0_8px_currentColor]`}></span>
+                                    <p className="text-[9px] tech-mono font-bold text-neutral-500 uppercase tracking-[0.25em]">
+                                        {personaMode === 'hanisah' ? 'HEURISTIC_ENGINE_READY' : 'LOGIC_KERNEL_ACTIVE'}
                                     </p>
-                                    <div className="h-[1px] w-8 bg-black/10 dark:bg-white/10"></div>
                                 </div>
                             </div>
 
-                            {/* Refined Bento Grid Suggestions */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 w-full px-2">
+                            {/* Suggestions Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 w-full max-w-4xl mx-auto">
                                 {personaMode === 'hanisah' ? (
                                     <>
                                         <SuggestionCard 
-                                            icon={<Palette size={20} />} 
-                                            label="GENERATE_VISUAL" 
-                                            desc="Create high-fidelity images with Imagen 3." 
+                                            icon={<Palette />} 
+                                            label="VISUAL_SYNTHESIS" 
+                                            desc="Generate 8K visuals with Imagen 3." 
                                             onClick={() => handleSuggestionClick("Generate a futuristic cyberpunk city with neon lights, 8k resolution.", 'GEN_IMG')} 
                                             className="col-span-1 sm:col-span-2 md:col-span-1"
                                             accent="text-pink-500"
                                         />
                                         <SuggestionCard 
-                                            icon={<Code size={20} />} 
+                                            icon={<Code />} 
                                             label="CODE_AUDIT" 
-                                            desc="Debug algorithms." 
+                                            desc="Debug & optimize algorithms." 
                                             onClick={() => handleSuggestionClick("Review this code for performance bottlenecks and suggest optimizations.", 'CODE_AUDIT')} 
                                             className="col-span-1 sm:col-span-2 md:col-span-2"
                                             accent="text-emerald-500"
                                         />
                                         <SuggestionCard 
-                                            icon={<Layers size={20} />} 
+                                            icon={<Layers />} 
                                             label="VAULT_SYNC" 
-                                            desc="Analyze notes." 
+                                            desc="Connect active knowledge nodes." 
                                             onClick={() => handleSuggestionClick("Analyze my recent notes about 'Project X' and summarize key insights.", 'VAULT_SYNC')} 
                                             className="col-span-1 md:col-span-1"
                                             accent="text-blue-500"
@@ -361,25 +364,25 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                 ) : (
                                     <>
                                         <SuggestionCard 
-                                            icon={<GraduationCap size={20} />} 
+                                            icon={<GraduationCap />} 
                                             label="STOIC_AUDIT" 
-                                            desc="Analyze a dilemma via Marcus Aurelius." 
+                                            desc="Analyze via Marcus Aurelius." 
                                             onClick={() => handleSuggestionClick("I'm feeling overwhelmed by work. How would a Stoic approach this?", 'STOIC_AUDIT')} 
                                             className="col-span-1 sm:col-span-2 md:col-span-2"
                                             accent="text-amber-500"
                                         />
                                         <SuggestionCard 
-                                            icon={<Lightbulb size={20} />} 
-                                            label="LOGIC_BREAKDOWN" 
-                                            desc="First principles thinking." 
+                                            icon={<Lightbulb />} 
+                                            label="FIRST_PRINCIPLES" 
+                                            desc="Deconstruct core truths." 
                                             onClick={() => handleSuggestionClick("Help me deconstruct this problem using first principles thinking.", 'LOGIC_BREAKDOWN')} 
                                             className="col-span-1"
                                             accent="text-cyan-500"
                                         />
                                         <SuggestionCard 
-                                            icon={<Brain size={20} />} 
+                                            icon={<Brain />} 
                                             label="BIAS_CHECK" 
-                                            desc="Identify fallacies." 
+                                            desc="Identify cognitive fallacies." 
                                             onClick={() => handleSuggestionClick("Identify potential biases in this argument: [Insert Text]", 'BIAS_CHECK')} 
                                             className="col-span-1"
                                             accent="text-purple-500"
@@ -410,7 +413,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                         {showScrollBtn && (
                             <button 
                                 onClick={handleScrollBtnClick}
-                                className="absolute -top-14 right-0 z-20 w-10 h-10 rounded-full bg-white dark:bg-[#0a0a0b] shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center text-accent hover:scale-110 active:scale-95 transition-all animate-bounce"
+                                className="absolute -top-16 right-0 z-20 w-10 h-10 rounded-full bg-white dark:bg-[#0a0a0b] shadow-xl border border-black/10 dark:border-white/10 flex items-center justify-center text-accent hover:scale-110 active:scale-95 transition-all animate-bounce"
                             >
                                 <ArrowDown size={18} strokeWidth={2.5} />
                             </button>
@@ -442,6 +445,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                 activeModelId={activeModel?.id || ''}
                 onSelectModel={(id) => {
                     debugService.logAction(UI_REGISTRY.CHAT_BTN_MODEL_PICKER, FN_REGISTRY.CHAT_SELECT_MODEL, id);
+                    setGlobalModelId(id);
                     if (activeThreadId) {
                         setThreads(prev => prev.map(t => t.id === activeThreadId ? { ...t, model_id: id } : t));
                     }

@@ -10,6 +10,14 @@ import { OMNI_KERNEL } from "./omniRace";
 import { type ModelMetadata } from "../types";
 
 export const MODEL_CATALOG: ModelMetadata[] = [
+  { 
+    id: 'gemini-2.5-flash', 
+    name: 'Gemini 2.5 Flash', 
+    category: 'GEMINI_2_5', 
+    provider: 'GEMINI', 
+    description: 'Model Default. Tercepat, Gratis, & Multimodal.', 
+    specs: { context: '1M', speed: 'INSTANT', intelligence: 9 } 
+  },
   {
     id: 'auto-best',
     name: 'Auto Pilot (Hydra)',
@@ -19,12 +27,12 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     specs: { context: 'AUTO', speed: 'INSTANT', intelligence: 9.8 }
   },
   { 
-    id: 'gemini-2.5-flash', 
-    name: 'Gemini 2.5 Flash', 
-    category: 'GEMINI_2_5', 
+    id: 'gemini-3-flash-preview', 
+    name: 'Gemini 3.0 Flash', 
+    category: 'GEMINI_3', 
     provider: 'GEMINI', 
-    description: 'Model Default. Tercepat, Gratis, & Multimodal.', 
-    specs: { context: '1M', speed: 'INSTANT', intelligence: 9 } 
+    description: 'Next-Gen Flash. High speed, low latency, advanced reasoning.', 
+    specs: { context: '1M', speed: 'INSTANT', intelligence: 9.5 } 
   },
   { 
     id: 'gemini-3-pro-preview', 
@@ -98,16 +106,20 @@ export class HanisahKernel {
   async *streamExecute(msg: string, initialModelId: string, context?: string, imageData?: { data: string, mimeType: string }, configOverride?: any): AsyncGenerator<StreamChunk> {
     const systemPrompt = configOverride?.systemInstruction || HANISAH_BRAIN.getSystemInstruction('hanisah', context);
     
+    // CRITICAL FIX: Defined mutable currentModelId to be used in the logic loop
+    let currentModelId = initialModelId;
+
     // --- OMNI RACE LOGIC with FEATURE FLAG CHECK ---
     if (initialModelId === 'auto-best') {
         const isEnabled = this.isOmniRaceEnabled();
         
         if (!isEnabled) {
-            yield { text: `\n\n> 🛑 *Omni-Race disabled by Protocol. Switching to Single-Core (Gemini Flash)...*` };
-            initialModelId = 'gemini-2.5-flash'; // Fallback
+            // FIX: If disabled, explicit fallback message and model reassignment
+            yield { text: `\n\n> 🛑 *Omni-Race disabled by Protocol. Switching to Single-Core (Gemini Flash)...*\n\n` };
+            currentModelId = 'gemini-2.5-flash'; 
         } else if (imageData) {
             yield { text: `\n\n> ⚠️ *Visual Input detected. Falling back to Gemini Vision...*` };
-            initialModelId = 'gemini-2.5-flash';
+            currentModelId = 'gemini-2.5-flash';
         } else {
             yield* OMNI_KERNEL.raceStream(msg, systemPrompt, context);
             this.updateHistory(msg, "[Omni-Race Response]"); 
@@ -115,13 +127,12 @@ export class HanisahKernel {
         }
     }
 
-    let currentModelId = initialModelId;
     let attempts = 0;
     const maxAttempts = 3;
 
     while (attempts < maxAttempts) {
         attempts++;
-        const model = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG[1];
+        const model = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG[0];
         const provider = model.provider;
         const key = GLOBAL_VAULT.getKey(provider as Provider);
 
@@ -172,8 +183,17 @@ export class HanisahKernel {
             const isQuota = JSON.stringify(err).includes('429') || JSON.stringify(err).includes('resource_exhausted') || JSON.stringify(err).includes('limit');
             const isBalance = JSON.stringify(err).includes('402');
 
-            if (isQuota || isBalance) {
-                yield { text: `\n\n> 🔄 *Quota ${provider} penuh. Merotasi sistem...*` };
+            // If it's a fatal error with the model ID (like sending auto-best to Gemini), fallback immediately
+            const isBadModel = JSON.stringify(err).includes('404') || JSON.stringify(err).includes('not found') || JSON.stringify(err).includes('400');
+
+            if (isQuota || isBalance || isBadModel) {
+                // FALLBACK LOGIC: If we are already on Flash, we can't fall back further easily.
+                if (currentModelId === 'gemini-2.5-flash') {
+                     yield { text: `\n\n> ⛔ *Jalur Darurat (Flash) juga gagal. Pesan tidak terkirim.*` };
+                     throw err; 
+                }
+                
+                yield { text: `\n\n> 🔄 *Jalur ${model.name} terganggu. Mengalihkan ke Jalur Darurat (Flash)...*` };
                 currentModelId = 'gemini-2.5-flash';
                 continue;
             }

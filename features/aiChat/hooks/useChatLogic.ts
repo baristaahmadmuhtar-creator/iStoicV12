@@ -13,6 +13,10 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     const [threads, setThreads] = useLocalStorage<ChatThread[]>('chat_threads', []);
     const [activeThreadId, setActiveThreadId] = useLocalStorage<string | null>('active_thread_id', null);
     
+    // NEW: Global Model Preference (Persists user choice across sessions/new chats)
+    // Updated default to Groq Llama 3.3 as requested
+    const [globalModelId, setGlobalModelId] = useLocalStorage<string>('global_model_preference', 'llama-3.3-70b-versatile');
+
     // SECURITY: Use Global Context
     const { isVaultUnlocked, lockVault, unlockVault, isVaultConfigEnabled } = useVault();
     
@@ -29,10 +33,10 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     [threads, activeThreadId]);
 
     const activeModel = useMemo(() => {
-        // DEFAULT CHANGE: auto-best (Hydra) is now the default instead of gemini-3-pro
-        const id = activeThread?.model_id || 'auto-best';
-        return MODEL_CATALOG.find(m => m.id === id) || MODEL_CATALOG[0];
-    }, [activeThread]);
+        // PRIORITY: Active Thread Model -> Global Preference -> Default
+        const id = activeThread?.model_id || globalModelId || 'llama-3.3-70b-versatile';
+        return MODEL_CATALOG.find(m => m.id === id) || MODEL_CATALOG.find(m => m.id === 'llama-3.3-70b-versatile') || MODEL_CATALOG[0];
+    }, [activeThread, globalModelId]);
 
     // UPDATED: Default to 'stoic' if no thread is active
     const personaMode = activeThread?.persona || 'stoic';
@@ -50,7 +54,8 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             id: uuidv4(),
             title: `SESSION_${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
             persona,
-            model_id: 'auto-best', // Default new chats to Hydra
+            // CRITICAL FIX: Use the user's globally selected model instead of forcing auto-best
+            model_id: globalModelId, 
             messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
             updated: new Date().toISOString(),
             isPinned: false
@@ -59,7 +64,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         setThreads(prev => [newThread, ...prev]);
         setActiveThreadId(newThread.id);
         return newThread; // Return for immediate usage
-    }, [setActiveThreadId, setThreads]);
+    }, [setActiveThreadId, setThreads, globalModelId]);
 
     const renameThread = useCallback(async (id: string, newTitle: string) => {
         setThreads(prev => prev.map(t => t.id === id ? { ...t, title: newTitle, updated: new Date().toISOString() } : t));
@@ -77,7 +82,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         let currentThreadId = activeThreadId;
         let effectiveThread = activeThread;
 
-        // 1. AUTO-INITIALIZATION: If no thread exists, create one immediately
+        // 1. AUTO-INITIALIZATION: If no thread exists, create one immediately using current preferences
         if (!currentThreadId || !effectiveThread) {
             const welcome = personaMode === 'hanisah' 
                 ? "⚡ **HANISAH PLATINUM ONLINE.**\n\n*Halo Sayang, aku sudah siap. Apa yang bisa kubantu hari ini?*" 
@@ -88,7 +93,8 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 id: newId,
                 title: userMsg ? userMsg.slice(0, 30).toUpperCase() : 'IMAGE_ANALYSIS',
                 persona: personaMode,
-                model_id: 'auto-best', // Default
+                // CRITICAL FIX: Ensure the FIRST message uses the selected global model
+                model_id: globalModelId, 
                 messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
                 updated: new Date().toISOString(),
                 isPinned: false
@@ -119,11 +125,14 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
         // Create Placeholder for AI Message
         const modelMessageId = uuidv4();
+        // Determine model info for metadata
+        const currentModel = MODEL_CATALOG.find(m => m.id === effectiveThread.model_id) || activeModel;
+        
         const initialModelMessage: ChatMessage = { 
             id: modelMessageId, 
             role: 'model', 
             text: '', 
-            metadata: { status: 'success', model: activeModel.name, provider: activeModel.provider } 
+            metadata: { status: 'success', model: currentModel.name, provider: currentModel.provider } 
         };
 
         // Update thread with new messages AND update the timestamp so it bumps to top
@@ -242,6 +251,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         input, setInput,
         isLoading,
         activeModel,
+        setGlobalModelId, // Export this setter for UI
         personaMode,
         handleNewChat,
         renameThread,

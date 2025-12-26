@@ -2,7 +2,11 @@
 import React, { memo, useState, useMemo, useEffect } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { User, Flame, Brain, ExternalLink, Sparkles, Cpu, Zap, Box, Globe, Timer, Copy, Check, TerminalSquare, ChevronDown, Wind, CornerDownLeft, Bot, Terminal, MoreHorizontal, Activity, CircuitBoard, Clock, ShieldCheck, ArrowRight } from 'lucide-react';
+import { 
+    Flame, Brain, ExternalLink, Sparkles, Cpu, Zap, Box, Globe, 
+    Copy, Check, ChevronDown, Wind, CircuitBoard, ArrowRight,
+    Terminal, Activity, Clock, ScanEye, RefreshCw, AlertCircle
+} from 'lucide-react';
 import { type ChatMessage } from '../../../types';
 
 interface ChatWindowProps {
@@ -12,40 +16,22 @@ interface ChatWindowProps {
   messagesEndRef: React.RefObject<HTMLDivElement>;
 }
 
-// --- REAL-TIME EXECUTION TIMER ---
-const ExecutionTimer = () => {
-    const [ms, setMs] = useState(0);
-    useEffect(() => {
-        const start = Date.now();
-        const timer = setInterval(() => setMs(Date.now() - start), 100);
-        return () => clearInterval(timer);
-    }, []);
-    return (
-        <span className="font-mono text-[10px] text-accent opacity-80 tabular-nums">
-            {(ms / 1000).toFixed(1)}s
-        </span>
-    );
-};
-
-// Helper: Provider Icon
 const ProviderIcon = ({ provider }: { provider?: string }) => {
     const p = provider?.toUpperCase() || 'UNKNOWN';
-    if (p.includes('GEMINI')) return <Sparkles size={10} className="text-blue-500" />;
-    if (p.includes('GROQ')) return <Zap size={10} className="text-orange-500" />;
-    if (p.includes('OPENAI')) return <Cpu size={10} className="text-green-500" />;
-    if (p.includes('DEEPSEEK')) return <Brain size={10} className="text-purple-500" />;
-    if (p.includes('OPENROUTER')) return <Globe size={10} className="text-pink-500" />;
-    if (p.includes('MISTRAL')) return <Wind size={10} className="text-yellow-500" />;
+    if (p.includes('GEMINI')) return <Sparkles size={10} className="text-blue-400" />;
+    if (p.includes('GROQ')) return <Zap size={10} className="text-orange-400" />;
+    if (p.includes('OPENAI')) return <Cpu size={10} className="text-green-400" />;
+    if (p.includes('DEEPSEEK')) return <Brain size={10} className="text-indigo-400" />;
+    if (p.includes('OPENROUTER')) return <Globe size={10} className="text-purple-400" />;
+    if (p.includes('MISTRAL')) return <Wind size={10} className="text-yellow-400" />;
     return <Box size={10} className="text-neutral-400" />;
 };
 
-// Reasoning Block Component - High Tech Terminal Style
-const ThoughtBlock = ({ content, isActive }: { content: string, isActive?: boolean }) => {
+// --- COGNITIVE TRACE (Thinking Block) ---
+const ThinkingAccordion = ({ content, isActive }: { content: string, isActive?: boolean }) => {
     const [isExpanded, setIsExpanded] = useState(isActive);
-    const [userToggled, setUserToggled] = useState(false); // Track manual interaction
-    const lines = content.split('\n');
+    const [userToggled, setUserToggled] = useState(false);
     
-    // Auto-expand if active (streaming thought), but ONLY if user hasn't toggled it manually
     useEffect(() => {
         if (isActive && !userToggled) setIsExpanded(true);
     }, [isActive, userToggled]);
@@ -56,50 +42,44 @@ const ThoughtBlock = ({ content, isActive }: { content: string, isActive?: boole
     };
     
     return (
-        <div className={`my-3 rounded-lg overflow-hidden border transition-all duration-300 w-full max-w-full group/thought ${isActive ? 'border-purple-500/30 bg-purple-500/5 ring-1 ring-purple-500/10' : 'border-black/5 dark:border-white/5 bg-zinc-50/50 dark:bg-white/[0.02]'}`}>
+        <div className={`my-6 rounded-xl overflow-hidden border transition-all duration-500 w-full group/thought ${
+            isActive 
+            ? 'border-indigo-500/30 bg-indigo-500/5 shadow-[0_0_20px_rgba(99,102,241,0.1)]' 
+            : 'border-black/5 dark:border-white/5 bg-zinc-50 dark:bg-black/20'
+        }`}>
             <button 
                 onClick={handleToggle}
-                className="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer hover:bg-black/5 dark:hover:bg-white/5"
+                className="w-full flex items-center justify-between px-4 py-3 transition-colors cursor-pointer hover:bg-black/5 dark:hover:bg-white/5"
             >
-                <div className="flex items-center gap-2.5">
-                    <div className={`p-1 rounded-md ${isActive ? 'bg-purple-500/10 text-purple-400 animate-pulse' : 'bg-black/5 dark:bg-white/10 text-neutral-500'}`}>
-                        <CircuitBoard size={12} />
+                <div className="flex items-center gap-3">
+                    <div className={`p-1.5 rounded-lg ${isActive ? 'bg-indigo-500/20 text-indigo-400 animate-pulse' : 'bg-black/5 dark:bg-white/10 text-neutral-500'}`}>
+                        <CircuitBoard size={14} />
                     </div>
                     <div className="flex flex-col items-start">
-                        <span className={`text-[9px] font-black uppercase tracking-[0.2em] leading-none ${isActive ? 'text-purple-400' : 'text-neutral-500'}`}>
-                            {isActive ? 'PROCESSING_LOGIC' : 'COGNITIVE_TRACE'}
+                        <span className={`text-[9px] font-black uppercase tracking-[0.25em] leading-none ${isActive ? 'text-indigo-400' : 'text-neutral-500'}`}>
+                            {isActive ? 'NEURAL_PROCESSING' : 'COGNITIVE_TRACE'}
                         </span>
-                        {isActive && (
-                            <span className="text-[7px] text-purple-400/70 font-mono mt-0.5 animate-pulse">
-                                Deep Reasoning Active...
-                            </span>
-                        )}
+                        {isActive && <span className="text-[8px] text-indigo-400/70 font-mono mt-1 animate-pulse">Running reasoning logic...</span>}
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <span className="text-[8px] font-mono text-neutral-400 hidden sm:block opacity-0 group-hover/thought:opacity-100 transition-opacity">
-                        {lines.length} LINES
-                    </span>
-                    <ChevronDown size={14} className={`text-neutral-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
-                </div>
+                <ChevronDown size={14} className={`text-neutral-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
             </button>
             
-            {isExpanded && (
-                <div className="relative border-t border-black/5 dark:border-white/5 bg-zinc-100/50 dark:bg-black/20 animate-slide-down">
-                    <div className="absolute top-0 left-0 bottom-0 w-[2px] bg-gradient-to-b from-transparent via-purple-500/20 to-transparent"></div>
-                    <div className="p-3 overflow-x-auto custom-scroll">
-                        <pre className="text-[10px] font-mono leading-[1.6] text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap font-medium">
+            <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div className="relative border-t border-black/5 dark:border-white/5 bg-zinc-100/50 dark:bg-[#08080a]">
+                    <div className="absolute top-0 left-0 bottom-0 w-[2px] bg-gradient-to-b from-transparent via-indigo-500/30 to-transparent"></div>
+                    <div className="p-4 overflow-x-auto custom-scroll">
+                        <pre className="text-[10px] md:text-[11px] font-mono leading-[1.8] text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap font-medium">
                             {content}
-                            {isActive && <span className="inline-block w-1.5 h-3 ml-1 bg-purple-500 animate-pulse align-middle"></span>}
+                            {isActive && <span className="inline-block w-1.5 h-3 ml-1 bg-indigo-500 animate-pulse align-middle"></span>}
                         </pre>
                     </div>
                 </div>
-            )}
+            </div>
         </div>
     );
 };
 
-// Custom Code Block Component
 const CodeBlock = ({ language, children }: { language: string, children: React.ReactNode }) => {
     const [copied, setCopied] = useState(false);
     
@@ -113,29 +93,29 @@ const CodeBlock = ({ language, children }: { language: string, children: React.R
     };
 
     return (
-        <div className="relative group/code my-4 rounded-xl overflow-hidden border border-black/10 dark:border-white/10 bg-[#09090b] shadow-sm ring-1 ring-white/5">
-            <div className="flex items-center justify-between px-3 py-2 bg-white/5 border-b border-white/5">
-                <div className="flex items-center gap-2">
+        <div className="relative group/code my-6 rounded-[20px] overflow-hidden border border-black/10 dark:border-white/10 bg-[#0e0e10] shadow-md ring-1 ring-white/5">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-white/5 border-b border-white/5 backdrop-blur-md">
+                <div className="flex items-center gap-3">
                     <div className="flex gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-red-500/20"></div>
-                        <div className="w-2 h-2 rounded-full bg-yellow-500/20"></div>
-                        <div className="w-2 h-2 rounded-full bg-green-500/20"></div>
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50"></div>
+                        <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20 border border-yellow-500/50"></div>
+                        <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/50"></div>
                     </div>
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-neutral-500 ml-2">
-                        {language || 'PLAINTEXT'}
+                    <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500 ml-1">
+                        {language || 'TEXT'}
                     </span>
                 </div>
                 <button 
                     onClick={handleCopy}
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[8px] font-bold uppercase tracking-wider transition-all text-neutral-500 hover:text-white hover:bg-white/10"
+                    className="flex items-center gap-2 px-3 py-1 rounded-lg text-[8px] font-bold uppercase tracking-wider transition-all text-neutral-500 hover:text-white hover:bg-white/10 border border-transparent hover:border-white/10"
                 >
                     {copied ? <Check size={10} className="text-emerald-500"/> : <Copy size={10}/>}
                     {copied ? 'COPIED' : 'COPY'}
                 </button>
             </div>
             
-            <div className="p-3 md:p-4 overflow-x-auto custom-scroll w-full bg-[#050505]">
-                <code className={`language-${language} block text-[11px] md:text-xs font-mono text-neutral-300 leading-relaxed whitespace-pre min-w-max`}>
+            <div className="p-4 md:p-5 overflow-x-auto custom-scroll w-full bg-[#050505]">
+                <code className={`language-${language} block text-[12px] font-mono text-neutral-300 leading-[1.7] whitespace-pre min-w-max`}>
                     {children}
                 </code>
             </div>
@@ -147,12 +127,11 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
     const [copied, setCopied] = useState(false);
     const isModel = msg.role === 'model';
     const hasText = msg.text && msg.text.trim().length > 0;
+    const isError = msg.metadata?.status === 'error';
     
-    // Parse Thinking Tags <think>...</think>
+    // Parse Thinking Tags
     const { thought, content } = useMemo(() => {
         if (!msg.text) return { thought: null, content: '' };
-        
-        // Handle Gemini 2.0 / DeepSeek R1 Thinking Tags
         if (msg.text.includes('<think>')) {
             const parts = msg.text.split('</think>');
             if (parts.length > 1) {
@@ -161,7 +140,6 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
                     content: parts[1].trim() 
                 };
             } else {
-                // If only think tag exists (streaming partially)
                 return { 
                     thought: msg.text.replace('<think>', '').trim(), 
                     content: '' 
@@ -171,8 +149,7 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
         return { thought: null, content: msg.text };
     }, [msg.text]);
 
-    // Don't render empty bubbles if there is no thought and no text and it's not loading
-    if (isModel && !hasText && !isLoading && !thought) return null;
+    if (isModel && !hasText && !isLoading && !thought && !isError) return null;
 
     const handleCopy = () => {
         navigator.clipboard.writeText(msg.text);
@@ -180,79 +157,79 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
         setTimeout(() => setCopied(false), 2000);
     };
 
+    // Persona-specific styling constants
+    const accentColor = personaMode === 'hanisah' ? 'text-orange-500' : 'text-cyan-500';
+    const accentBg = personaMode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500';
+    const glowClass = personaMode === 'hanisah' ? 'shadow-orange-500/10' : 'shadow-cyan-500/10';
+
     return (
-        <div className={`flex w-full mb-6 ${isModel ? 'justify-start' : 'justify-end'} animate-fade-in group px-1`}>
+        <div className={`flex w-full mb-8 md:mb-10 ${isModel ? 'justify-start' : 'justify-end'} animate-slide-up px-1 group/msg`}>
             
-            {/* Avatar for AI */}
+            {/* AI Avatar */}
             {isModel && (
-                <div className="hidden sm:flex flex-col items-center gap-2 mr-3 shrink-0 mt-1">
+                <div className="hidden md:flex flex-col gap-2 mr-5 shrink-0 mt-1">
                     <div className={`
-                        w-8 h-8 rounded-xl flex items-center justify-center shadow-sm border border-black/5 dark:border-white/10
-                        ${personaMode === 'hanisah' ? 'bg-orange-500/10 text-orange-500' : 'bg-cyan-500/10 text-cyan-500'}
+                        w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg border border-white/10 transition-all duration-500 relative overflow-hidden
+                        ${isError ? 'bg-red-500/10 text-red-500 border-red-500/20' : personaMode === 'hanisah' ? 'bg-gradient-to-br from-orange-500/10 to-pink-500/10 text-orange-500' : 'bg-gradient-to-br from-cyan-500/10 to-blue-500/10 text-cyan-500'}
                     `}>
-                        {personaMode === 'hanisah' ? <Flame size={14} fill="currentColor" /> : <Brain size={14} fill="currentColor" />}
+                        <div className={`absolute inset-0 opacity-20 ${isError ? 'bg-red-500' : accentBg} blur-md`}></div>
+                        {isError ? <AlertCircle size={18} /> : (personaMode === 'hanisah' ? <Flame size={18} fill="currentColor" className="relative z-10"/> : <Brain size={18} fill="currentColor" className="relative z-10"/>)}
                     </div>
                 </div>
             )}
 
-            <div className={`relative max-w-[95%] sm:max-w-[85%] flex flex-col ${isModel ? 'items-start' : 'items-end'}`}>
+            <div className={`relative max-w-[95%] md:max-w-[85%] lg:max-w-[80%] flex flex-col ${isModel ? 'items-start' : 'items-end'}`}>
                 
-                {/* Meta Info (Model Name & Latency) */}
+                {/* Meta Header (AI Only) */}
                 {isModel && (
-                    <div className="flex items-center gap-2 mb-1.5 px-1 opacity-70">
-                        {/* Mobile Avatar Replacement */}
-                        <div className={`
-                            sm:hidden w-4 h-4 rounded-md flex items-center justify-center
-                            ${personaMode === 'hanisah' ? 'bg-orange-500/10 text-orange-500' : 'bg-cyan-500/10 text-cyan-500'}
-                        `}>
-                            {personaMode === 'hanisah' ? <Flame size={8} fill="currentColor" /> : <Brain size={8} fill="currentColor" />}
-                        </div>
-
-                        <span className="text-[8px] font-black uppercase tracking-widest text-neutral-500">
-                            {personaMode === 'hanisah' ? 'HANISAH_OS' : 'STOIC_KERNEL'}
+                    <div className="flex items-center gap-3 mb-2 px-1 select-none">
+                        <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isError ? 'text-red-500' : accentColor}`}>
+                            {isError ? 'SYSTEM_FAILURE' : (personaMode === 'hanisah' ? 'HANISAH_CORE' : 'STOIC_LOGIC')}
                         </span>
-                        {msg.metadata?.model && (
-                            <>
-                                <span className="text-neutral-300 dark:text-neutral-700">•</span>
-                                <div className="flex items-center gap-1">
-                                    <ProviderIcon provider={msg.metadata?.provider} />
-                                    <span className="text-[8px] font-bold text-neutral-500 uppercase truncate max-w-[80px]">{msg.metadata.model}</span>
-                                </div>
-                            </>
+                        
+                        {!isError && <div className="h-3 w-[1px] bg-black/10 dark:bg-white/10"></div>}
+
+                        {msg.metadata?.model && !isError && (
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
+                                <ProviderIcon provider={msg.metadata?.provider} />
+                                <span className="text-[8px] font-bold text-neutral-500 uppercase tracking-wider truncate max-w-[150px]">
+                                    {msg.metadata.model}
+                                </span>
+                            </div>
                         )}
                         {msg.metadata?.latency && (
-                            <>
-                                <span className="text-neutral-300 dark:text-neutral-700">•</span>
-                                <span className="text-[8px] font-mono text-neutral-500">{Math.round(msg.metadata.latency)}ms</span>
-                            </>
+                            <span className="text-[8px] font-mono text-neutral-400 flex items-center gap-1 opacity-60">
+                                <Clock size={8} /> {Math.round(msg.metadata.latency)}ms
+                            </span>
                         )}
                     </div>
                 )}
 
                 {/* Bubble Container */}
                 <div className={`
-                    relative px-4 py-3 md:px-5 md:py-3.5 shadow-sm transition-all overflow-hidden
+                    relative px-6 py-5 md:px-7 md:py-6 shadow-sm overflow-hidden text-sm md:text-base leading-7
                     ${isModel 
-                        ? 'bg-white dark:bg-[#121214] text-black dark:text-neutral-200 border border-black/5 dark:border-white/10 rounded-[20px] rounded-tl-sm' 
-                        : 'bg-black dark:bg-white text-white dark:text-black rounded-[20px] rounded-tr-sm shadow-md'
+                        ? `bg-white/40 dark:bg-white/[0.02] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-[28px] rounded-tl-none ${glowClass} text-black dark:text-neutral-200` 
+                        : 'bg-zinc-100 dark:bg-[#1a1a1c] text-black dark:text-white rounded-[28px] rounded-tr-sm border border-black/5 dark:border-white/5 shadow-md'
                     }
+                    ${isError ? 'border-red-500/20 bg-red-500/5' : ''}
                 `}>
                     {(hasText || isLoading || thought) && (
                         <>
-                            {/* Render Thinking Block FIRST if exists */}
-                            {thought && <ThoughtBlock content={thought} isActive={isLoading && !content} />}
+                            {thought && <ThinkingAccordion content={thought} isActive={isLoading && !content} />}
 
                             {content ? (
-                                <div className={`prose dark:prose-invert prose-sm max-w-none break-words leading-7 min-w-0 font-sans text-[13px] md:text-[14px]
+                                <div className={`prose dark:prose-invert prose-sm max-w-none break-words min-w-0 font-sans tracking-wide
                                     ${isModel 
-                                        ? 'prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-headings:text-black dark:prose-headings:text-white prose-p:text-neutral-700 dark:prose-p:text-neutral-300 prose-strong:text-black dark:prose-strong:text-white' 
-                                        : 'prose-p:text-white/95 dark:prose-p:text-black/95 prose-strong:text-white dark:prose-strong:text-black prose-code:text-white dark:prose-code:text-black prose-ul:text-white/90 dark:prose-ul:text-black/90'
+                                        ? 'prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-p:text-neutral-700 dark:prose-p:text-neutral-300 prose-strong:text-black dark:prose-strong:text-white prose-li:text-neutral-700 dark:prose-li:text-neutral-300' 
+                                        : 'prose-p:text-black/95 dark:prose-p:text-white/95 prose-strong:text-black dark:prose-strong:text-white prose-li:text-black/95 dark:prose-li:text-white/95 prose-code:text-black dark:prose-code:text-white'
                                     }
-                                    prose-code:px-1 prose-code:py-0.5 prose-code:rounded-md prose-code:before:content-none prose-code:after:content-none
-                                    prose-table:border-collapse prose-table:min-w-full prose-table:my-4 prose-table:text-xs prose-table:rounded-lg prose-table:overflow-hidden
-                                    prose-th:bg-black/5 dark:prose-th:bg-white/5 prose-th:p-2.5 prose-th:text-left prose-th:font-bold prose-th:uppercase prose-th:tracking-wider prose-th:border-b prose-th:border-black/10 dark:prose-th:border-white/10
-                                    prose-td:p-2.5 prose-td:border-b prose-td:border-black/5 dark:prose-td:border-white/5
-                                    prose-tr:even:bg-black/[0.02] dark:prose-tr:even:bg-white/[0.02]
+                                    prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-lg prose-code:before:content-none prose-code:after:content-none
+                                    prose-blockquote:border-l-4 prose-blockquote:border-accent prose-blockquote:bg-black/5 dark:prose-blockquote:bg-white/5 prose-blockquote:py-1 prose-blockquote:px-4 prose-blockquote:rounded-r-xl prose-blockquote:not-italic
+                                    prose-th:bg-black/5 dark:prose-th:bg-white/5 prose-th:p-3 prose-th:text-left prose-th:font-bold prose-th:uppercase prose-th:tracking-wider prose-th:rounded-lg
+                                    prose-td:p-3 prose-td:border-b prose-td:border-black/5 dark:prose-td:border-white/5
+                                    prose-hr:border-black/10 dark:prose-hr:border-white/10 prose-hr:my-6
+                                    prose-img:rounded-2xl prose-img:shadow-lg prose-img:border prose-img:border-black/10 dark:prose-img:border-white/10
                                 `}>
                                     <Markdown
                                         remarkPlugins={[remarkGfm]}
@@ -263,76 +240,81 @@ const MessageBubble = memo(({ msg, personaMode, isLoading }: { msg: ChatMessage,
                                                 return !inline ? (
                                                     <CodeBlock language={lang} children={children} />
                                                 ) : (
-                                                    <code className={`text-[11px] font-mono font-bold px-1.5 py-0.5 rounded border ${isModel ? 'bg-black/5 dark:bg-white/10 border-black/5 dark:border-white/10 text-pink-600 dark:text-pink-400' : 'bg-white/20 border-white/10 text-white dark:text-black'}`} {...props}>
+                                                    <code className={`text-[11px] font-mono font-bold px-1.5 py-0.5 rounded border ${isModel ? 'bg-black/5 dark:bg-white/10 border-black/5 dark:border-white/10 text-pink-600 dark:text-pink-400' : 'bg-black/10 dark:bg-white/20 border-black/10 dark:border-white/10 text-black dark:text-white'}`} {...props}>
                                                         {children}
                                                     </code>
                                                 )
                                             },
-                                            ul: ({children}) => <ul className="list-disc pl-4 space-y-1 my-2 marker:text-current opacity-90">{children}</ul>,
-                                            ol: ({children}) => <ol className="list-decimal pl-4 space-y-1 my-2 marker:text-current opacity-90">{children}</ol>,
-                                            blockquote: ({children}) => <blockquote className="border-l-2 border-accent pl-4 italic opacity-80 my-3 py-1 bg-black/5 dark:bg-white/5 rounded-r-lg">{children}</blockquote>,
-                                            a: ({children, href}) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline font-bold inline-flex items-center gap-1">{children} <ArrowRight size={10} className="-rotate-45"/></a>
+                                            a: ({children, href}) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline font-bold inline-flex items-center gap-1 bg-accent/5 px-1.5 rounded transition-colors hover:bg-accent/10 border border-accent/10 hover:border-accent/30">{children} <ArrowRight size={10} className="-rotate-45"/></a>,
+                                            li: ({children}) => <li className="marker:text-accent/50 pl-2">{children}</li>,
+                                            ul: ({children}) => <ul className="list-disc list-outside space-y-1">{children}</ul>,
+                                            ol: ({children}) => <ol className="list-decimal list-outside space-y-1">{children}</ol>
                                         }}
                                     >
                                         {content}
                                     </Markdown>
+                                    
+                                    {isLoading && isModel && (
+                                        <span className="inline-block w-2 h-4 bg-accent align-middle ml-1 animate-[pulse_0.8s_ease-in-out_infinite]"></span>
+                                    )}
                                 </div>
                             ) : isLoading && !thought && (
                                 <div className="flex items-center gap-3 py-1">
-                                    <div className="flex gap-1">
-                                        <div className="w-1.5 h-1.5 bg-current rounded-full animate-[bounce_1s_infinite_-0.3s] opacity-50"></div>
-                                        <div className="w-1.5 h-1.5 bg-current rounded-full animate-[bounce_1s_infinite_-0.15s] opacity-50"></div>
-                                        <div className="w-1.5 h-1.5 bg-current rounded-full animate-[bounce_1s_infinite] opacity-50"></div>
+                                    <div className="flex gap-1.5">
+                                        <div className="w-1.5 h-1.5 bg-accent rounded-full animate-[bounce_1s_infinite_-0.3s]"></div>
+                                        <div className="w-1.5 h-1.5 bg-accent rounded-full animate-[bounce_1s_infinite_-0.15s]"></div>
+                                        <div className="w-1.5 h-1.5 bg-accent rounded-full animate-[bounce_1s_infinite]"></div>
                                     </div>
-                                    <span className="text-[9px] font-black uppercase tracking-[0.2em] opacity-50 animate-pulse flex items-center gap-2">
-                                        SYNTHESIZING <ExecutionTimer />
+                                    <span className="text-[9px] font-black uppercase tracking-[0.25em] opacity-50 animate-pulse flex items-center gap-2">
+                                        COMPUTING
                                     </span>
-                                </div>
-                            )}
-
-                            {/* Action Footer (AI Only) - Hover to show */}
-                            {isModel && content && (
-                                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                                    <button 
-                                        onClick={handleCopy}
-                                        className="p-1.5 rounded-lg text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                                        title="Copy"
-                                    >
-                                        {copied ? <Check size={12} className="text-emerald-500"/> : <Copy size={12}/>}
-                                    </button>
                                 </div>
                             )}
                         </>
                     )}
                 </div>
 
-                {/* Grounding Chips */}
-                {isModel && hasText && msg.metadata?.groundingChunks && msg.metadata.groundingChunks.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2 w-full animate-slide-up px-1">
-                        {msg.metadata.groundingChunks.map((chunk, cIdx) => {
-                            const url = chunk.web?.uri || chunk.maps?.uri;
-                            const title = chunk.web?.title || chunk.maps?.title || "Source Reference";
-                            if (!url) return null;
-                            return (
-                                <a 
-                                    key={cIdx} 
-                                    href={url} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white dark:bg-[#1a1a1c] rounded-lg border border-black/5 dark:border-white/5 text-[8px] font-black uppercase tracking-wider text-neutral-500 hover:text-accent hover:border-accent/30 transition-all shadow-sm max-w-full truncate hover:scale-[1.02]"
+                {/* Footer Meta & Actions (AI Only) */}
+                {isModel && (
+                    <div className="flex items-center justify-between w-full mt-2 px-2 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-300">
+                        {/* Grounding / Sources */}
+                        <div className="flex flex-wrap gap-2 max-w-[80%]">
+                            {msg.metadata?.groundingChunks?.map((chunk, cIdx) => {
+                                const url = chunk.web?.uri || chunk.maps?.uri;
+                                const title = chunk.web?.title || chunk.maps?.title || "Reference";
+                                if (!url) return null;
+                                return (
+                                    <a 
+                                        key={cIdx} 
+                                        href={url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-md border border-white/5 text-[8px] font-bold uppercase tracking-wider text-neutral-500 hover:text-accent hover:border-accent/30 transition-all truncate max-w-[150px]"
+                                    >
+                                        <ExternalLink size={8} /> {title}
+                                    </a>
+                                );
+                            })}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 ml-auto">
+                            {content && (
+                                <button 
+                                    onClick={handleCopy}
+                                    className="p-1.5 rounded-lg text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                                    title="Copy Response"
                                 >
-                                    <ExternalLink size={10} className="shrink-0" /> 
-                                    <span className="truncate">{title}</span>
-                                </a>
-                            );
-                        })}
+                                    {copied ? <Check size={12} className="text-emerald-500"/> : <Copy size={12}/>}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
         </div>
     );
 }, (prev, next) => {
-    // Strict memoization to prevent partial re-renders during high-frequency token streaming
     return prev.msg.text === next.msg.text && 
            prev.isLoading === next.isLoading && 
            prev.msg.metadata?.model === next.msg.metadata?.model;
@@ -345,7 +327,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = memo(({
   messagesEndRef
 }) => {
   return (
-    <div className="w-full py-4 pb-8">
+    <div className="w-full py-4 pb-12">
         {messages.map((msg) => (
             <MessageBubble 
                 key={msg.id} 
@@ -355,22 +337,22 @@ export const ChatWindow: React.FC<ChatWindowProps> = memo(({
             />
         ))}
         
-        {/* Connection Indicator - Only shows if strictly loading and NO partial response yet */}
+        {/* Initial Connection Loader */}
         {isLoading && messages.length > 0 && messages[messages.length - 1]?.role !== 'model' && (
-             <div className="flex justify-start mb-6 pl-2 sm:pl-12 animate-fade-in">
-                <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full border border-dashed border-neutral-300 dark:border-neutral-800 bg-white/50 dark:bg-white/5 backdrop-blur-sm">
-                    <span className="relative flex h-2 w-2">
+             <div className="flex justify-start mb-10 pl-0 md:pl-16 animate-fade-in">
+                <div className="flex items-center gap-4 px-5 py-3 rounded-2xl border border-dashed border-black/10 dark:border-white/10 bg-white/40 dark:bg-white/5 backdrop-blur-sm">
+                    <div className="relative flex h-3 w-3">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
-                    </span>
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400 flex items-center gap-2">
-                        ESTABLISHING_UPLINK <ExecutionTimer />
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-accent shadow-[0_0_15px_var(--accent-glow)]"></span>
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-500 flex items-center gap-2">
+                        {personaMode === 'hanisah' ? 'HANISAH_SYNTHESIZING' : 'STOIC_ANALYZING'}
                     </span>
                 </div>
             </div>
         )}
 
-        <div ref={messagesEndRef} className="h-4" />
+        <div ref={messagesEndRef} className="h-6" />
     </div>
   );
 });

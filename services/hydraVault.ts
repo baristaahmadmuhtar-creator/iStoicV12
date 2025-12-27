@@ -1,7 +1,7 @@
 
 import { debugService } from './debugService';
 
-export type Provider = 'GEMINI' | 'GROQ' | 'OPENAI' | 'DEEPSEEK' | 'MISTRAL' | 'OPENROUTER' | 'ELEVENLABS';
+export type Provider = 'GEMINI' | 'GROQ' | 'OPENAI' | 'DEEPSEEK' | 'MISTRAL' | 'OPENROUTER' | 'ELEVENLABS' | 'PUTER';
 type KeyStatus = 'ACTIVE' | 'COOLDOWN';
 
 interface KeyRecord {
@@ -33,7 +33,7 @@ export class HydraVault {
    */
   public refreshPools() {
     const env = { ...((import.meta as any).env || {}), ...((typeof process !== 'undefined' && process.env) || {}) };
-    const providers: Provider[] = ['GEMINI', 'GROQ', 'OPENAI', 'DEEPSEEK', 'MISTRAL', 'OPENROUTER', 'ELEVENLABS'];
+    const providers: Provider[] = ['GEMINI', 'GROQ', 'OPENAI', 'DEEPSEEK', 'MISTRAL', 'OPENROUTER', 'ELEVENLABS', 'PUTER'];
 
     // READ PROVIDER VISIBILITY (ON/OFF TOGGLES)
     let visibility: Record<string, boolean> = {};
@@ -55,6 +55,19 @@ export class HydraVault {
 
         const keys = new Set<string>(); // Use Set to avoid duplicates
         
+        // PUTER SPECIAL HANDLING (No Env Vars needed)
+        if (provider === 'PUTER') {
+            this.vault['PUTER'] = [{
+                key: 'PUTER_JS_NATIVE',
+                provider: 'PUTER',
+                status: 'ACTIVE',
+                usageCount: 0,
+                fails: 0,
+                cooldownUntil: 0
+            }];
+            return;
+        }
+
         // Helper to add keys (handles commas, quotes, PIPES, NEWLINES, SEMICOLONS, SPACES)
         const addKey = (val: string | undefined) => {
             if (val && typeof val === 'string' && val.length > 5) {

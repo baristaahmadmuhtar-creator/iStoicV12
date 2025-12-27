@@ -5,7 +5,7 @@ import { HANISAH_BRAIN } from "./melsaBrain";
 import { noteTools, visualTools, searchTools, universalTools } from "./geminiService";
 import { GLOBAL_VAULT, Provider } from "./hydraVault"; 
 import { mechanicTools } from "../features/mechanic/mechanicTools";
-import { streamOpenAICompatible } from "./providerEngine";
+import { streamOpenAICompatible, streamPuterChat } from "./providerEngine";
 import { runHanisahRace } from "./melsaOmni"; 
 import { type ModelMetadata } from "../types";
 import { KEY_MANAGER } from "./geminiService"; 
@@ -43,6 +43,24 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     provider: 'GEMINI', 
     description: 'Otomatis memilih jalur tercepat.',
     specs: { context: 'AUTO', speed: 'INSTANT', intelligence: 9.8 } 
+  },
+
+  // --- PUTER (X.AI) ---
+  { 
+    id: 'x-ai/grok-4.1-fast', 
+    name: 'Grok 4.1 Fast (Puter)', 
+    category: 'GROQ_VELOCITY', 
+    provider: 'PUTER', 
+    description: 'Ultra-fast inference from X.AI via Puter.js.', 
+    specs: { context: '128K', speed: 'INSTANT', intelligence: 9.2 } 
+  },
+  { 
+    id: 'x-ai/grok-2-1212', 
+    name: 'Grok 2 (Puter)', 
+    category: 'GROQ_VELOCITY', 
+    provider: 'PUTER', 
+    description: 'Advanced reasoning by X.AI via Puter.js.', 
+    specs: { context: '128K', speed: 'FAST', intelligence: 9.4 } 
   },
 
   // --- GROQ (LLAMA - BEST FREE FALLBACK) ---
@@ -247,6 +265,17 @@ export class HanisahKernel {
                     if (signal?.aborted) break;
                     if (chunk.text) { fullText += chunk.text; yield { text: chunk.text }; }
                     if (chunk.functionCalls?.length) yield { functionCall: chunk.functionCalls[0] };
+                }
+                if (signal?.aborted) return;
+                this.updateHistory(msg, fullText);
+                GLOBAL_VAULT.reportSuccess(provider as Provider);
+                return;
+            } else if (provider === 'PUTER') {
+                const stream = streamPuterChat(model.id, [{ role: 'user', content: msg }], systemPrompt, signal);
+                let fullText = "";
+                for await (const chunk of stream) {
+                    if (signal?.aborted) break;
+                    if (chunk.text) { fullText += chunk.text; yield { text: chunk.text }; }
                 }
                 if (signal?.aborted) return;
                 this.updateHistory(msg, fullText);

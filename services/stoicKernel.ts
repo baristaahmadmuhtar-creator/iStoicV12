@@ -9,7 +9,7 @@ import { streamOpenAICompatible } from "./providerEngine";
 class StoicLogicKernel {
   private history: any[] = [];
 
-  private getActiveTools(provider: string, deepSearchOverride?: boolean): any[] {
+  private getActiveTools(provider: string): any[] {
       const configStr = localStorage.getItem('stoic_tools_config');
       const config = configStr 
           ? JSON.parse(configStr) 
@@ -20,13 +20,12 @@ class StoicLogicKernel {
           if (config.vault) tools.push(noteTools);
           if (config.visual) tools.push(visualTools);
           
-          // Force search if override is true, otherwise fallback to config
-          if (deepSearchOverride || config.search) tools.push(searchTools);
+          if (config.search) tools.push(searchTools);
           
           return tools;
       } else {
           // For non-Gemini, if search/vault is enabled, use Universal Tools
-          if (deepSearchOverride || config.search || config.vault) {
+          if (config.search || config.vault) {
               return universalTools.functionDeclarations ? [universalTools] : [];
           }
           return [];
@@ -36,7 +35,6 @@ class StoicLogicKernel {
   async *streamExecute(msg: string, modelId: string, context?: string, attachment?: any, configOverride?: any): AsyncGenerator<StreamChunk> {
     const systemPrompt = HANISAH_BRAIN.getSystemInstruction('stoic', context);
     const signal = configOverride?.signal; // AbortSignal passed via configOverride
-    const deepSearchOverride = configOverride?.deepSearch;
     
     // FIX 404: If modelId is 'auto-best' (Omni-Race Virtual ID), map it to a concrete model.
     let effectiveModelId = modelId;
@@ -71,7 +69,7 @@ class StoicLogicKernel {
         try {
           if (selectedModel.provider === 'GEMINI') {
             const ai = new GoogleGenAI({ apiKey: key });
-            const activeTools = this.getActiveTools('GEMINI', deepSearchOverride);
+            const activeTools = this.getActiveTools('GEMINI');
             
             const config: any = { 
                 systemInstruction: systemPrompt, 
@@ -125,7 +123,7 @@ class StoicLogicKernel {
 
           } else {
             // Support for non-Gemini models (Groq, DeepSeek, etc.) via providerEngine
-            const activeTools = this.getActiveTools(selectedModel.provider, deepSearchOverride);
+            const activeTools = this.getActiveTools(selectedModel.provider);
             
             const stream = streamOpenAICompatible(selectedModel.provider as any, selectedModel.id, [{ role: 'user', content: msg }], systemPrompt, activeTools, signal);
             

@@ -217,23 +217,11 @@ const readNoteTool: FunctionDeclaration = {
     }
 };
 
-const deepSearchTool: FunctionDeclaration = {
-    name: 'deep_search',
-    description: 'Perform a real-time web search to retrieve up-to-date information, lyrics, news, or facts from the internet.',
-    parameters: {
-        type: Type.OBJECT,
-        properties: {
-            query: { type: Type.STRING, description: 'The search query string.' }
-        },
-        required: ['query']
-    }
-};
-
 export const noteTools = { functionDeclarations: [manageNoteTool, searchNotesTool, readNoteTool] };
 export const visualTools = null; 
 export const searchTools = { googleSearch: {} }; 
 
 // Universal tools for Non-Gemini providers
 export const universalTools = {
-    functionDeclarations: [manageNoteTool, searchNotesTool, readNoteTool, deepSearchTool]
+    functionDeclarations: [manageNoteTool, searchNotesTool, readNoteTool]
 };

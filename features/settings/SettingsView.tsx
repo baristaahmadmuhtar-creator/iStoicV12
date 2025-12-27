@@ -5,7 +5,8 @@ import {
     Shield, Trash2, Cpu, Languages, Palette, Layout, Save, CheckCircle2, 
     Volume2, Mic2, Moon, Sun, Monitor, X, Check, HelpCircle, RefreshCw,
     Terminal, UserCheck, Sparkles, MessageSquare, ChevronRight, Activity, Zap, Globe, User, UserRound, Play, Info,
-    Flame, Brain, DatabaseZap, Image as ImageIcon, HardDrive, Download, Upload, FileJson, Edit3, Undo2, Loader2
+    Flame, Brain, DatabaseZap, Image as ImageIcon, HardDrive, Download, Upload, FileJson, Edit3, Undo2, Loader2,
+    Network, Key, Eye, EyeOff
 } from 'lucide-react';
 import { THEME_COLORS } from '../../App';
 import { speakWithHanisah } from '../../services/elevenLabsService';
@@ -129,7 +130,7 @@ const ToolRow: React.FC<{
 }> = ({ label, description, icon, isActive, onClick, activeColor, badge }) => (
     <button 
         onClick={onClick}
-        className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all duration-300 group text-left ${
+        className={`w-full flex items-center justify-center sm:justify-between p-3.5 rounded-2xl border transition-all duration-300 group text-left ${
             isActive 
             ? 'bg-white/80 dark:bg-black/40 border-black/5 dark:border-white/10 shadow-sm' 
             : 'bg-transparent border-transparent hover:bg-black/5 dark:hover:bg-white/5 opacity-70 hover:opacity-100'
@@ -141,7 +142,7 @@ const ToolRow: React.FC<{
             }`}>
                 {React.cloneElement(icon as React.ReactElement<any>, { size: 14 })}
             </div>
-            <div>
+            <div className="hidden sm:block">
                 <div className="flex items-center gap-2">
                     <h5 className={`text-[9px] font-black uppercase tracking-widest ${isActive ? 'text-black dark:text-white' : 'text-neutral-500'}`}>{label}</h5>
                     {badge && isActive && (
@@ -161,6 +162,41 @@ const ToolRow: React.FC<{
         </div>
     </button>
 );
+
+const ApiKeyRow: React.FC<{ 
+    provider: string; 
+    value: string; 
+    onChange: (val: string) => void; 
+}> = ({ provider, value, onChange }) => {
+    const [show, setShow] = useState(false);
+    return (
+        <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-[#0f0f11] border border-black/5 dark:border-white/5 shadow-sm group hover:border-accent/30 transition-all">
+            <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-white/5 flex items-center justify-center text-neutral-400 group-hover:text-accent transition-colors">
+                    <Key size={14} />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500 group-hover:text-white transition-colors">{provider}</span>
+            </div>
+            <div className="flex items-center gap-2 bg-zinc-100 dark:bg-white/5 rounded-lg px-2 border border-black/5 dark:border-white/5 group-hover:border-accent/20 transition-all">
+                <input 
+                    type={show ? "text" : "password"} 
+                    value={value} 
+                    onChange={(e) => onChange(e.target.value)} 
+                    placeholder="ENTER_API_KEY"
+                    className="bg-transparent text-right text-[10px] font-mono text-accent focus:outline-none w-32 md:w-48 placeholder:text-neutral-600 py-2"
+                    autoComplete="off"
+                />
+                <button 
+                    onClick={() => setShow(!show)}
+                    className="p-1 hover:text-white text-neutral-500 transition-colors"
+                    type="button"
+                >
+                    {show ? <EyeOff size={12} /> : <Eye size={12} />}
+                </button>
+            </div>
+        </div>
+    );
+};
 
 // --- MAIN VIEW ---
 
@@ -188,6 +224,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const [persistedHanisahTools, setPersistedHanisahTools] = useLocalStorage<ToolConfig>('hanisah_tools_config', { search: true, vault: true, visual: true });
     const [persistedStoicTools, setPersistedStoicTools] = useLocalStorage<ToolConfig>('stoic_tools_config', { search: true, vault: true, visual: false });
     
+    // API Keys Configuration
+    const [persistedApiKeys, setPersistedApiKeys] = useLocalStorage<Record<string, string>>('user_api_keys', {});
+
     // Local UI State (For buffering changes before "Saving")
     const [language, setLanguage] = useState(persistedLanguage);
     const [theme, setTheme] = useState(persistedTheme);
@@ -197,6 +236,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const [hanisahTools, setHanisahTools] = useState(persistedHanisahTools);
     const [stoicTools, setStoicTools] = useState(persistedStoicTools);
     const [localPersona, setLocalPersona] = useState(userPersona);
+    const [localApiKeys, setLocalApiKeys] = useState(persistedApiKeys);
 
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
@@ -226,7 +266,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
             setPersistedHanisahTools(hanisahTools);
             setPersistedStoicTools(stoicTools);
             setUserPersona(localPersona);
+            setPersistedApiKeys(localApiKeys);
             
+            KEY_MANAGER.refreshPools(); // Force Hydra refresh to pick up new user keys immediately
+
             if ((!hanisahTools.vault && persistedHanisahTools.vault) || (!stoicTools.vault && persistedStoicTools.vault)) {
                 lockVault();
             }
@@ -289,6 +332,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const openKernelStream = () => {
         debugService.logAction(UI_REGISTRY.MECH_BTN_SCAN, FN_REGISTRY.NAVIGATE_TO_FEATURE, 'KERNEL_STREAM');
         if (onNavigate) onNavigate('system');
+    };
+
+    const updateApiKey = (provider: string, val: string) => {
+        setLocalApiKeys(prev => ({ ...prev, [provider]: val }));
     };
 
     return (
@@ -390,6 +437,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
                                         <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest pl-1">{t.user_bio || "BIO CONTEXT"}</label>
                                         <textarea value={localPersona.bio} onChange={(e) => setLocalPersona({...localPersona, bio: e.target.value})} className="w-full h-24 bg-zinc-100 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-medium text-black dark:text-white focus:outline-none focus:border-accent/50 transition-all resize-none"/>
                                     </div>
+                                </div>
+                            </div>
+                        </SettingsSection>
+
+                        {/* API KEYS / NEURAL UPLINKS */}
+                        <SettingsSection title="NEURAL_UPLINKS" icon={<Network size={18} />}>
+                            <div className="p-2 space-y-2">
+                                <div className="p-4 bg-zinc-50 dark:bg-[#0f0f11] rounded-[24px] border border-black/5 dark:border-white/5 space-y-3">
+                                    <p className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest px-1 pb-1">
+                                        USER_OVERRIDE_KEYS (LOCAL_STORAGE)
+                                    </p>
+                                    <ApiKeyRow provider="GEMINI" value={localApiKeys['GEMINI'] || ''} onChange={(v) => updateApiKey('GEMINI', v)} />
+                                    <ApiKeyRow provider="GROQ" value={localApiKeys['GROQ'] || ''} onChange={(v) => updateApiKey('GROQ', v)} />
+                                    <ApiKeyRow provider="OPENAI" value={localApiKeys['OPENAI'] || ''} onChange={(v) => updateApiKey('OPENAI', v)} />
+                                    <ApiKeyRow provider="DEEPSEEK" value={localApiKeys['DEEPSEEK'] || ''} onChange={(v) => updateApiKey('DEEPSEEK', v)} />
+                                    <ApiKeyRow provider="MISTRAL" value={localApiKeys['MISTRAL'] || ''} onChange={(v) => updateApiKey('MISTRAL', v)} />
+                                    <ApiKeyRow provider="ELEVENLABS" value={localApiKeys['ELEVENLABS'] || ''} onChange={(v) => updateApiKey('ELEVENLABS', v)} />
                                 </div>
                             </div>
                         </SettingsSection>

@@ -20,8 +20,6 @@ interface ChatInputProps {
   isVaultEnabled?: boolean;
   onTogglePersona?: () => void;
   variant?: 'hero' | 'standard';
-  isDeepSearchEnabled?: boolean;
-  onToggleDeepSearch?: () => void;
 }
 
 const MAX_CHARS = 4000;
@@ -41,8 +39,6 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   isVaultEnabled = true,
   onTogglePersona,
   variant = 'standard',
-  isDeepSearchEnabled = false,
-  onToggleDeepSearch
 }) => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -282,7 +278,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 onFocus={() => { setIsFocused(true); onFocusChange(true); }}
                 onBlur={() => { setIsFocused(false); onFocusChange(false); }}
                 placeholder={isDictating ? t.listening : t.placeholder}
-                className="w-full bg-transparent text-[15px] font-medium text-black dark:text-white placeholder:text-neutral-400 resize-none focus:outline-none max-h-60 custom-scroll leading-relaxed"
+                className="w-full bg-transparent text-base md:text-sm font-medium text-black dark:text-white placeholder:text-neutral-400 resize-none focus:outline-none max-h-60 custom-scroll leading-relaxed"
                 rows={1}
                 aria-label="Chat Input"
                 disabled={isLoading && !onStop} // Disable if loading but no stop capability
@@ -314,15 +310,6 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} accept="image/*" />
 
                 <div className="w-[1px] h-4 bg-black/10 dark:bg-white/10 mx-1"></div>
-
-                <button 
-                    onClick={onToggleDeepSearch}
-                    aria-label={isDeepSearchEnabled ? "Deep Search Active" : "Enable Deep Search"}
-                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${isDeepSearchEnabled ? 'text-blue-500 bg-blue-500/10 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
-                    title="Deep Search"
-                >
-                    <Globe size={16} />
-                </button>
 
                 <button 
                     onClick={onToggleVaultSync}

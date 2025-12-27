@@ -34,6 +34,7 @@ export class NeuralLinkService {
     private config: NeuralLinkConfig | null = null;
     private _analyser: AnalyserNode | null = null;
     private isConnecting: boolean = false;
+    private isConnected: boolean = false;
     private audioCheckInterval: any = null;
 
     constructor() {}
@@ -43,43 +44,57 @@ export class NeuralLinkService {
     }
 
     async connect(config: NeuralLinkConfig) {
-        if (this.isConnecting) return;
+        if (this.isConnecting || this.isConnected) {
+            console.warn("Neural Link already active or connecting.");
+            return;
+        }
+        
         this.isConnecting = true;
         this.config = config;
         
-        this.disconnect(); 
+        // Reset state
+        this.disconnect(true); 
         config.onStatusChange('CONNECTING');
 
         try {
+            // 1. Initialize Audio Contexts (MUST happen inside user gesture flow)
+            const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+            
+            // Input: 16kHz for Gemini
+            this.inputCtx = new AudioContextClass({ sampleRate: 16000 });
+            
+            // Output: 24kHz for Gemini Response
+            this.outputCtx = new AudioContextClass({ sampleRate: 24000 });
+            
+            // Analyser for visualizer
+            this._analyser = this.outputCtx.createAnalyser();
+            this._analyser.fftSize = 256;
+            this._analyser.smoothingTimeConstant = 0.5;
+
+            // CRITICAL: Resume contexts for Mobile Safari/Chrome autoplay policies
+            if (this.inputCtx.state === 'suspended') await this.inputCtx.resume();
+            if (this.outputCtx.state === 'suspended') await this.outputCtx.resume();
+
+            // 2. Get User Media (Microphone)
             this.activeStream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
-                    autoGainControl: true
+                    autoGainControl: true,
+                    sampleRate: 16000,
+                    channelCount: 1
                 } 
             });
-            
-            const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
-            this.inputCtx = new AudioContextClass({ sampleRate: 16000 });
-            this.outputCtx = new AudioContextClass({ sampleRate: 24000 });
-            this._analyser = this.outputCtx.createAnalyser();
-            this._analyser.fftSize = 256;
 
-            const resumeContexts = async () => {
-                if (this.inputCtx?.state === 'suspended') await this.inputCtx.resume();
-                if (this.outputCtx?.state === 'suspended') await this.outputCtx.resume();
-            };
-            await resumeContexts();
-
-            // CHECK API KEY VALIDITY BEFORE CONNECTING
+            // 3. Get API Key
             const apiKey = KEY_MANAGER.getKey('GEMINI');
             if (!apiKey) {
-                throw new Error("No healthy GEMINI API key available. Please check system configuration.");
+                throw new Error("No healthy GEMINI API key available.");
             }
 
             const ai = new GoogleGenAI({ apiKey });
             
-            // DYNAMIC VOICE SELECTION & VALIDATION
+            // 4. Voice Selection
             const storedHanisahVoice = localStorage.getItem('hanisah_voice');
             const storedStoicVoice = localStorage.getItem('stoic_voice');
             
@@ -87,39 +102,41 @@ export class NeuralLinkService {
                 ? (storedHanisahVoice ? JSON.parse(storedHanisahVoice) : 'Zephyr') 
                 : (storedStoicVoice ? JSON.parse(storedStoicVoice) : 'Fenrir');
 
-            // SAFETY CHECK: If user selected "Hanisah" (Custom) in settings, Gemini API will error.
             if (!GOOGLE_VALID_VOICES.includes(preferredVoice)) {
-                debugService.log('WARN', 'NEURAL_LINK', 'VOICE_FALLBACK', `Voice '${preferredVoice}' not supported by Gemini Live. Falling back.`);
                 preferredVoice = config.persona === 'hanisah' ? 'Kore' : 'Fenrir';
             }
 
-            // PREPARE TOOLS: Merge function declarations and EXCLUDE unsupported tools (like Google Search) for Live API
+            // 5. Prepare Tools
             const liveTools = [
                 { 
                     functionDeclarations: [
                         ...(noteTools.functionDeclarations || []),
-                        ...(visualTools.functionDeclarations || [])
+                        ...(visualTools?.functionDeclarations || [])
                     ] 
                 }
             ];
 
+            // 6. Connect to Gemini Live
             const sessionPromise = ai.live.connect({
                 model: config.modelId || 'gemini-2.5-flash-native-audio-preview-09-2025',
                 callbacks: {
                     onopen: () => {
                         this.isConnecting = false;
+                        this.isConnected = true;
                         config.onStatusChange('ACTIVE');
+                        
                         this.startAudioInputStream(sessionPromise);
                         
+                        // Keep-alive / Monitor
                         this.audioCheckInterval = setInterval(() => {
-                            resumeContexts();
+                            if (this.outputCtx?.state === 'suspended') this.outputCtx.resume();
+                            if (this.inputCtx?.state === 'suspended') this.inputCtx.resume();
                         }, 2000);
 
                         sessionPromise.then(session => {
                             const greeting = config.persona === 'hanisah' 
-                                ? "Sistem Hanisah tersinkronisasi. Tuan, aku sudah siap mendengarkan."
-                                : "Logika Stoik aktif. Kesadaran kognitif terhubung.";
-                            // Send initial text to trigger the model's greeting
+                                ? "Sistem online. Hai, aku siap mendengarkan."
+                                : "Logika terhubung. Silakan berbicara.";
                             try {
                                 session.sendRealtimeInput({ text: greeting });
                             } catch(err) {
@@ -132,15 +149,12 @@ export class NeuralLinkService {
                     },
                     onerror: (e) => {
                         console.error("Neural Link Error:", e);
-                        this.isConnecting = false;
-                        config.onStatusChange('ERROR', e.message || "Connection Error");
+                        config.onStatusChange('ERROR', "Connection interrupted.");
                         this.disconnect();
                     },
                     onclose: () => {
-                        this.isConnecting = false;
-                        if (this.config) {
-                            this.config.onStatusChange('IDLE');
-                        }
+                        console.log("Neural Link Closed");
+                        this.disconnect();
                     },
                 },
                 config: {
@@ -156,10 +170,10 @@ export class NeuralLinkService {
             });
 
             this.session = await sessionPromise;
+
         } catch (e: any) {
-            this.isConnecting = false;
             console.error("Neural Link Setup Failed:", e);
-            config.onStatusChange('ERROR', e.message || "Network Error");
+            config.onStatusChange('ERROR', e.name === 'NotAllowedError' ? "Microphone Access Denied" : e.message);
             this.disconnect();
         }
     }
@@ -172,25 +186,26 @@ export class NeuralLinkService {
             const scriptProcessor = this.inputCtx.createScriptProcessor(4096, 1, 1);
             
             scriptProcessor.onaudioprocess = (e) => {
-                if (!this.session) return;
+                if (!this.isConnected) return; // Stop processing if disconnected
+
                 const inputData = e.inputBuffer.getChannelData(0);
                 // Convert Float32 to Int16 PCM
                 const int16 = new Int16Array(inputData.length);
                 for (let i = 0; i < inputData.length; i++) {
+                    // Clamp and scale
                     int16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
                 }
+                
                 const pcmBlob = { 
                     data: encodeAudio(new Uint8Array(int16.buffer)), 
                     mimeType: 'audio/pcm;rate=16000' 
                 };
                 
-                // Always use the promise to send data to avoid stale closures or race conditions
                 sessionPromise.then(s => { 
                     try { 
-                        // Check if session is still open before sending
-                        if (s) s.sendRealtimeInput({ media: pcmBlob }); 
+                        if (this.isConnected && s) s.sendRealtimeInput({ media: pcmBlob }); 
                     } catch (err) { 
-                        // Silent fail for stream chunks if disconnected
+                        // Ignore send errors during teardown
                     } 
                 });
             };
@@ -203,16 +218,27 @@ export class NeuralLinkService {
     }
 
     private async handleServerMessage(msg: LiveServerMessage, sessionPromise: Promise<any>) {
-        // ... (Existing implementation remains the same, but ensuring context access is safe)
-        if (!this.session && !msg) return;
+        if (!this.isConnected) return;
 
-        if (msg.serverContent?.inputTranscription && this.config?.onTranscription) {
-            this.config.onTranscription({ text: msg.serverContent.inputTranscription.text, source: 'user', isFinal: !!msg.serverContent.turnComplete });
-        }
-        if (msg.serverContent?.outputTranscription && this.config?.onTranscription) {
-            this.config.onTranscription({ text: msg.serverContent.outputTranscription.text, source: 'model', isFinal: !!msg.serverContent.turnComplete });
+        // 1. Transcriptions
+        if (this.config?.onTranscription) {
+            if (msg.serverContent?.inputTranscription) {
+                this.config.onTranscription({ 
+                    text: msg.serverContent.inputTranscription.text, 
+                    source: 'user', 
+                    isFinal: !!msg.serverContent.turnComplete 
+                });
+            }
+            if (msg.serverContent?.outputTranscription) {
+                this.config.onTranscription({ 
+                    text: msg.serverContent.outputTranscription.text, 
+                    source: 'model', 
+                    isFinal: !!msg.serverContent.turnComplete 
+                });
+            }
         }
 
+        // 2. Tool Calls
         if (msg.toolCall) {
             for (const fc of msg.toolCall.functionCalls) {
                 if (this.config?.onToolCall) {
@@ -228,10 +254,16 @@ export class NeuralLinkService {
             }
         }
 
+        // 3. Audio Output
         const base64Audio = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
         if (base64Audio && this.outputCtx) {
             try {
-                this.nextStartTime = Math.max(this.nextStartTime, this.outputCtx.currentTime);
+                // Drift Correction: If next start time is behind current time, fast forward
+                const currentTime = this.outputCtx.currentTime;
+                if (this.nextStartTime < currentTime) {
+                    this.nextStartTime = currentTime + 0.05; // 50ms buffer
+                }
+
                 const audioBuffer = await decodeAudioData(decodeAudio(base64Audio), this.outputCtx, 24000, 1);
                 const source = this.outputCtx.createBufferSource();
                 source.buffer = audioBuffer;
@@ -246,16 +278,16 @@ export class NeuralLinkService {
                 source.start(this.nextStartTime);
                 this.nextStartTime += audioBuffer.duration;
                 this.sources.add(source);
+                
                 source.onended = () => {
                     this.sources.delete(source);
-                    // Do not disconnect immediately if using shared nodes, but here we create source per chunk
-                    // source.disconnect(); // Safe to disconnect source
                 };
             } catch (e) {
                 console.warn("Audio playback error:", e);
             }
         }
 
+        // 4. Interruption Handling
         if (msg.serverContent?.interrupted) {
             this.sources.forEach(s => { 
                 try { s.stop(); } catch(e){} 
@@ -265,25 +297,25 @@ export class NeuralLinkService {
         }
     }
 
-    disconnect() {
+    disconnect(silent: boolean = false) {
+        this.isConnected = false;
+        this.isConnecting = false;
+
         if (this.audioCheckInterval) {
             clearInterval(this.audioCheckInterval);
             this.audioCheckInterval = null;
         }
         
-        // Close session
+        // Stop Websocket
         if (this.session) { 
             try { 
-                // Currently no explicit close method on the client wrapper in some versions, 
-                // but we nullify it to stop sending data.
-                // The SDK manages the websocket closure when the object is GC'd or connection drops,
-                // but we can try to force it if the method exists.
+                // Attempt to close if method exists
                 if(typeof this.session.close === 'function') this.session.close();
             } catch(e){} 
             this.session = null; 
         }
 
-        // Stop Media Stream
+        // Stop Microphone
         if (this.activeStream) { 
             this.activeStream.getTracks().forEach(t => t.stop()); 
             this.activeStream = null; 
@@ -299,14 +331,15 @@ export class NeuralLinkService {
             this.outputCtx = null; 
         }
 
-        // Clear Sources
+        // Stop Playing Audio
         this.sources.forEach(s => {
             try { s.stop(); } catch(e){}
         });
         this.sources.clear();
         this.nextStartTime = 0;
-        this.isConnecting = false;
         
-        if (this.config) this.config.onStatusChange('IDLE');
+        if (!silent && this.config) {
+            this.config.onStatusChange('IDLE');
+        }
     }
 }

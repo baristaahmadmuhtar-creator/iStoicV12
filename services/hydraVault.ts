@@ -35,9 +35,25 @@ export class HydraVault {
     const env = { ...((import.meta as any).env || {}), ...((typeof process !== 'undefined' && process.env) || {}) };
     const providers: Provider[] = ['GEMINI', 'GROQ', 'OPENAI', 'DEEPSEEK', 'MISTRAL', 'OPENROUTER', 'ELEVENLABS'];
 
+    // READ USER KEYS FROM LOCAL STORAGE
+    let userKeys: Record<string, string> = {};
+    try {
+        if (typeof window !== 'undefined') {
+            const stored = window.localStorage.getItem('user_api_keys');
+            if (stored) userKeys = JSON.parse(stored);
+        }
+    } catch (e) {
+        // ignore errors reading local storage
+    }
+
     providers.forEach(provider => {
         const keys = new Set<string>(); // Use Set to avoid duplicates
         
+        // 0. User Override (Local Storage)
+        if (userKeys[provider] && userKeys[provider].length > 5) {
+            keys.add(userKeys[provider].trim());
+        }
+
         // 1. Generic Scan (Includes provider name)
         Object.keys(env).forEach(keyName => {
             if (keyName.toUpperCase().includes(provider) && typeof env[keyName] === 'string') {

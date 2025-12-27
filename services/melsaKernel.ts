@@ -24,7 +24,7 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     name: 'Auto Pilot (Hydra)',
     category: 'GEMINI_2_5',
     provider: 'GEMINI', 
-    description: 'Melsa Engine: No Mercy Omni-Race. Fastest winner takes all. Uncensored Logic.',
+    description: 'Hanisah Engine: No Mercy Omni-Race. Fastest winner takes all. Uncensored Logic.',
     specs: { context: 'AUTO', speed: 'INSTANT', intelligence: 9.8 } 
   },
   { 
@@ -143,7 +143,7 @@ export interface StreamChunk {
 export class HanisahKernel {
   private history: any[] = [];
 
-  private getActiveTools(provider: string, isThinking: boolean, deepSearchOverride?: boolean): any[] {
+  private getActiveTools(provider: string, isThinking: boolean): any[] {
       // 1. GEMINI PROVIDER (Native Tools)
       if (provider === 'GEMINI') {
           if (isThinking) return []; // Thinking models (2.0 Pro) often restricted with tools
@@ -155,8 +155,7 @@ export class HanisahKernel {
           if (config.vault && noteTools) tools.push(noteTools);
           if (config.visual && visualTools) tools.push(visualTools);
           
-          // Force search if override is true, otherwise fallback to config
-          if (deepSearchOverride || config.search) tools.push(searchTools); 
+          if (config.search) tools.push(searchTools); 
           
           if (mechanicTools) tools.push(mechanicTools);
           return tools;
@@ -168,7 +167,7 @@ export class HanisahKernel {
           // Note: DeepSeek Reasoner does not support tools in current API usually
           if (isThinking) return [];
 
-          // Use the UNIVERSAL toolset (Deep Search + Note Management)
+          // Use the UNIVERSAL toolset (Note Management)
           // We wrap them in the structure expected by the providerEngine
           // providerEngine expects an array of tool objects
           return universalTools.functionDeclarations ? [universalTools] : [];
@@ -188,18 +187,17 @@ export class HanisahKernel {
   async *streamExecute(msg: string, initialModelId: string, context?: string, imageData?: { data: string, mimeType: string }, configOverride?: any): AsyncGenerator<StreamChunk> {
     const systemPrompt = configOverride?.systemInstruction || HANISAH_BRAIN.getSystemInstruction('hanisah', context);
     const signal = configOverride?.signal; // AbortSignal passed via configOverride
-    const deepSearchOverride = configOverride?.deepSearch;
 
     // Auto-Migrate Stale IDs
     let currentModelId = initialModelId;
     if (currentModelId === 'gemini-2.5-flash') currentModelId = 'gemini-2.0-flash-exp';
 
-    // --- NEW OMNI RACE LOGIC (MELSA DEWA) ---
+    // --- NEW OMNI RACE LOGIC (HANISAH DEWA) ---
     if (initialModelId === 'auto-best') {
         const isEnabled = this.isOmniRaceEnabled();
         
         if (!isEnabled) {
-            yield { text: `\n\n> 🛑 *Omni-Race disabled. Switching to Gemini Flash...*\n\n` };
+            yield { text: `\n\n> 🛑 *Omni-Race disabled (Check Kernel Protocols). Switching to Gemini Flash...*\n\n` };
             currentModelId = 'gemini-2.0-flash-exp'; 
         } else {
             // Melsa Engine: Non-Streaming Logic wrapped in Generator
@@ -216,7 +214,7 @@ export class HanisahKernel {
                 return;
             } catch (e: any) {
                 if (e.message === "ABORTED" || signal?.aborted) return;
-                yield { text: `\n\n> ⚠️ *Melsa Engine Error: ${e.message}*` };
+                yield { text: `\n\n> ⚠️ *Hanisah Engine Error: ${e.message}*` };
                 currentModelId = 'gemini-2.0-flash-exp'; // Fallback
             }
         }
@@ -248,7 +246,7 @@ export class HanisahKernel {
 
         try {
             const isThinking = model.specs.speed === 'THINKING';
-            const activeTools = configOverride?.tools || this.getActiveTools(provider, isThinking, deepSearchOverride);
+            const activeTools = configOverride?.tools || this.getActiveTools(provider, isThinking);
 
             if (provider === 'GEMINI') {
                 const ai = new GoogleGenAI({ apiKey: key });

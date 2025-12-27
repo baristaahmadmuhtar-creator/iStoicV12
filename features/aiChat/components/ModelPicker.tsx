@@ -105,8 +105,8 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   const tabs = {
     'AUTO': {
         icon: <CircuitBoard size={16}/>,
-        label: 'HYDRA',
-        sub: 'OMNI-RACE',
+        label: features.OMNI_RACE ? 'HYDRA' : 'OFFLINE',
+        sub: features.OMNI_RACE ? 'OMNI-RACE' : 'DISABLED',
         desc: 'Concurrent Multi-Provider Execution. Fastest Winner Takes All.',
         accent: 'text-emerald-400',
         bg: 'bg-emerald-500/10',
@@ -209,18 +209,23 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
                     const isActive = activeTab === key;
                     const providerId = data.models[0]?.provider || 'UNKNOWN';
                     const status = statuses.find(s => s.id === providerId);
-                    const isHealthy = key === 'AUTO' ? true : status?.status === 'HEALTHY';
+                    
+                    // Logic: Auto is healthy only if enabled. Others check API status.
+                    const isHealthy = key === 'AUTO' ? features.OMNI_RACE : status?.status === 'HEALTHY';
+                    const isDisabled = key === 'AUTO' && !features.OMNI_RACE;
 
                     return (
                         <button
                             key={key}
-                            onClick={() => setActiveTab(key as any)}
+                            onClick={() => !isDisabled && setActiveTab(key as any)}
+                            disabled={isDisabled}
                             className={`
                                 relative p-3 rounded-xl flex md:w-full items-center gap-3 transition-all group overflow-hidden border shrink-0
                                 ${isActive 
                                     ? 'bg-white/5 border-white/10 shadow-inner' 
                                     : 'bg-transparent border-transparent hover:bg-white/[0.02] hover:border-white/5'
                                 }
+                                ${isDisabled ? 'opacity-40 cursor-not-allowed grayscale' : ''}
                             `}
                         >
                             {/* Selection Indicator */}

@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, Terminal, ShieldAlert, ZapOff, Copy, Check } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Terminal, ZapOff, Copy, Check } from 'lucide-react';
 import { debugService } from '../services/debugService';
 import { KEY_MANAGER } from '../services/geminiService';
 
@@ -34,7 +34,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Only update state if component is mounted (standard safety)
     this.setState({ errorInfo });
+    
     // Use this.props to access viewName
     const view = this.props.viewName || 'UNKNOWN_MODULE';
     const errStr = error.message.toLowerCase();

@@ -5,37 +5,6 @@ import { generateImage, KEY_MANAGER } from '../../../services/geminiService';
 import { executeMechanicTool } from '../../mechanic/mechanicTools';
 import { GoogleGenAI } from '@google/genai';
 
-/**
- * Proxy Search Agent.
- */
-async function performGeminiBackedSearch(query: string): Promise<string> {
-    const apiKey = KEY_MANAGER.getKey('GEMINI');
-    if (!apiKey) return "ERROR: No search uplink available (Gemini Key missing).";
-
-    try {
-        const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-exp',
-            contents: { parts: [{ text: `Search Query: "${query}". \n\nGoal: Provide a comprehensive answer, summary, or lyrics based on real-time Google Search results. If it's lyrics, provide the full lyrics. If it's news, provide the latest summary.` }] },
-            config: {
-                tools: [{ googleSearch: {} }] 
-            }
-        });
-
-        const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
-            ?.map((c: any) => c.web?.title ? `[${c.web.title}](${c.web.uri})` : '')
-            .filter(Boolean)
-            .join(', ');
-
-        const text = response.text || "No results found.";
-        return sources ? `${text}\n\nSources: ${sources}` : text;
-
-    } catch (error: any) {
-        console.error("Deep Search Proxy Failed:", error);
-        return `SEARCH_FAILED: ${error.message}`;
-    }
-}
-
 export const executeNeuralTool = async (
     fc: any, 
     notes: Note[], 
@@ -159,18 +128,13 @@ export const executeNeuralTool = async (
         }, null, 2);
     }
 
-    // --- 3. DEEP SEARCH (The Bridge) ---
-    if (name === 'deep_search') {
-        return await performGeminiBackedSearch(args.query);
-    }
-
-    // --- 4. VISUAL GENERATION ---
+    // --- 3. VISUAL GENERATION ---
     if (name === 'generate_visual') {
         const imgUrl = await generateImage(args.prompt);
         return imgUrl ? `!!IMG:[${args.prompt}]!!` : "ERROR: Failed to synthesize visual.";
     }
 
-    // --- 5. SYSTEM MECHANIC ---
+    // --- 4. SYSTEM MECHANIC ---
     if (name === 'system_mechanic_tool') {
         return await executeMechanicTool(fc);
     }

@@ -30,7 +30,7 @@ const SuggestionCard: React.FC<{
     desc: string, 
     onClick: () => void, 
     className?: string, 
-    accent?: string,
+    accent?: string, 
     delay?: number
 }> = ({ icon, label, desc, onClick, className, accent = "text-neutral-400 group-hover:text-accent", delay = 0 }) => (
     <button 
@@ -79,7 +79,8 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const isLiveLinkEnabled = isFeatureEnabled('LIVE_LINK');
     
     const { isInputFocused, shouldShowNav } = useNavigationIntelligence();
-    const isMobileNavVisible = shouldShowNav && (!isInputFocused || window.innerWidth > 768);
+    // Mobile Nav is visible if logic says so AND we are on mobile. On desktop it's Sidebar.
+    const isMobileNavVisible = shouldShowNav && window.innerWidth < 768; 
     
     const {
         threads, setThreads,
@@ -98,8 +99,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         isVaultConfigEnabled, 
         setIsLiveModeActive,
         setGlobalModelId,
-        isDeepSearchEnabled,
-        setIsDeepSearchEnabled
     } = chatLogic;
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -215,7 +214,8 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
 
             <div className={`fixed inset-0 bg-gradient-to-b ${personaGlow} pointer-events-none transition-all duration-1000 opacity-20`}></div>
 
-            <div className={`flex-1 flex flex-col relative z-10 w-full max-w-5xl mx-auto transition-all duration-500 ${isMobileNavVisible ? 'pb-36' : 'pb-32'}`}>
+            {/* Main Content Area - Padding bottom ensures content isn't covered by fixed input */}
+            <div className="flex-1 flex flex-col relative z-10 w-full max-w-5xl mx-auto transition-all duration-500 pb-[180px] md:pb-40">
                 
                 {/* 1. HUD HEADER */}
                 <div className="sticky top-4 z-40 w-full px-4 flex justify-center pointer-events-none">
@@ -331,13 +331,11 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                         isVaultEnabled={isVaultConfigEnabled}
                                         onTogglePersona={() => changePersona(personaMode === 'hanisah' ? 'stoic' : 'hanisah')}
                                         variant="hero"
-                                        isDeepSearchEnabled={isDeepSearchEnabled}
-                                        onToggleDeepSearch={() => setIsDeepSearchEnabled(!isDeepSearchEnabled)}
                                     />
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full max-w-5xl mx-auto px-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full max-w-5xl mx-auto px-4 pb-24">
                                 <SuggestionCard 
                                     icon={<SparklesIcon />} 
                                     label="VISUAL_SYNTHESIS" 
@@ -389,10 +387,11 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                 {/* 3. INPUT CAPSULE (FIXED FOOTER - Only visible when NOT in empty state) */}
                 {!showEmptyState && (
                     <div className={`
-                        fixed bottom-6 left-4 right-4 md:left-[80px] z-[100] 
-                        pointer-events-none transition-all duration-500 ease-out
-                        flex justify-center
-                        ${isMobileNavVisible ? 'mb-16 md:mb-0' : 'mb-2'}
+                        fixed bottom-0 left-0 right-0 z-[100] 
+                        pointer-events-none flex justify-center
+                        pb-safe px-4 md:px-0 md:left-[80px]
+                        transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]
+                        ${isMobileNavVisible ? 'mb-[84px] md:mb-6' : 'mb-4'}
                         animate-slide-up
                     `}>
                         <div className="w-full max-w-[1000px] pointer-events-auto relative">
@@ -420,8 +419,6 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                                 isVaultEnabled={isVaultConfigEnabled}
                                 onTogglePersona={() => changePersona(personaMode === 'hanisah' ? 'stoic' : 'hanisah')}
                                 variant="standard"
-                                isDeepSearchEnabled={isDeepSearchEnabled}
-                                onToggleDeepSearch={() => setIsDeepSearchEnabled(!isDeepSearchEnabled)}
                             />
                         </div>
                     </div>

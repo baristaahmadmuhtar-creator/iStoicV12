@@ -21,7 +21,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isLiveModeActive, setIsLiveModeActive] = useState(false);
-    const [isDeepSearchEnabled, setIsDeepSearchEnabled] = useState(false);
 
     // PERSISTENT REF: To prevent race condition during thread creation
     const pendingThreadId = useRef<string | null>(null);
@@ -72,7 +71,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         
         setThreads(prev => [newThread, ...prev]);
         setActiveThreadId(newId);
-        setIsDeepSearchEnabled(false); // Reset search on new chat
         
         console.debug(`[CHAT_LOGIC] New session created: ${newId} (Persona: ${persona})`);
         return newThread;
@@ -105,7 +103,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         // DIAGNOSTIC LOG START
         const transmissionId = uuidv4().slice(0,8);
         console.group(`🧠 NEURAL_LINK_TRANSMISSION: ${transmissionId}`);
-        console.log("Payload:", { userMsg, attachment: !!attachment, model: activeModel.id, deepSearch: isDeepSearchEnabled });
+        console.log("Payload:", { userMsg, attachment: !!attachment, model: activeModel.id });
 
         // 1. ATOMIC SESSION INITIALIZATION
         if (!targetId || !targetThread) {
@@ -172,7 +170,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                 attachment,
                 { 
                     signal,
-                    deepSearch: isDeepSearchEnabled // Pass the toggle state
                 } 
             );
             
@@ -279,7 +276,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         isVaultConfigEnabled: vaultEnabled,
         isAutoSpeak, setIsAutoSpeak,
         isLiveModeActive, setIsLiveModeActive, 
-        isDeepSearchEnabled, setIsDeepSearchEnabled, // Export Search State
         input, setInput,
         isLoading,
         activeModel,

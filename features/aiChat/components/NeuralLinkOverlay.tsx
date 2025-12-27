@@ -1,8 +1,8 @@
 
-import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { Flame, Brain, MicOff, Radio, Shield, X, Mic, Volume2, Activity } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Flame, Brain, MicOff, Radio, X, Mic, Activity } from 'lucide-react';
 import { type NeuralLinkStatus } from '../../../services/neuralLink';
-import { useFeatures } from '../../../contexts/FeatureContext'; // Import Feature Hook
+import { useFeatures } from '../../../contexts/FeatureContext'; 
 
 interface NeuralLinkOverlayProps {
   isOpen: boolean;
@@ -26,32 +26,38 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [volume, setVolume] = useState(0);
 
   // Check Feature Flag
   const { isFeatureEnabled } = useFeatures();
   const isVisualEngineEnabled = isFeatureEnabled('VISUAL_ENGINE');
 
+  // Prevent Body Scroll when open
+  useEffect(() => {
+      if (isOpen) {
+          document.body.style.overflow = 'hidden';
+      } else {
+          document.body.style.overflow = '';
+      }
+      return () => { document.body.style.overflow = ''; };
+  }, [isOpen]);
+
   // Auto-scroll transcript
   useEffect(() => {
       if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          const el = scrollRef.current;
+          // Use smooth scroll only if not manually scrolled way up
+          const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 300;
+          if (isNearBottom) {
+              el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+          }
       }
   }, [transcriptHistory, interimTranscript]);
-
-  // Handle Resize
-  useEffect(() => {
-      const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // Enhanced Audio Visualizer
   useEffect(() => {
     if (!isOpen || !analyser || !canvasRef.current) return;
     
-    // IF VISUAL ENGINE DISABLED -> SKIP RENDERING
     if (!isVisualEngineEnabled) {
         setVolume(128); // Static volume for orb
         return;
@@ -61,12 +67,17 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = windowSize.width;
-    canvas.height = windowSize.height;
-
+    let animationId: number;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
-    let animationId: number;
+
+    // Resize handler inside effect
+    const resizeCanvas = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 
     const draw = () => {
       animationId = requestAnimationFrame(draw);
@@ -76,7 +87,7 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
       const avg = sum / bufferLength;
-      setVolume(avg); // Sync react state for orb scaling
+      setVolume(avg); 
 
       // Clear with trail effect
       ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; 
@@ -84,59 +95,48 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
       
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
-      const maxRadius = Math.min(centerX, centerY) * 0.4;
+      const maxRadius = Math.min(centerX, centerY) * 0.45;
       
       // Determine Core Color
-      const hue = personaMode === 'hanisah' ? 25 : 190; // Orange vs Cyan
+      const hue = personaMode === 'hanisah' ? 25 : 190; 
       
       // Draw Circular Spectrum
-      const bars = 100;
+      const bars = 64; // Reduced for performance/mobile
       const step = Math.floor(bufferLength / bars);
       
       ctx.beginPath();
       for (let i = 0; i < bars; i++) {
           const value = dataArray[i * step];
           const percent = value / 256;
-          const height = maxRadius * 0.5 * percent;
+          const height = maxRadius * 0.6 * percent;
           const angle = (i / bars) * Math.PI * 2;
           
-          const x = centerX + Math.cos(angle) * (maxRadius + height * 0.5);
-          const y = centerY + Math.sin(angle) * (maxRadius + height * 0.5);
+          const x = centerX + Math.cos(angle) * (maxRadius * 0.8 + height);
+          const y = centerY + Math.sin(angle) * (maxRadius * 0.8 + height);
           
-          const xEnd = centerX + Math.cos(angle) * (maxRadius + height * 1.5);
-          const yEnd = centerY + Math.sin(angle) * (maxRadius + height * 1.5);
+          const xBase = centerX + Math.cos(angle) * (maxRadius * 0.8);
+          const yBase = centerY + Math.sin(angle) * (maxRadius * 0.8);
 
-          ctx.strokeStyle = `hsla(${hue}, 100%, ${50 + percent * 50}%, ${percent})`;
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = `hsla(${hue}, 100%, ${60 + percent * 40}%, ${Math.max(0.3, percent)})`;
+          ctx.lineWidth = 4;
           ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(xEnd, yEnd);
+          ctx.moveTo(xBase, yBase);
+          ctx.lineTo(x, y);
           ctx.stroke();
       }
-
-      // Draw Connection Lines (Neural Network Effect)
-      ctx.beginPath();
-      ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.1)`;
-      ctx.lineWidth = 1;
-      for (let i = 0; i < bars; i+=5) {
-          const angle = (i / bars) * Math.PI * 2;
-          const x = centerX + Math.cos(angle) * maxRadius;
-          const y = centerY + Math.sin(angle) * maxRadius;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.stroke();
     };
 
     draw();
-    return () => cancelAnimationFrame(animationId);
-  }, [isOpen, analyser, windowSize, personaMode, isVisualEngineEnabled]);
+    return () => {
+        cancelAnimationFrame(animationId);
+        window.removeEventListener('resize', resizeCanvas);
+    };
+  }, [isOpen, analyser, personaMode, isVisualEngineEnabled]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[5000] bg-black flex flex-col animate-fade-in transition-all overflow-hidden selection:bg-accent/30 font-sans">
+    <div className="fixed inset-0 z-[5000] bg-black flex flex-col animate-fade-in font-sans touch-none">
       
       {/* 1. VISUALIZER LAYER */}
       {isVisualEngineEnabled && (
@@ -146,11 +146,11 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
           />
       )}
 
-      {/* 2. AMBIENT ORB LAYER (Simplified if Visual Engine Disabled) */}
+      {/* 2. AMBIENT ORB LAYER */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 transition-transform duration-100 ease-out"
-           style={{ transform: `scale(${1 + (volume / 256) * 0.2})` }}
+           style={{ transform: `scale(${1 + (volume / 256) * 0.15})` }}
       >
-          <div className={`relative w-[280px] h-[280px] rounded-full blur-3xl opacity-40 animate-pulse ${personaMode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500'}`}></div>
+          <div className={`relative w-[280px] h-[280px] rounded-full blur-[80px] opacity-40 animate-pulse ${personaMode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500'}`}></div>
           <div className="absolute inset-0 flex items-center justify-center">
                <div className={`w-32 h-32 rounded-full border-2 border-white/20 flex items-center justify-center backdrop-blur-md shadow-[0_0_50px_rgba(255,255,255,0.1)] ${status === 'ACTIVE' ? 'animate-[spin_10s_linear_infinite]' : ''}`}>
                     {personaMode === 'hanisah' ? <Flame size={48} className="text-white opacity-80" /> : <Brain size={48} className="text-white opacity-80" />}
@@ -162,31 +162,31 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
       <div className="relative z-20 flex flex-col h-full justify-between pointer-events-none">
           
           {/* HEADER */}
-          <div className="p-6 md:p-8 flex justify-between items-center pointer-events-auto">
+          <div className="p-6 pt-safe flex justify-between items-center pointer-events-auto">
               <div className="flex items-center gap-4">
-                  <div className={`px-3 py-1 rounded-full border bg-black/40 backdrop-blur-md flex items-center gap-2 ${status === 'ERROR' ? 'border-red-500 text-red-500' : 'border-white/10 text-white'}`}>
-                      <Radio size={14} className={status === 'ACTIVE' ? 'animate-pulse text-green-400' : ''} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">{status}</span>
+                  <div className={`px-4 py-2 rounded-full border bg-black/40 backdrop-blur-md flex items-center gap-2 ${status === 'ERROR' ? 'border-red-500 text-red-500' : 'border-white/10 text-white'}`}>
+                      <Radio size={16} className={status === 'ACTIVE' ? 'animate-pulse text-green-400' : ''} />
+                      <span className="text-xs font-black uppercase tracking-widest">{status}</span>
                   </div>
-                  {!isVisualEngineEnabled && (
-                      <span className="text-[8px] font-mono text-neutral-500 bg-black/20 px-2 py-1 rounded">ECO_MODE</span>
-                  )}
               </div>
-              <button onClick={onTerminate} className="w-10 h-10 rounded-full bg-white/10 hover:bg-red-500/20 text-white hover:text-red-500 flex items-center justify-center transition-all border border-white/5 hover:border-red-500/50">
-                  <X size={18} />
+              <button 
+                onClick={onTerminate} 
+                className="w-12 h-12 rounded-full bg-white/10 hover:bg-red-500/20 text-white hover:text-red-500 flex items-center justify-center transition-all border border-white/5 active:scale-90"
+              >
+                  <X size={20} />
               </button>
           </div>
 
           {/* DYNAMIC TRANSCRIPT AREA */}
-          <div ref={scrollRef} className="flex-1 w-full max-w-2xl mx-auto px-6 overflow-y-auto no-scrollbar pointer-events-auto flex flex-col justify-end pb-10 space-y-4 mask-fade-top">
+          <div ref={scrollRef} className="flex-1 w-full max-w-2xl mx-auto px-6 overflow-y-auto no-scrollbar pointer-events-auto flex flex-col justify-end pb-8 space-y-4 mask-fade-top touch-pan-y">
               
               {/* History */}
               {transcriptHistory.map((item, idx) => (
                   <div key={idx} className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
-                      <div className={`max-w-[85%] px-4 py-2 rounded-2xl text-sm font-medium leading-relaxed backdrop-blur-sm ${
+                      <div className={`max-w-[85%] px-5 py-3 rounded-2xl text-sm md:text-base font-medium leading-relaxed backdrop-blur-sm shadow-sm ${
                           item.role === 'user' 
-                          ? 'bg-white/10 text-white/70 rounded-tr-none' 
-                          : 'bg-black/40 text-accent/80 border border-accent/10 rounded-tl-none'
+                          ? 'bg-white/10 text-white/90 rounded-tr-none' 
+                          : 'bg-black/60 text-accent/90 border border-accent/20 rounded-tl-none'
                       }`}>
                           {item.text}
                       </div>
@@ -196,53 +196,50 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
               {/* Interim (Live Streaming) */}
               {interimTranscript && (
                   <div className={`flex ${interimTranscript.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
-                      <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-base font-bold leading-relaxed backdrop-blur-md border shadow-lg ${
+                      <div className={`max-w-[85%] px-5 py-3 rounded-2xl text-base md:text-lg font-bold leading-relaxed backdrop-blur-md border shadow-lg ${
                           interimTranscript.role === 'user' 
                           ? 'bg-white/20 text-white border-white/20 rounded-tr-none' 
                           : 'bg-accent/20 text-accent border-accent/40 rounded-tl-none'
                       }`}>
                           {interimTranscript.text}
-                          <span className="inline-block w-1.5 h-4 ml-1 align-middle bg-current animate-pulse"></span>
+                          <span className="inline-block w-2 h-4 ml-1 align-middle bg-current animate-pulse"></span>
                       </div>
                   </div>
               )}
               
               {/* Status Text when Idle */}
               {!interimTranscript && status === 'ACTIVE' && transcriptHistory.length === 0 && (
-                  <div className="text-center text-white/30 text-xs font-mono uppercase tracking-widest animate-pulse mt-4">
-                      Listening for audio input...
+                  <div className="text-center text-white/40 text-xs font-mono uppercase tracking-widest animate-pulse mt-4">
+                      Listening for voice input...
                   </div>
               )}
           </div>
 
           {/* CONTROLS FOOTER */}
-          <div className="p-8 md:p-12 flex justify-center items-center gap-6 pointer-events-auto bg-gradient-to-t from-black via-black/80 to-transparent">
+          <div className="p-8 pb-safe flex justify-center items-center gap-6 pointer-events-auto bg-gradient-to-t from-black via-black/80 to-transparent">
               <button 
                   onClick={() => setIsMuted(!isMuted)}
-                  className={`w-14 h-14 rounded-full flex items-center justify-center border transition-all ${
+                  className={`w-16 h-16 rounded-full flex items-center justify-center border transition-all active:scale-95 ${
                       isMuted ? 'bg-red-500/20 border-red-500 text-red-500' : 'bg-white/10 border-white/10 text-white hover:bg-white/20'
                   }`}
+                  aria-label="Toggle Mute"
               >
-                  {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+                  {isMuted ? <MicOff size={28} /> : <Mic size={28} />}
               </button>
 
               <button 
                   onClick={onTerminate}
-                  className="px-8 h-16 rounded-full bg-red-600 hover:bg-red-500 text-white font-black text-xs tracking-[0.3em] uppercase shadow-lg shadow-red-900/50 hover:shadow-red-500/50 hover:scale-105 transition-all flex items-center gap-3 active:scale-95"
+                  className="h-16 px-10 rounded-full bg-red-600 hover:bg-red-500 text-white font-black text-xs tracking-[0.3em] uppercase shadow-lg shadow-red-900/50 hover:shadow-red-500/50 hover:scale-105 transition-all flex items-center gap-3 active:scale-95"
               >
-                  <Activity size={18} className="animate-pulse" /> TERMINATE_LINK
+                  <Activity size={20} className="animate-pulse" /> TERMINATE
               </button>
-
-              <div className="w-14 h-14 rounded-full border border-white/10 flex items-center justify-center text-white/50">
-                  <Volume2 size={24} />
-              </div>
           </div>
       </div>
 
       <style>{`
         .mask-fade-top {
-            mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
-            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
+            mask-image: linear-gradient(to bottom, transparent 0%, black 15%);
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%);
         }
       `}</style>
     </div>

@@ -407,7 +407,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = memo(({
             </div>
         )}
 
-        <div ref={messagesEndRef} className="h-6" />
+        <div ref={messagesEndRef} className="h-12 md:h-6" />
     </div>
   );
 });

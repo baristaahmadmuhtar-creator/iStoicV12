@@ -124,20 +124,21 @@ export class HydraVault {
 
   /**
    * Retrieves an available API Key.
-   * IMPLEMENTS: Round Robin & Emergency Revive Threshold.
+   * IMPLEMENTS: Random Load Balancing & Emergency Revive.
+   * CHANGED: Random selection is statistically better for avoiding 429 hotspots than Round-Robin/Least-Used.
    */
   public getKey(provider: Provider): string | null {
     const pool = this.vault[provider];
     if (!pool || pool.length === 0) return null;
 
     // 1. Try to find ACTIVE keys
-    // Sort by usageCount ascending (Prioritize least used keys for load balancing)
-    const activeKeys = pool
-        .filter((k) => k.status === 'ACTIVE')
-        .sort((a, b) => a.usageCount - b.usageCount);
+    const activeKeys = pool.filter((k) => k.status === 'ACTIVE');
 
     if (activeKeys.length > 0) {
-      const bestKey = activeKeys[0];
+      // Pick RANDOM key from active pool to distribute load instantly
+      const randomIndex = Math.floor(Math.random() * activeKeys.length);
+      const bestKey = activeKeys[randomIndex];
+      
       bestKey.usageCount++;
       return bestKey.key;
     }
@@ -159,7 +160,6 @@ export class HydraVault {
     }
 
     // 3. DESPERATE MEASURE: Just pick ANY key if all else fails
-    // This allows hitting 429s repeatedly rather than failing the app completely
     const desperateKey = pool[Math.floor(Math.random() * pool.length)];
     if (desperateKey) {
          debugService.log('WARN', 'HYDRA_VAULT', 'DESPERATE_PICK', `All keys in cooldown. Forcing retry on random key.`);
@@ -168,6 +168,16 @@ export class HydraVault {
 
     debugService.log('ERROR', 'HYDRA_VAULT', 'EXHAUSTED', `No keys available for ${provider}. All ${pool.length} keys in cooldown.`);
     return null;
+  }
+
+  /**
+   * Checks if there are other ACTIVE keys available for a provider.
+   * Used by Kernel to decide whether to retry same model or switch providers.
+   */
+  public hasAlternativeKeys(provider: Provider): boolean {
+      const pool = this.vault[provider];
+      if (!pool) return false;
+      return pool.some(k => k.status === 'ACTIVE');
   }
 
   /**
@@ -189,9 +199,9 @@ export class HydraVault {
     const now = Date.now();
 
     // PENALTY LOGIC
-    // Rate Limit (429) = 30 Seconds (Reduced from 2 min to rotate faster in multi-key setups)
+    // Rate Limit (429) = 45 Seconds (Increased slightly to ensure Groq resets)
     // Standard Error (500, Network) = 15 Seconds
-    const penaltyMs = isRateLimit ? 30_000 : 15_000;
+    const penaltyMs = isRateLimit ? 45_000 : 15_000;
     
     keyRecord.cooldownUntil = now + penaltyMs;
 

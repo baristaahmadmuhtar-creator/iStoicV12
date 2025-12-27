@@ -184,7 +184,7 @@ const callSingleApi = async (candidate: any, userContent: any, signal: AbortSign
     throw new Error(`Gagal menghubungi ${candidate.provider}.`);
 };
 
-export const runHanisahRace = async (message: string, imageData: any = null): Promise<string> => {
+export const runHanisahRace = async (message: string, imageData: any = null): Promise<{ text: string, provider: string, model: string }> => {
   if (chatHistory.length === 0) resetHistory();
   
   stopResponse(); 
@@ -208,9 +208,9 @@ export const runHanisahRace = async (message: string, imageData: any = null): Pr
             updateHistory("user", cleanMessage + " [Image]");
             updateHistory("assistant", String(replyText));
             activeController = null;
-            return String(replyText);
+            return { text: String(replyText), provider: 'GEMINI', model: candidate.model };
         } catch (error: any) {
-            if (error.message === "Dibatalkan.") return "Dibatalkan.";
+            if (error.message === "Dibatalkan.") return { text: "Dibatalkan.", provider: 'SYSTEM', model: 'ABORT' };
         }
     }
   } 
@@ -239,13 +239,15 @@ export const runHanisahRace = async (message: string, imageData: any = null): Pr
             updateHistory("user", cleanMessage);
             updateHistory("assistant", String(replyText));
             activeController = null;
-            return String(replyText);
+            
+            const winningProvider = result.candidate.provider === 'google' ? 'GEMINI' : 'GROQ';
+            return { text: String(replyText), provider: winningProvider, model: result.candidate.model };
         } else {
             throw result.error;
         }
 
     } catch (e: any) {
-        if (e.message === "Dibatalkan.") return "Dibatalkan.";
+        if (e.message === "Dibatalkan.") return { text: "Dibatalkan.", provider: 'SYSTEM', model: 'ABORT' };
         
         // Fallback Strategy for Free Tier Robustness
         // If primary racers failed (likely rate limit), try the "slower" but stable candidates
@@ -258,12 +260,14 @@ export const runHanisahRace = async (message: string, imageData: any = null): Pr
                 updateHistory("user", cleanMessage);
                 updateHistory("assistant", String(replyText));
                 activeController = null;
-                return String(replyText);
+                
+                const winningProvider = candidate.provider === 'google' ? 'GEMINI' : 'GROQ';
+                return { text: String(replyText), provider: winningProvider, model: candidate.model };
             } catch (error: any) {}
         }
     }
   }
 
   activeController = null;
-  return "Maaf sayang, semua jaringan lagi sibuk banget (Rate Limit). Coba lagi bentar ya.";
+  return { text: "Maaf sayang, semua jaringan lagi sibuk banget (Rate Limit). Coba lagi bentar ya.", provider: 'SYSTEM', model: 'ERROR' };
 };

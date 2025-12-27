@@ -164,8 +164,20 @@ export class HanisahKernel {
                 const hanisahImg = imageData ? { data: imageData.data, mimeType: imageData.mimeType } : null;
                 const response = await runHanisahRace(msg, hanisahImg);
                 if (signal?.aborted) throw new Error("ABORTED");
-                yield { text: response };
-                this.updateHistory(msg, response);
+                
+                yield { text: response.text };
+                
+                if (response.provider && response.model) {
+                    yield { 
+                        metadata: { 
+                            provider: response.provider, 
+                            model: response.model,
+                            status: 'success'
+                        } 
+                    };
+                }
+
+                this.updateHistory(msg, response.text);
                 return;
             } catch (e: any) {
                 if (e.message === "ABORTED" || signal?.aborted) return;
@@ -270,7 +282,14 @@ export class HanisahKernel {
             console.warn(`[KERNEL] Error on ${model.id}: ${err.message}`);
 
             if (isQuota || isNotFound || isTimeout) {
-                // INTELLIGENT DOWNGRADE for Vercel Safety
+                // FIXED: Check if we have alternative keys for the SAME provider before switching models
+                // This prevents giving up on Groq too early if only one key failed but 7 others exist.
+                if (GLOBAL_VAULT.hasAlternativeKeys(provider as Provider)) {
+                    yield { metadata: { systemStatus: `${provider} Limit. Rotating key...`, isRerouting: true } };
+                    continue; // Loop again, HydraVault will provide a NEW key
+                }
+
+                // INTELLIGENT DOWNGRADE for Vercel Safety (Only if ALL keys for provider are dead)
                 if (currentModelId.includes('pro') || currentModelId.includes('3')) {
                     currentModelId = 'gemini-1.5-flash'; // Downgrade to safest model
                     yield { metadata: { systemStatus: "Model Timeout/Limit on Vercel. Downgrading to Flash...", isRerouting: true } };

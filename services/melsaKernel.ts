@@ -11,8 +11,7 @@ import { type ModelMetadata } from "../types";
 import { KEY_MANAGER } from "./geminiService"; 
 
 export const MODEL_CATALOG: ModelMetadata[] = [
-  // --- GEMINI (GOOGLE) - VERCEL SAFE ---
-  // Prioritize Flash for speed on Vercel Hobby Tier (prevents 10s timeout)
+  // --- GEMINI (GOOGLE) ---
   { 
     id: 'gemini-2.0-flash-exp', 
     name: 'Gemini 2.0 Flash (Exp)', 
@@ -29,7 +28,6 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     description: 'Fallback paling stabil & cepat.', 
     specs: { context: '1M', speed: 'FAST', intelligence: 9.0 } 
   },
-  // Use exact API string for Pro. Note: High latency may cause timeouts on free Vercel.
   { 
     id: 'gemini-1.5-pro-latest', 
     name: 'Gemini 1.5 Pro', 
@@ -65,7 +63,7 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     specs: { context: '128K', speed: 'INSTANT', intelligence: 8.5 } 
   },
 
-  // --- MISTRAL (RESTORED) ---
+  // --- MISTRAL ---
   { 
     id: 'mistral-large-latest', 
     name: 'Mistral Large', 
@@ -83,7 +81,7 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     specs: { context: '32K', speed: 'INSTANT', intelligence: 8.9 } 
   },
 
-  // --- OPENAI (PAID/TRIAL ONLY) ---
+  // --- OPENAI ---
   { 
     id: 'gpt-4o-mini', 
     name: 'GPT-4o Mini', 
@@ -188,7 +186,7 @@ export class HanisahKernel {
     }
 
     let attempts = 0;
-    const maxAttempts = 6; 
+    const maxAttempts = 15; // Increased attempts to cycle through all 8+ keys if needed
 
     while (attempts < maxAttempts) {
         if (signal?.aborted) break;
@@ -197,16 +195,18 @@ export class HanisahKernel {
         // Find model metadata, default to Flash if ID not found
         const model = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG[0];
         const provider = model.provider;
+        
+        // REQUEST KEY FROM HYDRA (Will get the least-used ACTIVE key)
         const key = GLOBAL_VAULT.getKey(provider as Provider);
 
         if (!key) {
-            debugService.log('WARN', 'KERNEL', 'NO_KEY', `No keys for ${provider}. Switching to fallback.`);
+            debugService.log('WARN', 'KERNEL', 'NO_KEY', `All keys for ${provider} are exhausted/cooldown.`);
             
-            // EMERGENCY FALLBACK CHAIN
+            // EMERGENCY FALLBACK CHAIN (Cross-Provider)
             if (provider === 'GEMINI') {
                 if (KEY_MANAGER.getKey('GROQ')) {
                     currentModelId = 'llama-3.3-70b-versatile';
-                    yield { metadata: { systemStatus: "Gemini Keys Exhausted. Rerouting to Groq...", isRerouting: true } };
+                    yield { metadata: { systemStatus: "Gemini Exhausted. Rerouting to Groq...", isRerouting: true } };
                     continue;
                 } else if (KEY_MANAGER.getKey('MISTRAL')) {
                     currentModelId = 'mistral-small-latest';
@@ -216,7 +216,7 @@ export class HanisahKernel {
             } else if (provider === 'GROQ') {
                  if (KEY_MANAGER.getKey('GEMINI')) {
                     currentModelId = 'gemini-1.5-flash'; 
-                    yield { metadata: { systemStatus: "Groq Limit. Rerouting to Gemini Flash...", isRerouting: true } };
+                    yield { metadata: { systemStatus: "Groq Exhausted. Rerouting to Gemini...", isRerouting: true } };
                     continue;
                  }
             }
@@ -234,11 +234,7 @@ export class HanisahKernel {
                 const config: any = { systemInstruction: systemPrompt, temperature: 0.7 };
                 
                 if (activeTools.length > 0 && !isThinking) config.tools = activeTools;
-                
-                // Reduce thinking budget for Vercel to avoid timeouts
-                if (isThinking) {
-                    config.thinkingConfig = { thinkingBudget: 1024 }; 
-                }
+                if (isThinking) config.thinkingConfig = { thinkingBudget: 1024 }; 
 
                 const contents = [
                     ...this.history.map(h => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }] })), 
@@ -272,34 +268,33 @@ export class HanisahKernel {
         } catch (err: any) {
             if (signal?.aborted) return;
             
+            // REPORT FAILURE TO HYDRA (Will trigger penalty/cooldown for this key)
             GLOBAL_VAULT.reportFailure(provider as Provider, key, err);
             
             const errStr = JSON.stringify(err);
-            const isQuota = errStr.includes('429') || errStr.includes('resource_exhausted');
+            const isQuota = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('quota');
             const isNotFound = errStr.includes('404') || errStr.includes('not found');
             const isTimeout = errStr.includes('timeout') || errStr.includes('504');
             
             console.warn(`[KERNEL] Error on ${model.id}: ${err.message}`);
 
             if (isQuota || isNotFound || isTimeout) {
-                // FIXED: Check if we have alternative keys for the SAME provider before switching models
-                // This prevents giving up on Groq too early if only one key failed but 7 others exist.
+                // IMPORTANT: Check for alternative keys within the SAME provider first
+                // HydraVault has already marked the bad key as COOLDOWN, so calling getKey() again
+                // will return a different key if one exists.
                 if (GLOBAL_VAULT.hasAlternativeKeys(provider as Provider)) {
                     yield { metadata: { systemStatus: `${provider} Limit. Rotating key...`, isRerouting: true } };
-                    continue; // Loop again, HydraVault will provide a NEW key
+                    continue; // Loop again -> Get New Key -> Retry
                 }
 
-                // INTELLIGENT DOWNGRADE for Vercel Safety (Only if ALL keys for provider are dead)
+                // Only if NO keys left for this provider, downgrade/switch
                 if (currentModelId.includes('pro') || currentModelId.includes('3')) {
-                    currentModelId = 'gemini-1.5-flash'; // Downgrade to safest model
+                    currentModelId = 'gemini-1.5-flash'; 
                     yield { metadata: { systemStatus: "Model Timeout/Limit on Vercel. Downgrading to Flash...", isRerouting: true } };
                 } else if (provider === 'GEMINI') {
                     if (KEY_MANAGER.getKey('GROQ')) {
                         currentModelId = 'llama-3.3-70b-versatile';
                         yield { metadata: { systemStatus: "Gemini Unstable. Switching to Groq...", isRerouting: true } };
-                    } else if (KEY_MANAGER.getKey('MISTRAL')) {
-                        currentModelId = 'mistral-small-latest';
-                        yield { metadata: { systemStatus: "Gemini Unstable. Switching to Mistral...", isRerouting: true } };
                     }
                 }
                 continue; 
@@ -311,8 +306,8 @@ export class HanisahKernel {
     }
   }
 
-  async execute(msg: string, modelId: string, context?: string): Promise<StreamChunk> {
-    const it = this.streamExecute(msg, modelId, context);
+  async execute(msg: string, modelId: string, context?: string, configOverride?: any): Promise<StreamChunk> {
+    const it = this.streamExecute(msg, modelId, context, undefined, configOverride);
     let fullText = "";
     let finalChunk: StreamChunk = {};
     for await (const chunk of it) {

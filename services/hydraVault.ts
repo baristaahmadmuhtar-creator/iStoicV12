@@ -29,7 +29,7 @@ export class HydraVault {
 
   /**
    * Scans environment variables to populate the vault.
-   * EXCLUSIVELY uses Environment Variables. User LocalStorage keys are no longer supported.
+   * EXCLUSIVELY uses Environment Variables.
    */
   public refreshPools() {
     const env = { ...((import.meta as any).env || {}), ...((typeof process !== 'undefined' && process.env) || {}) };
@@ -62,15 +62,14 @@ export class HydraVault {
                 let cleanVal = val.replace(/['"]/g, '').trim();
                 
                 // 2. Normalize delimiters: Replace newlines, pipes, semicolons, and literal "\n" with commas
-                cleanVal = cleanVal.replace(/[\n|\s;]/g, ','); // Also handle spaces as separators if accidental
-                cleanVal = cleanVal.replace(/\\n/g, ','); // Handle escaped newlines from some env UIs
+                cleanVal = cleanVal.replace(/[\n|\s;]/g, ','); 
+                cleanVal = cleanVal.replace(/\\n/g, ','); 
 
-                // 3. Split by comma
+                // 3. Split by comma (to handle multi-key string in one var)
                 const parts = cleanVal.split(',');
 
                 parts.forEach(v => {
                     const trimmed = v.trim();
-                    // Basic validation: Gemini keys usually start with AIza, length check
                     if (trimmed.length > 10) { 
                         keys.add(trimmed);
                     }
@@ -78,18 +77,8 @@ export class HydraVault {
             }
         };
 
-        // 1. Generic Scan (Includes provider name)
-        Object.keys(env).forEach(keyName => {
-            if (keyName.toUpperCase().includes(provider)) {
-                addKey(env[keyName]);
-            }
-        });
-
-        // 2. Explicit Standard Names (Backup)
-        addKey(env[`VITE_${provider}_API_KEY`]);
-        addKey(env[`${provider}_API_KEY`]);
-
-        // 3. Explicit Numbered Scan (Force check for VITE_GEMINI_KEY_1 to 50)
+        // 1. Explicit Numbered Scan (VITE_GROQ_API_KEY_1 ... 50)
+        // Scan up to 50 to ensure we catch all your keys
         for (let i = 1; i <= 50; i++) {
             addKey(env[`VITE_${provider}_KEY_${i}`]);
             addKey(env[`${provider}_KEY_${i}`]);
@@ -97,35 +86,35 @@ export class HydraVault {
             addKey(env[`${provider}_API_KEY_${i}`]);
         }
 
+        // 2. Generic Scan (Backups)
+        Object.keys(env).forEach(keyName => {
+            if (keyName.toUpperCase().includes(provider)) {
+                addKey(env[keyName]);
+            }
+        });
+
         // Initialize or Update Pool
-        this.vault[provider] = Array.from(keys).map(k => ({
-            key: k,
-            provider,
-            status: 'ACTIVE',
-            usageCount: 0,
-            fails: 0,
-            cooldownUntil: 0
-        }));
+        // Preserve usageCount if key already exists to maintain rotation logic across reloads if persistent
+        this.vault[provider] = Array.from(keys).map(k => {
+            const existing = this.vault[provider]?.find(ex => ex.key === k);
+            return {
+                key: k,
+                provider,
+                status: 'ACTIVE',
+                usageCount: existing ? existing.usageCount : 0,
+                fails: 0,
+                cooldownUntil: 0
+            };
+        });
     });
     
     const totalKeys = Object.values(this.vault).flat().length;
     console.log(`[HYDRA] Vault initialized. Total Keys: ${totalKeys}`);
-    
-    // Log detailed breakdown for debugging (without exposing full keys)
-    providers.forEach(p => {
-        const count = this.vault[p]?.length || 0;
-        if (count > 0) {
-            console.log(`[HYDRA] ${p}: ${count} keys loaded.`);
-        }
-    });
-    
-    debugService.log('KERNEL', 'HYDRA_VAULT', 'INIT', `Vault initialized with ${totalKeys} keys across ${providers.length} providers.`);
   }
 
   /**
-   * Retrieves an available API Key.
-   * IMPLEMENTS: Random Load Balancing & Emergency Revive.
-   * CHANGED: Random selection is statistically better for avoiding 429 hotspots than Round-Robin/Least-Used.
+   * Retrieves an available API Key using LEAST-USED strategy.
+   * This ensures strict rotation: Key 1 -> Key 2 -> ... -> Key 8 -> Key 1.
    */
   public getKey(provider: Provider): string | null {
     const pool = this.vault[provider];
@@ -135,35 +124,31 @@ export class HydraVault {
     const activeKeys = pool.filter((k) => k.status === 'ACTIVE');
 
     if (activeKeys.length > 0) {
-      // Pick RANDOM key from active pool to distribute load instantly
-      const randomIndex = Math.floor(Math.random() * activeKeys.length);
-      const bestKey = activeKeys[randomIndex];
+      // SORT BY USAGE COUNT ASCENDING (Least Used First)
+      // This forces the system to use fresh keys before reusing old ones.
+      activeKeys.sort((a, b) => a.usageCount - b.usageCount);
       
+      const bestKey = activeKeys[0];
       bestKey.usageCount++;
+      
+      // Log usage for debugging balance
+      // console.debug(`[HYDRA] Selected ${provider} key (Used: ${bestKey.usageCount} times)`);
+      
       return bestKey.key;
     }
 
-    // 2. REVIVE THRESHOLD LOGIC
-    // If NO active keys, check COOLDOWN keys that are close to expiry or expired.
+    // 2. REVIVE LOGIC: Check COOLDOWN keys
     const now = Date.now();
     const emergencyKey = pool.find((k) => {
-      // If cooldown is expired OR less than 5s remaining
-      return k.status === 'COOLDOWN' && (k.cooldownUntil <= now || (k.cooldownUntil - now < 5000));
+      return k.status === 'COOLDOWN' && k.cooldownUntil <= now;
     });
 
     if (emergencyKey) {
-      debugService.log('WARN', 'HYDRA_VAULT', 'EMERGENCY_REVIVE', `Forcing revive on ${provider} key (ending ...${emergencyKey.key.slice(-4)})`);
+      debugService.log('INFO', 'HYDRA_VAULT', 'REVIVE', `Restoring ${provider} key from cooldown.`);
       emergencyKey.status = 'ACTIVE';
       emergencyKey.cooldownUntil = 0;
       emergencyKey.usageCount++;
       return emergencyKey.key;
-    }
-
-    // 3. DESPERATE MEASURE: Just pick ANY key if all else fails
-    const desperateKey = pool[Math.floor(Math.random() * pool.length)];
-    if (desperateKey) {
-         debugService.log('WARN', 'HYDRA_VAULT', 'DESPERATE_PICK', `All keys in cooldown. Forcing retry on random key.`);
-         return desperateKey.key;
     }
 
     debugService.log('ERROR', 'HYDRA_VAULT', 'EXHAUSTED', `No keys available for ${provider}. All ${pool.length} keys in cooldown.`);
@@ -190,8 +175,14 @@ export class HydraVault {
     if (!keyRecord) return;
 
     const errStr = JSON.stringify(error).toLowerCase();
-    // 429 = Rate Limit, 402 = Quota Exceeded / Payment Required
-    const isRateLimit = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('402') || errStr.includes('quota') || errStr.includes('capacity') || errStr.includes('limit');
+    
+    // DETECT 429 / RATE LIMITS (Specific patterns for Groq/Gemini)
+    const isRateLimit = 
+        errStr.includes('429') || 
+        errStr.includes('resource_exhausted') || 
+        errStr.includes('quota') || 
+        errStr.includes('rate limit') ||
+        errStr.includes('too many requests');
 
     keyRecord.fails++;
     keyRecord.status = 'COOLDOWN';
@@ -199,13 +190,13 @@ export class HydraVault {
     const now = Date.now();
 
     // PENALTY LOGIC
-    // Rate Limit (429) = 45 Seconds (Increased slightly to ensure Groq resets)
-    // Standard Error (500, Network) = 15 Seconds
-    const penaltyMs = isRateLimit ? 45_000 : 15_000;
+    // Rate Limit (429) = 60 Seconds (Give it a full minute to recover)
+    // Standard Error = 10 Seconds
+    const penaltyMs = isRateLimit ? 60_000 : 10_000;
     
     keyRecord.cooldownUntil = now + penaltyMs;
 
-    debugService.log('WARN', 'HYDRA_VAULT', 'PENALTY', `Freezing ${provider} key (...${keyRecord.key.slice(-4)}) for ${penaltyMs/1000}s. Reason: ${isRateLimit ? 'RATE_LIMIT' : 'ERROR'}`);
+    debugService.log('WARN', 'HYDRA_VAULT', 'PENALTY', `Freezing ${provider} key for ${penaltyMs/1000}s. Reason: ${isRateLimit ? 'RATE_LIMIT_429' : 'ERROR'}`);
 
     // Auto-heal scheduling
     setTimeout(() => {
@@ -218,11 +209,15 @@ export class HydraVault {
   }
 
   public reportSuccess(provider: Provider) {
-      // Optional: Reset fail count on success if implementing partial forgiveness
+      // We don't reset usageCount because we want cumulative balancing
   }
 
   public isProviderHealthy(provider: Provider): boolean {
-      return !!this.getKey(provider);
+      const pool = this.vault[provider];
+      if (!pool) return false;
+      // It's healthy if at least one key is ACTIVE or ready to be revived
+      const now = Date.now();
+      return pool.some(k => k.status === 'ACTIVE' || (k.status === 'COOLDOWN' && k.cooldownUntil <= now));
   }
 
   public getAllProviderStatuses(): ProviderStatus[] {
@@ -230,7 +225,6 @@ export class HydraVault {
           const pool = this.vault[id];
           const hasActive = pool.some(k => k.status === 'ACTIVE');
           
-          // Calculate max cooldown remaining for display
           let maxCooldown = 0;
           if (!hasActive) {
               const now = Date.now();

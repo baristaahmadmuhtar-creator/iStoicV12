@@ -172,8 +172,8 @@ const AppContent: React.FC<AppContentProps> = ({ notes, setNotes }) => {
       />
       
       <main className="flex-1 relative h-full overflow-hidden bg-zinc-50 dark:bg-black min-w-0">
-        <div id="main-scroll-container" className="h-full w-full overflow-y-auto custom-scroll pb-safe scroll-smooth">
-          <div className="min-h-full pb-32 md:pb-40">
+        <div id="main-scroll-container" className="h-full w-full overflow-y-auto custom-scroll scroll-smooth">
+          <div className="min-h-full pb-32 md:pb-40 pt-safe">
             {renderContent()}
           </div>
         </div>
@@ -190,10 +190,6 @@ const AppContent: React.FC<AppContentProps> = ({ notes, setNotes }) => {
       <DebugConsole isOpen={isDebugOpen} onClose={() => setIsDebugOpen(false)} />
 
       {!isTutorialComplete && <TutorialOverlay onComplete={() => setIsTutorialComplete(true)} />}
-
-      <style>{`
-        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-      `}</style>
     </div>
   );
 };

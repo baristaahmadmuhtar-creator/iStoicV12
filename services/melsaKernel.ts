@@ -5,7 +5,7 @@ import { HANISAH_BRAIN } from "./melsaBrain";
 import { noteTools, visualTools, searchTools, universalTools } from "./geminiService";
 import { GLOBAL_VAULT, Provider } from "./hydraVault"; 
 import { mechanicTools } from "../features/mechanic/mechanicTools";
-import { streamOpenAICompatible } from "./providerEngine";
+import { streamOpenAICompatible, streamPuterChat } from "./providerEngine";
 import { runHanisahRace } from "./melsaOmni"; 
 import { type ModelMetadata } from "../types";
 import { KEY_MANAGER } from "./geminiService"; 
@@ -43,6 +43,24 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     provider: 'GEMINI', 
     description: 'Otomatis memilih jalur tercepat.',
     specs: { context: 'AUTO', speed: 'INSTANT', intelligence: 9.8 } 
+  },
+
+  // --- PUTER (X.AI) ---
+  { 
+    id: 'x-ai/grok-4.1-fast', 
+    name: 'Grok 4.1 Fast (Puter)', 
+    category: 'GROQ_VELOCITY', 
+    provider: 'PUTER', 
+    description: 'Ultra-fast inference from X.AI via Puter.js.', 
+    specs: { context: '128K', speed: 'INSTANT', intelligence: 9.2 } 
+  },
+  { 
+    id: 'x-ai/grok-2-1212', 
+    name: 'Grok 2 (Puter)', 
+    category: 'GROQ_VELOCITY', 
+    provider: 'PUTER', 
+    description: 'Advanced reasoning by X.AI via Puter.js.', 
+    specs: { context: '128K', speed: 'FAST', intelligence: 9.4 } 
   },
 
   // --- GROQ (LLAMA - BEST FREE FALLBACK) ---
@@ -186,7 +204,7 @@ export class HanisahKernel {
     }
 
     let attempts = 0;
-    const maxAttempts = 15; // Increased attempts to cycle through all 8+ keys if needed
+    const maxAttempts = 15; // Increased attempts to cycle through all keys if needed
 
     while (attempts < maxAttempts) {
         if (signal?.aborted) break;
@@ -252,6 +270,17 @@ export class HanisahKernel {
                 this.updateHistory(msg, fullText);
                 GLOBAL_VAULT.reportSuccess(provider as Provider);
                 return;
+            } else if (provider === 'PUTER') {
+                const stream = streamPuterChat(model.id, [{ role: 'user', content: msg }], systemPrompt, signal);
+                let fullText = "";
+                for await (const chunk of stream) {
+                    if (signal?.aborted) break;
+                    if (chunk.text) { fullText += chunk.text; yield { text: chunk.text }; }
+                }
+                if (signal?.aborted) return;
+                this.updateHistory(msg, fullText);
+                GLOBAL_VAULT.reportSuccess(provider as Provider);
+                return;
             } else {
                 const stream = streamOpenAICompatible(provider as any, model.id, [{ role: 'user', content: msg }], systemPrompt, activeTools, signal);
                 let fullText = "";
@@ -271,19 +300,21 @@ export class HanisahKernel {
             // REPORT FAILURE TO HYDRA (Will trigger penalty/cooldown for this key)
             GLOBAL_VAULT.reportFailure(provider as Provider, key, err);
             
-            const errStr = JSON.stringify(err);
-            const isQuota = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('quota');
+            // Fix: Include message in stringification to ensure 429 matches
+            const errStr = (err.message + ' ' + JSON.stringify(err)).toLowerCase();
+            const isQuota = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('quota') || errStr.includes('rate limit');
             const isNotFound = errStr.includes('404') || errStr.includes('not found');
             const isTimeout = errStr.includes('timeout') || errStr.includes('504');
+            const isServiceUnavailable = errStr.includes('503') || errStr.includes('500') || errStr.includes('service unavailable');
             
-            console.warn(`[KERNEL] Error on ${model.id}: ${err.message}`);
+            console.warn(`[KERNEL] Error on ${model.id} (Key ending in ...${key.slice(-4)}): ${err.message}`);
 
-            if (isQuota || isNotFound || isTimeout) {
+            if (isQuota || isNotFound || isTimeout || isServiceUnavailable) {
                 // IMPORTANT: Check for alternative keys within the SAME provider first
                 // HydraVault has already marked the bad key as COOLDOWN, so calling getKey() again
                 // will return a different key if one exists.
                 if (GLOBAL_VAULT.hasAlternativeKeys(provider as Provider)) {
-                    yield { metadata: { systemStatus: `${provider} Limit. Rotating key...`, isRerouting: true } };
+                    yield { metadata: { systemStatus: `${provider} Limit (${isQuota ? '429' : 'ERR'}). Rotating key...`, isRerouting: true } };
                     continue; // Loop again -> Get New Key -> Retry
                 }
 
@@ -298,6 +329,12 @@ export class HanisahKernel {
                     }
                 }
                 continue; 
+            }
+            
+            // For other unexpected errors, try to retry if we haven't maxed out attempts
+            if (attempts < maxAttempts) {
+                 yield { metadata: { systemStatus: `API Error. Retrying... (${attempts}/${maxAttempts})`, isRerouting: true } };
+                 continue;
             }
             
             yield { text: `\n\n> ⚠️ *Connection Error:* ${err.message}. Check Vercel Logs.` };

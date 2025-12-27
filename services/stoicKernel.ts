@@ -5,7 +5,6 @@ import { debugService } from "./debugService";
 import { MODEL_CATALOG, type StreamChunk } from "./melsaKernel";
 import { HANISAH_BRAIN } from "./melsaBrain";
 import { streamOpenAICompatible } from "./providerEngine";
-import { GLOBAL_VAULT, type Provider } from "./hydraVault"; // Import Vault
 
 class StoicLogicKernel {
   private history: any[] = [];
@@ -36,50 +35,30 @@ class StoicLogicKernel {
     const systemPrompt = HANISAH_BRAIN.getSystemInstruction('stoic', context);
     const signal = configOverride?.signal; 
     
-    let currentModelId = modelId;
-    if (currentModelId === 'auto-best') {
-        currentModelId = 'llama-3.3-70b-versatile'; 
+    let effectiveModelId = modelId;
+    if (effectiveModelId === 'auto-best') {
+        effectiveModelId = 'llama-3.3-70b-versatile'; 
     }
 
-    let attempts = 0;
-    const maxAttempts = 15;
+    // Updated plan to use gemini-3-flash-preview instead of deprecated 1.5
+    const plan = [effectiveModelId, 'gemini-3-flash-preview', 'llama-3.3-70b-versatile', 'gpt-4o-mini'];
+    const uniquePlan = [...new Set(plan)];
 
-    while (attempts < maxAttempts) {
+    for (const currentModelId of uniquePlan) {
         if (signal?.aborted) break;
-        attempts++;
 
-        let selectedModel = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG[0];
-        const provider = selectedModel.provider;
+        // Robust lookup with fallback to gemini-3-flash-preview if the specific ID is missing from catalog
+        let selectedModel = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-3-flash-preview');
+        
+        // Final safety check if catalog is somehow empty or missing default
+        if (!selectedModel && MODEL_CATALOG.length > 0) selectedModel = MODEL_CATALOG[0];
+        
+        if (!selectedModel) continue;
 
-        // Use HYDRA VAULT to get rotated keys
-        const key = GLOBAL_VAULT.getKey(provider as Provider);
-
-        if (!key) {
-             debugService.log('WARN', 'STOIC_KERNEL', 'NO_KEY', `All keys for ${provider} are exhausted.`);
-             
-             // FALLBACK CHAIN
-             if (provider === 'GEMINI') {
-                 if (KEY_MANAGER.getKey('GROQ')) {
-                     currentModelId = 'llama-3.3-70b-versatile';
-                     yield { metadata: { systemStatus: "Gemini Exhausted. Rerouting to Groq...", isRerouting: true } };
-                     continue;
-                 } else if (KEY_MANAGER.getKey('MISTRAL')) {
-                     currentModelId = 'mistral-small-latest';
-                     yield { metadata: { systemStatus: "Gemini Exhausted. Rerouting to Mistral...", isRerouting: true } };
-                     continue;
-                 }
-             } else if (provider === 'GROQ') {
-                 if (KEY_MANAGER.getKey('GEMINI')) {
-                     currentModelId = 'gemini-1.5-flash';
-                     yield { metadata: { systemStatus: "Groq Exhausted. Rerouting to Gemini...", isRerouting: true } };
-                     continue;
-                 }
-             }
-             yield { text: `\n\n> ⛔ *CRITICAL: No active API keys found.*` };
-             break;
-        }
-
+        const key = KEY_MANAGER.getKey(selectedModel.provider);
         const startTime = Date.now();
+
+        if (!key) continue;
 
         try {
           if (selectedModel.provider === 'GEMINI') {
@@ -95,10 +74,11 @@ class StoicLogicKernel {
                 config.tools = activeTools;
             }
 
+            // DYNAMIC THINKING BUDGET
             if (selectedModel.specs.speed === 'THINKING' || selectedModel.id.includes('pro')) {
                if (selectedModel.id.includes('2.5') || selectedModel.id.includes('3')) {
                    const budgetStr = localStorage.getItem('thinking_budget');
-                   const budget = budgetStr ? parseInt(budgetStr) : 4096; 
+                   const budget = budgetStr ? parseInt(budgetStr) : 4096; // Default higher for Stoic
                    config.thinkingConfig = { thinkingBudget: budget }; 
                }
             }
@@ -126,7 +106,7 @@ class StoicLogicKernel {
             if (signal?.aborted) return;
 
             this.updateHistory(msg, fullText);
-            GLOBAL_VAULT.reportSuccess('GEMINI');
+            KEY_MANAGER.reportSuccess('GEMINI');
             
             yield {
               metadata: { provider: 'GEMINI', model: selectedModel.name, latency: Date.now() - startTime, status: 'success' as const }
@@ -146,7 +126,7 @@ class StoicLogicKernel {
             if (signal?.aborted) return;
 
             this.updateHistory(msg, fullText);
-            GLOBAL_VAULT.reportSuccess(selectedModel.provider as any);
+            KEY_MANAGER.reportSuccess(selectedModel.provider as any);
             
             yield {
               metadata: { provider: selectedModel.provider, model: selectedModel.name, latency: Date.now() - startTime, status: 'success' as const }
@@ -155,51 +135,82 @@ class StoicLogicKernel {
           }
         } catch (err: any) {
           if (signal?.aborted) return;
+          debugService.log('ERROR', 'STOIC_KERNEL', 'EXEC_FAIL', `Model ${selectedModel.id} failed: ${JSON.stringify(err)}`);
+          KEY_MANAGER.reportFailure(selectedModel.provider, err);
           
-          // REPORT FAILURE TO VAULT
-          GLOBAL_VAULT.reportFailure(selectedModel.provider as Provider, key, err);
-          
-          debugService.log('ERROR', 'STOIC_KERNEL', 'EXEC_FAIL', `Model ${selectedModel.id} failed: ${err.message}`);
-          
-          const errStr = JSON.stringify(err);
-          const isQuota = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('quota');
-          const isTimeout = errStr.includes('timeout') || errStr.includes('504');
-
-          if (isQuota || isTimeout) {
-                // Retry same provider first (Hydra will give new key)
-                if (GLOBAL_VAULT.hasAlternativeKeys(provider as Provider)) {
-                    yield { metadata: { systemStatus: `${provider} Limit. Rotating key...`, isRerouting: true } };
-                    continue; 
-                }
-
-                // If no keys left, switch providers
-                if (provider === 'GEMINI') {
-                    currentModelId = 'llama-3.3-70b-versatile';
-                    yield { metadata: { systemStatus: "Gemini Overloaded. Switching to Groq...", isRerouting: true } };
-                } else if (provider === 'GROQ') {
-                    currentModelId = 'mistral-small-latest';
-                    yield { metadata: { systemStatus: "Groq Overloaded. Switching to Mistral...", isRerouting: true } };
-                }
-                continue;
+          if (currentModelId === uniquePlan[uniquePlan.length - 1]) {
+             const isRateLimit = JSON.stringify(err).includes('429');
+             const errMsg = isRateLimit ? "System capacity limits reached. All logical nodes failed." : "Logical flow disrupted.";
+             yield { text: `\n\n> *${errMsg}*`, metadata: { status: 'error' } };
+          } else {
+             const nextModelId = uniquePlan[uniquePlan.indexOf(currentModelId) + 1];
+             yield { 
+                 metadata: { 
+                     systemStatus: `Rerouting logic stream to ${nextModelId}...`, 
+                     isRerouting: true 
+                 } 
+             };
           }
-          
-          yield { text: `\n\n> *Logic Matrix Error: ${err.message}*`, metadata: { status: 'error' } };
-          return;
         }
     }
   }
 
   async execute(msg: string, modelId: string, context?: string): Promise<any> {
-    const it = this.streamExecute(msg, modelId, context);
-    let fullText = "";
-    let finalChunk: any = {};
-    
-    for await (const chunk of it) {
-        if (chunk.text) fullText += chunk.text;
-        if (chunk.functionCall) finalChunk.functionCall = chunk.functionCall;
-        if (chunk.metadata) finalChunk.metadata = chunk.metadata;
+    const startTime = Date.now();
+    let effectiveModelId = modelId;
+    if (effectiveModelId === 'auto-best') effectiveModelId = 'llama-3.3-70b-versatile';
+
+    let selectedModel = MODEL_CATALOG.find(m => m.id === effectiveModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-3-flash-preview');
+    if (!selectedModel) throw new Error("CRITICAL_KERNEL_ERROR: No valid model found.");
+
+    const systemPrompt = HANISAH_BRAIN.getSystemInstruction('stoic', context);
+    const key = KEY_MANAGER.getKey(selectedModel.provider);
+
+    try {
+      if (selectedModel.provider === 'GEMINI') {
+        const ai = new GoogleGenAI({ apiKey: key });
+        const activeTools = this.getActiveTools('GEMINI');
+        
+        const config: any = { 
+            systemInstruction: systemPrompt, 
+            temperature: 0.1,
+        };
+
+        if (activeTools.length > 0) {
+            config.tools = activeTools;
+        }
+
+        const response = await ai.models.generateContent({
+          model: selectedModel.id,
+          contents: [...this.history, { role: 'user', parts: [{ text: msg }] }],
+          config
+        });
+
+        if (response.functionCalls && response.functionCalls.length > 0) {
+          return {
+            functionCall: response.functionCalls[0],
+            metadata: { provider: 'GEMINI', model: selectedModel.name, latency: Date.now() - startTime, status: 'success' as const }
+          };
+        }
+
+        const text = response.text || "Memproses...";
+        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        this.updateHistory(msg, text);
+        
+        KEY_MANAGER.reportSuccess('GEMINI');
+
+        return {
+          text,
+          groundingChunks,
+          metadata: { provider: 'GEMINI', model: selectedModel.name, latency: Date.now() - startTime, status: 'success' as const }
+        };
+      }
+      return { text: "Stoic connection is optimized for Gemini nodes only in non-streaming mode.", metadata: { status: 'error' as const } };
+    } catch (err: any) {
+      debugService.log('ERROR', 'STOIC_KERNEL', 'SYS-01', err.message);
+      KEY_MANAGER.reportFailure(selectedModel.provider, err);
+      throw err;
     }
-    return { ...finalChunk, text: fullText };
   }
 
   private updateHistory(user: string, assistant: string) {

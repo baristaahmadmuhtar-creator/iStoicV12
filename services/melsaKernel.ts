@@ -196,7 +196,7 @@ export class HanisahKernel {
     }
 
     let attempts = 0;
-    const maxAttempts = 6; // High retry count for aggressive rotation
+    const maxAttempts = 10; // High retry count for aggressive rotation
 
     while (attempts < maxAttempts) {
         if (signal?.aborted) break;
@@ -208,14 +208,14 @@ export class HanisahKernel {
         if (!key) {
             debugService.log('WARN', 'KERNEL', 'NO_KEY', `No keys for ${provider}. Attempting fallback switch.`);
             if (provider === 'GEMINI') {
-                // If Gemini keys empty, try Groq as a backup
+                // If Gemini keys exhausted, try Groq as a backup immediately
                 if (KEY_MANAGER.getKey('GROQ')) {
                     currentModelId = 'llama-3.3-70b-versatile';
                     yield { metadata: { systemStatus: "Gemini Exhausted. Rerouting to Groq LPU...", isRerouting: true } };
                     continue;
                 }
             }
-            yield { text: `\n\n> ⛔ *CRITICAL: No keys available for ${provider}. Check Settings > Provider Matrix.*` };
+            yield { text: `\n\n> ⛔ *CRITICAL: No keys available for ${provider}. Check Settings > Provider Matrix. If you are using Free Tier, ensure you have unique keys from different projects.*` };
             break;
         }
 
@@ -267,7 +267,7 @@ export class HanisahKernel {
         } catch (err: any) {
             if (signal?.aborted) return;
             
-            // REPORT FAILURE TO VAULT (This freezes the key)
+            // REPORT FAILURE TO VAULT (This freezes the key for 30s)
             GLOBAL_VAULT.reportFailure(provider as Provider, key, err);
             
             const errStr = JSON.stringify(err);
@@ -278,25 +278,23 @@ export class HanisahKernel {
             console.warn(`[KERNEL] Error on ${model.id} (Key: ...${key.slice(-4)}): ${err.message}`);
 
             if (provider === 'GEMINI') {
-                // AGGRESSIVE DOWNGRADE LOGIC
+                // AGGRESSIVE DOWNGRADE LOGIC for 429 or 404
                 if (isQuota || isNotFound) {
-                     if (currentModelId === 'gemini-3-flash-preview') {
-                         currentModelId = 'gemini-2.0-flash-exp';
-                         yield { metadata: { systemStatus: "Gemini 3 Limit Reached. Retrying with 2.0 Flash (Stable)...", isRerouting: true } };
-                         continue;
-                     } else if (currentModelId === 'gemini-2.0-flash-exp') {
+                     // Try switching to 1.5 Flash if we are on a higher model
+                     if (currentModelId === 'gemini-3-flash-preview' || currentModelId === 'gemini-2.0-flash-exp') {
                          currentModelId = 'gemini-1.5-flash';
-                         yield { metadata: { systemStatus: "Gemini 2.0 Limit Reached. Retrying with 1.5 Flash (Legacy)...", isRerouting: true } };
+                         yield { metadata: { systemStatus: "Gemini Limit Reached. Retrying with 1.5 Flash (Legacy)...", isRerouting: true } };
                          continue;
                      }
-                     // If 1.5 also fails, we just loop to try a new key on 1.5
+                     
+                     // If we are already on 1.5 Flash, or if we just want to try another key with the SAME model (auto-handled by loop + hydraVault active check)
                      yield { metadata: { systemStatus: "Switching API Key...", isRerouting: true } };
                      continue;
                 }
             }
 
             if (isQuota || isBalance) {
-                // Generic retry for other providers or if models are exhausted
+                // Try next iteration (HydraVault will give a different key)
                 continue;
             }
             

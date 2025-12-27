@@ -6,7 +6,7 @@ import {
     Volume2, Mic2, Moon, Sun, Monitor, X, Check, HelpCircle, RefreshCw,
     Terminal, UserCheck, Sparkles, MessageSquare, ChevronRight, Activity, Zap, Globe, User, UserRound, Play, Info,
     Flame, Brain, DatabaseZap, Image as ImageIcon, HardDrive, Download, Upload, FileJson, Edit3, Undo2, Loader2,
-    Network, Key, Eye, EyeOff, ToggleLeft, ToggleRight, Power
+    Network, Key, Eye, EyeOff, ToggleLeft, ToggleRight, Power, Lock, Unlock, Server
 } from 'lucide-react';
 import { THEME_COLORS } from '../../App';
 import { speakWithHanisah } from '../../services/elevenLabsService';
@@ -17,6 +17,7 @@ import { debugService } from '../../services/debugService';
 import { KEY_MANAGER } from '../../services/geminiService';
 import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
 import { type FeatureID } from '../../constants';
+import { setSystemPin, isSystemPinConfigured } from '../../utils/crypto';
 
 interface SettingsViewProps {
     onNavigate?: (feature: FeatureID) => void;
@@ -163,52 +164,34 @@ const ToolRow: React.FC<{
     </button>
 );
 
-const ProviderConfigRow: React.FC<{ 
+const ProviderToggleRow: React.FC<{ 
     provider: string; 
-    value: string; 
     isEnabled: boolean;
-    onChangeValue: (val: string) => void;
     onToggle: () => void;
-}> = ({ provider, value, isEnabled, onChangeValue, onToggle }) => {
-    const [showKey, setShowKey] = useState(false);
+}> = ({ provider, isEnabled, onToggle }) => {
     return (
         <div className={`flex flex-col sm:flex-row items-center justify-between p-4 rounded-xl border transition-all ${isEnabled ? 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/5 shadow-sm' : 'bg-white/50 dark:bg-white/[0.02] border-transparent opacity-60'}`}>
             <div className="flex items-center gap-3 w-full sm:w-auto mb-3 sm:mb-0">
-                <button 
-                    onClick={onToggle}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isEnabled ? 'bg-emerald-500/10 text-emerald-500 shadow-inner' : 'bg-zinc-200 dark:bg-white/5 text-neutral-400'}`}
-                >
-                    <Power size={16} />
-                </button>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isEnabled ? 'bg-emerald-500/10 text-emerald-500 shadow-inner' : 'bg-zinc-200 dark:bg-white/5 text-neutral-400'}`}>
+                    <Server size={16} />
+                </div>
                 <div className="flex flex-col">
                     <span className={`text-[10px] font-black uppercase tracking-widest ${isEnabled ? 'text-black dark:text-white' : 'text-neutral-500'}`}>{provider}</span>
-                    <span className="text-[8px] font-mono text-neutral-400">{isEnabled ? 'ACTIVE' : 'DISABLED'}</span>
+                    <span className="text-[8px] font-mono text-neutral-400">{isEnabled ? 'ENABLED' : 'DISABLED'}</span>
                 </div>
             </div>
             
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className={`flex items-center flex-1 bg-zinc-100 dark:bg-white/5 rounded-xl px-3 border border-black/5 dark:border-white/5 transition-all focus-within:border-accent/50 ${!isEnabled && 'opacity-50 pointer-events-none'}`}>
-                    <Key size={12} className="text-neutral-400 mr-2" />
-                    <input 
-                        type={showKey ? "text" : "password"} 
-                        value={value} 
-                        onChange={(e) => onChangeValue(e.target.value)} 
-                        placeholder="API_KEY_STRING"
-                        className="bg-transparent text-[10px] font-mono text-accent focus:outline-none w-full sm:w-48 py-3 placeholder:text-neutral-600"
-                        autoComplete="off"
-                        disabled={!isEnabled}
-                    />
-                    <button 
-                        onClick={() => setShowKey(!showKey)}
-                        className="ml-2 text-neutral-500 hover:text-white transition-colors"
-                        type="button"
-                    >
-                        {showKey ? <EyeOff size={12} /> : <Eye size={12} />}
-                    </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <div className={`px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest flex items-center gap-2 border ${isEnabled ? 'bg-emerald-500/5 text-emerald-500 border-emerald-500/20' : 'bg-zinc-100 dark:bg-white/5 text-neutral-500 border-transparent'}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${isEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-neutral-400'}`}></div>
+                    {isEnabled ? 'SYSTEM_ACTIVE' : 'SYSTEM_OFF'}
                 </div>
-                <div className={`text-[10px] font-black uppercase tracking-widest px-2 ${isEnabled ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {isEnabled ? 'ON' : 'OFF'}
-                </div>
+                <button 
+                    onClick={onToggle}
+                    className={`w-12 h-7 rounded-full p-1 transition-colors duration-300 relative ${isEnabled ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}
+                >
+                    <div className={`w-5 h-5 bg-white rounded-full shadow-sm absolute top-1 transition-all duration-300 ${isEnabled ? 'left-[24px]' : 'left-1'}`} />
+                </button>
             </div>
         </div>
     );
@@ -240,8 +223,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const [persistedHanisahTools, setPersistedHanisahTools] = useLocalStorage<ToolConfig>('hanisah_tools_config', { search: true, vault: true, visual: true });
     const [persistedStoicTools, setPersistedStoicTools] = useLocalStorage<ToolConfig>('stoic_tools_config', { search: true, vault: true, visual: false });
     
-    // API Keys Configuration
-    const [persistedApiKeys, setPersistedApiKeys] = useLocalStorage<Record<string, string>>('user_api_keys', {});
+    // API Visibility Configuration
     const [persistedVisibility, setPersistedVisibility] = useLocalStorage<Record<string, boolean>>('provider_visibility', {});
 
     // Local UI State (For buffering changes before "Saving")
@@ -253,12 +235,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const [hanisahTools, setHanisahTools] = useState(persistedHanisahTools);
     const [stoicTools, setStoicTools] = useState(persistedStoicTools);
     const [localPersona, setLocalPersona] = useState(userPersona);
-    const [localApiKeys, setLocalApiKeys] = useState(persistedApiKeys);
     const [localVisibility, setLocalVisibility] = useState(persistedVisibility);
 
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
     const [isTestingVoice, setIsTestingVoice] = useState(false);
+    
+    // Security State
+    const [newPin, setNewPin] = useState('');
+    const [isPinConfigured, setIsPinConfigured] = useState(isSystemPinConfigured());
     
     // Editor Modal State
     const [editingPersona, setEditingPersona] = useState<'hanisah' | 'stoic' | null>(null);
@@ -269,10 +254,21 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
 
     const themeOptions = Object.entries(THEME_COLORS).map(([id, color]) => ({ id, color }));
 
-    const handleSave = () => {
+    const handleSave = async () => {
         debugService.logAction(UI_REGISTRY.SETTINGS_BTN_SAVE, FN_REGISTRY.SAVE_CONFIG, 'START');
         setIsSaving(true);
         
+        if (newPin) {
+            if (newPin.length < 4) {
+                alert("PIN must be at least 4 digits.");
+                setIsSaving(false);
+                return;
+            }
+            await setSystemPin(newPin);
+            setIsPinConfigured(true);
+            setNewPin('');
+        }
+
         // Simulate System Reconfiguration delay for UX
         setTimeout(() => {
             // Updating these triggers the custom event in useLocalStorage, which updates App.tsx and other views INSTANTLY.
@@ -284,10 +280,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
             setPersistedHanisahTools(hanisahTools);
             setPersistedStoicTools(stoicTools);
             setUserPersona(localPersona);
-            setPersistedApiKeys(localApiKeys);
             setPersistedVisibility(localVisibility);
             
-            KEY_MANAGER.refreshPools(); // Force Hydra refresh to pick up new user keys and visibility immediately
+            // CLEANUP: Remove any legacy stored keys for security
+            localStorage.removeItem('user_api_keys'); 
+            
+            KEY_MANAGER.refreshPools(); // Force Hydra refresh to pick up new visibility immediately
 
             if ((!hanisahTools.vault && persistedHanisahTools.vault) || (!stoicTools.vault && persistedStoicTools.vault)) {
                 lockVault();
@@ -302,6 +300,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const handleBackup = () => {
         debugService.logAction(UI_REGISTRY.SETTINGS_BTN_BACKUP, FN_REGISTRY.BACKUP_DATA, 'EXPORT');
         const data = { ...localStorage };
+        // Clean out sensitive keys from backup just in case
+        delete data['user_api_keys'];
+        delete data['sys_vault_hash'];
+        
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -351,10 +353,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const openKernelStream = () => {
         debugService.logAction(UI_REGISTRY.MECH_BTN_SCAN, FN_REGISTRY.NAVIGATE_TO_FEATURE, 'KERNEL_STREAM');
         if (onNavigate) onNavigate('system');
-    };
-
-    const updateApiKey = (provider: string, val: string) => {
-        setLocalApiKeys(prev => ({ ...prev, [provider]: val }));
     };
 
     const toggleProvider = (provider: string) => {
@@ -454,6 +452,32 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
                             />
                         </SettingsSection>
 
+                        {/* SECURITY PROTOCOLS */}
+                        <SettingsSection title="SECURITY_PROTOCOLS" icon={<Shield size={18} />}>
+                            <SettingsItem 
+                                label="VAULT_ENCRYPTION" desc={isPinConfigured ? "SECURE_HASH ACTIVE" : "UNSECURED"}
+                                icon={isPinConfigured ? <Lock size={22} className="text-emerald-500"/> : <Unlock size={22} className="text-red-500"/>}
+                                action={
+                                    <div className="flex flex-col gap-2 w-full md:w-64">
+                                        <div className="relative">
+                                            <input 
+                                                type="password"
+                                                placeholder="SET_NEW_PIN"
+                                                value={newPin}
+                                                onChange={(e) => setNewPin(e.target.value)}
+                                                className="w-full bg-zinc-100 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-mono text-black dark:text-white focus:outline-none focus:border-accent/50 text-center"
+                                                maxLength={10}
+                                            />
+                                            {isPinConfigured && <div className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_5px_#10b981]"></div>}
+                                        </div>
+                                        <p className="text-[8px] text-neutral-400 text-center font-mono">
+                                            {isPinConfigured ? "PIN IS CONFIGURED (OVERWRITE TO CHANGE)" : "WARNING: NO PIN SET. DATA IS EXPOSED."}
+                                        </p>
+                                    </div>
+                                }
+                            />
+                        </SettingsSection>
+
                         {/* IDENTITY MATRIX */}
                         <SettingsSection title={t.identity_title || "IDENTITY MATRIX"} icon={<UserCheck size={18} />}>
                             <div className="p-2 space-y-2">
@@ -475,14 +499,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
                             <div className="p-2 space-y-2">
                                 <div className="p-4 bg-zinc-50 dark:bg-[#0f0f11] rounded-[24px] border border-black/5 dark:border-white/5 space-y-3">
                                     <p className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest px-1 pb-1">
-                                        CONFIGURE UPLINKS & VISIBILITY (LOCAL_STORAGE)
+                                        MANAGE UPLINK AVAILABILITY (KEYS READ FROM .ENV)
                                     </p>
-                                    <ProviderConfigRow provider="GEMINI" value={localApiKeys['GEMINI'] || ''} isEnabled={isProviderEnabled('GEMINI')} onChangeValue={(v) => updateApiKey('GEMINI', v)} onToggle={() => toggleProvider('GEMINI')} />
-                                    <ProviderConfigRow provider="GROQ" value={localApiKeys['GROQ'] || ''} isEnabled={isProviderEnabled('GROQ')} onChangeValue={(v) => updateApiKey('GROQ', v)} onToggle={() => toggleProvider('GROQ')} />
-                                    <ProviderConfigRow provider="OPENAI" value={localApiKeys['OPENAI'] || ''} isEnabled={isProviderEnabled('OPENAI')} onChangeValue={(v) => updateApiKey('OPENAI', v)} onToggle={() => toggleProvider('OPENAI')} />
-                                    <ProviderConfigRow provider="DEEPSEEK" value={localApiKeys['DEEPSEEK'] || ''} isEnabled={isProviderEnabled('DEEPSEEK')} onChangeValue={(v) => updateApiKey('DEEPSEEK', v)} onToggle={() => toggleProvider('DEEPSEEK')} />
-                                    <ProviderConfigRow provider="MISTRAL" value={localApiKeys['MISTRAL'] || ''} isEnabled={isProviderEnabled('MISTRAL')} onChangeValue={(v) => updateApiKey('MISTRAL', v)} onToggle={() => toggleProvider('MISTRAL')} />
-                                    <ProviderConfigRow provider="ELEVENLABS" value={localApiKeys['ELEVENLABS'] || ''} isEnabled={isProviderEnabled('ELEVENLABS')} onChangeValue={(v) => updateApiKey('ELEVENLABS', v)} onToggle={() => toggleProvider('ELEVENLABS')} />
+                                    <ProviderToggleRow provider="GEMINI" isEnabled={isProviderEnabled('GEMINI')} onToggle={() => toggleProvider('GEMINI')} />
+                                    <ProviderToggleRow provider="GROQ" isEnabled={isProviderEnabled('GROQ')} onToggle={() => toggleProvider('GROQ')} />
+                                    <ProviderToggleRow provider="OPENAI" isEnabled={isProviderEnabled('OPENAI')} onToggle={() => toggleProvider('OPENAI')} />
+                                    <ProviderToggleRow provider="DEEPSEEK" isEnabled={isProviderEnabled('DEEPSEEK')} onToggle={() => toggleProvider('DEEPSEEK')} />
+                                    <ProviderToggleRow provider="MISTRAL" isEnabled={isProviderEnabled('MISTRAL')} onToggle={() => toggleProvider('MISTRAL')} />
+                                    <ProviderToggleRow provider="ELEVENLABS" isEnabled={isProviderEnabled('ELEVENLABS')} onToggle={() => toggleProvider('ELEVENLABS')} />
                                 </div>
                             </div>
                         </SettingsSection>

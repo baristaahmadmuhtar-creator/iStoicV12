@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { debugService } from './debugService';
 import { GLOBAL_VAULT, Provider } from "./hydraVault";
@@ -28,12 +29,9 @@ class KeyManagerProxy {
   }
 
   public reportFailure(provider: string, arg2: any, arg3?: any) {
-      // Overload support: (provider, key, error) OR (provider, error)
       if (arg3 !== undefined) {
-          // 3-arg signature: arg2 is key, arg3 is error
           GLOBAL_VAULT.reportFailure(provider as Provider, arg2, arg3);
       } else {
-          // 2-arg signature: arg2 is error
           debugService.log('WARN', 'LEGACY_KEY_MGR', 'FAIL_REPORT', `Provider ${provider} reported failure without key context.`);
       }
   }
@@ -53,47 +51,15 @@ class KeyManagerProxy {
 
 export const KEY_MANAGER = new KeyManagerProxy();
 
-// --- UTILITIES ---
-
-// 1. OPENAI GENERATOR
-async function generateOpenAIImage(prompt: string, apiKey: string): Promise<string | null> {
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-            model: "dall-e-3",
-            prompt: prompt,
-            n: 1,
-            size: "1024x1024",
-            response_format: "b64_json",
-            quality: "standard",
-            style: "vivid" 
-        })
-    });
-
-    if (response.ok) {
-        const json = await response.json();
-        if (json.data?.[0]?.b64_json) {
-            return `data:image/png;base64,${json.data[0].b64_json}`;
-        }
-    }
-    throw new Error(await response.text());
-}
-
-// 2. GEMINI GENERATOR
-// Fix: Use process.env.API_KEY and gemini-2.5-flash-image per guidelines
-async function generateGeminiImage(prompt: string): Promise<string | null> {
-    // Fix: Use process.env.API_KEY directly as per guidelines
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    // Fix: Generate images using gemini-2.5-flash-image by default as per guidelines.
+// --- GEMINI IMAGE GENERATION (NANO BANANA / FLASH IMAGE) ---
+async function generateGeminiImage(prompt: string, apiKey: string): Promise<string | null> {
+    const ai = new GoogleGenAI({ apiKey });
+    // Use gemini-2.5-flash-image (Nano Banana) which is optimized for fast/free generation
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: { parts: [{ text: prompt }] },
     });
-    // Fix: Iterate through all parts to find the image part as per nano banana series guidelines.
+    
     if (response.candidates?.[0]?.content?.parts) {
         for (const part of response.candidates[0].content.parts) {
             if (part.inlineData) {
@@ -105,43 +71,29 @@ async function generateGeminiImage(prompt: string): Promise<string | null> {
 }
 
 export async function generateImage(prompt: string): Promise<string | null> {
-  const openAiKey = KEY_MANAGER.getKey('OPENAI');
+  const geminiKey = KEY_MANAGER.getKey('GEMINI');
 
-  // Strategy: Try OpenAI -> Fallback Gemini (Higher quality first)
-  // BUT if OpenAI key is missing, go straight to Gemini
-  
-  if (openAiKey) {
+  // Priority: Gemini Flash Image (Free/Fast)
+  if (geminiKey) {
       try {
-          const result = await generateOpenAIImage(prompt, openAiKey);
+          const result = await generateGeminiImage(prompt, geminiKey);
           if (result) {
-              KEY_MANAGER.reportSuccess('OPENAI');
+              KEY_MANAGER.reportSuccess('GEMINI');
               return result;
           }
       } catch (e) {
-          debugService.log('WARN', 'IMG_GEN', 'OPENAI_FAIL', 'DALL-E 3 failed, trying Gemini fallback.');
-          GLOBAL_VAULT.reportFailure('OPENAI', openAiKey, e);
+          debugService.log('ERROR', 'IMG_GEN', 'GEMINI_FAIL', 'Gemini Flash Image failed.');
+          GLOBAL_VAULT.reportFailure('GEMINI', geminiKey, e);
       }
   }
-
-  // Gemini logic updated to use guidelines
-  try {
-      const result = await generateGeminiImage(prompt);
-      if (result) {
-          KEY_MANAGER.reportSuccess('GEMINI');
-          return result;
-      }
-  } catch (e) {
-      debugService.log('ERROR', 'IMG_GEN', 'GEMINI_FAIL', 'Imagen 3 failed.');
-      // Fallback failure reporting
-      GLOBAL_VAULT.reportFailure('GEMINI', process.env.API_KEY || 'MISSING_ENV_KEY', e);
-  }
-
+  
   return null;
 }
 
 export async function generateVideo(prompt: string, config: any): Promise<string | null> {
-    // Fix: Use process.env.API_KEY directly as per guidelines
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const key = KEY_MANAGER.getKey('GEMINI');
+    if (!key) return null;
+    const ai = new GoogleGenAI({ apiKey: key });
     try {
         let operation = await ai.models.generateVideos({
             model: 'veo-3.1-fast-generate-preview',
@@ -158,23 +110,22 @@ export async function generateVideo(prompt: string, config: any): Promise<string
         }
         const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
         if (!downloadLink) return null;
-        // Fix: Must append process.env.API_KEY when fetching from download link
-        const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+        const response = await fetch(`${downloadLink}&key=${key}`);
         const blob = await response.blob();
         return URL.createObjectURL(blob);
     } catch (e) {
-        GLOBAL_VAULT.reportFailure('GEMINI', process.env.API_KEY || 'MISSING_ENV_KEY', e);
+        GLOBAL_VAULT.reportFailure('GEMINI', key, e);
     }
     return null;
 }
 
 export async function editImage(base64: string, mimeType: string, prompt: string): Promise<string | null> {
-    // Fix: Use process.env.API_KEY directly as per guidelines
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const key = KEY_MANAGER.getKey('GEMINI');
+    if (!key) return null;
+    const ai = new GoogleGenAI({ apiKey: key });
     try {
         const response = await ai.models.generateContent({
-            // Fix: Use gemini-2.5-flash-image for editing as per guidelines
-            model: 'gemini-2.5-flash-image', 
+            model: 'gemini-2.5-flash-image', // Flash Image supports editing
             contents: {
                 parts: [
                     { inlineData: { data: base64, mimeType } },
@@ -182,7 +133,6 @@ export async function editImage(base64: string, mimeType: string, prompt: string
                 ],
             },
         });
-        // Fix: Correct way to iterate parts to find the image part for nano banana series
         if (response.candidates?.[0]?.content?.parts) {
             for (const part of response.candidates[0].content.parts) {
                 if (part.inlineData) {
@@ -191,7 +141,7 @@ export async function editImage(base64: string, mimeType: string, prompt: string
             }
         }
     } catch (e) {
-        GLOBAL_VAULT.reportFailure('GEMINI', process.env.API_KEY || 'MISSING_ENV_KEY', e);
+        GLOBAL_VAULT.reportFailure('GEMINI', key, e);
     }
     return null;
 }

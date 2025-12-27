@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { type Note } from '../../../types';
 import { generateImage, KEY_MANAGER } from '../../../services/geminiService';
 import { executeMechanicTool } from '../../mechanic/mechanicTools';
-import { GoogleGenAI } from '@google/genai';
+import { VectorDB } from '../../../services/vectorDb';
 
 export const executeNeuralTool = async (
     fc: any, 
@@ -53,7 +53,7 @@ export const executeNeuralTool = async (
                 }
             }
 
-            // Safe Merge: Only update fields if provided in args
+            // Safe Merge
             updatedNotes[noteIndex] = {
                 ...note,
                 title: title !== undefined ? title : note.title,
@@ -72,7 +72,6 @@ export const executeNeuralTool = async (
             if (noteIndex === -1) return `ERROR: Note ID ${id} not found.`;
             
             const note = updatedNotes[noteIndex];
-            // Intelligent spacing for append
             const newContent = note.content 
                 ? `${note.content}\n\n${appendContent}` 
                 : appendContent;
@@ -92,29 +91,49 @@ export const executeNeuralTool = async (
         }
     }
 
-    // --- 2. NOTE RETRIEVAL (RAG Lite) ---
+    // --- 2. INTELLIGENT RETRIEVAL (Hybrid RAG) ---
     if (name === 'search_notes') {
         const query = args.query.toLowerCase();
-        const matches = notes.filter(n => 
-            n.title.toLowerCase().includes(query) || 
-            n.content.toLowerCase().includes(query) ||
-            n.tags?.some(t => t.toLowerCase().includes(query))
-        ).slice(0, 5); // Limit results to top 5
+        let matches: Note[] = [];
+        let searchMethod = "KEYWORD";
 
-        if (matches.length === 0) return "SEARCH_RESULT: No matching notes found.";
+        // Try Semantic Vector Search first
+        try {
+            const vectorIds = await VectorDB.search(query, 5);
+            if (vectorIds.length > 0) {
+                // Retrieve full note objects from current state based on IDs
+                const vectorMatches = notes.filter(n => vectorIds.includes(n.id));
+                if (vectorMatches.length > 0) {
+                    matches = vectorMatches;
+                    searchMethod = "SEMANTIC_VECTOR";
+                }
+            }
+        } catch (e) {
+            console.warn("Vector search unavailable, falling back to keyword.", e);
+        }
+
+        // Fallback to Keyword if Vector returned nothing or failed
+        if (matches.length === 0) {
+            matches = notes.filter(n => 
+                n.title.toLowerCase().includes(query) || 
+                n.content.toLowerCase().includes(query) ||
+                n.tags?.some(t => t.toLowerCase().includes(query))
+            ).slice(0, 5);
+        }
+
+        if (matches.length === 0) return "SEARCH_RESULT: No matching notes found in vault.";
 
         const resultStr = matches.map(n => 
-            `- ID: ${n.id}\n  Title: ${n.title}\n  Snippet: ${n.content.slice(0, 100).replace(/\n/g, ' ')}...`
+            `- ID: ${n.id}\n  Title: ${n.title}\n  Snippet: ${n.content.slice(0, 150).replace(/\n/g, ' ')}...`
         ).join('\n');
 
-        return `SEARCH_RESULT:\n${resultStr}\n\n(Use 'read_note' with ID to see full content)`;
+        return `[METHOD: ${searchMethod}] SEARCH_RESULT:\n${resultStr}\n\n(Use 'read_note' with ID to see full content)`;
     }
 
     if (name === 'read_note') {
         const note = notes.find(n => n.id === args.id);
         if (!note) return "ERROR: Note ID not found.";
         
-        // Clean HTML tags for AI consumption if content contains HTML
         const cleanContent = note.content.replace(/<[^>]*>/g, '');
         const tasksStr = note.tasks?.map(t => `[${t.isCompleted ? 'x' : ' '}] ${t.text}`).join('\n') || "No tasks";
 
@@ -130,13 +149,9 @@ export const executeNeuralTool = async (
 
     // --- 3. VISUAL GENERATION ---
     if (name === 'generate_visual') {
-        // Automatically attempt generation.
-        // NOTE: This might take a few seconds. The UI will show "Executing..."
         try {
             const imgUrl = await generateImage(args.prompt);
             if (imgUrl) {
-                // Return Markdown image syntax directly.
-                // Using italic for caption instead of link syntax to prevent confusion
                 return `\n![Generated Visual](${imgUrl})\n\n_Visual Generated: ${args.prompt.slice(0, 50)}..._`;
             } else {
                 return "ERROR: Visual synthesis failed (No data returned).";

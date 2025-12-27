@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Loader2, Fingerprint, Terminal, AlertTriangle, Lock, ShieldAlert } from 'lucide-react';
-import { verifyPin } from '../../utils/crypto';
+import { verifySystemPin, isSystemPinConfigured } from '../../utils/crypto';
 
 interface AuthViewProps {
     onAuthSuccess: () => void;
@@ -13,19 +12,14 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
     const [passcode, setPasscode] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // SECURITY: We now fetch the HASH, not the PIN itself.
-    const SYSTEM_HASH = (
-        (process.env as any).VITE_VAULT_PIN_HASH || 
-        (import.meta as any).env?.VITE_VAULT_PIN_HASH || 
-        '' 
-    );
+    const isConfigured = isSystemPinConfigured();
 
     useEffect(() => {
         if (inputRef.current) inputRef.current.focus();
-        if (!SYSTEM_HASH) {
-            console.error("⚠️ SECURITY ALERT: VITE_VAULT_PIN_HASH is not set in environment variables. Access will be impossible.");
+        if (!isConfigured) {
+            console.error("⚠️ SECURITY ALERT: No Vault PIN configured (Env or Local). Access will be impossible.");
         }
-    }, []);
+    }, [isConfigured]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -34,7 +28,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
 
         // Simulate network handshake delay for UX (and to mitigate timing attacks)
         setTimeout(async () => {
-            const isValid = await verifyPin(passcode, SYSTEM_HASH);
+            const isValid = await verifySystemPin(passcode);
             
             if (isValid) {
                 onAuthSuccess();
@@ -82,13 +76,13 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                         </div>
                     )}
 
-                    {!SYSTEM_HASH ? (
+                    {!isConfigured ? (
                          <div className="p-6 bg-red-950/20 border border-red-500/20 rounded-2xl flex flex-col items-center text-center gap-4 animate-pulse">
                             <ShieldAlert size={32} className="text-red-500" />
                             <div>
                                 <h3 className="text-xs font-black text-red-500 uppercase tracking-widest mb-1">CONFIGURATION ERROR</h3>
                                 <p className="text-[10px] text-red-400 font-mono leading-relaxed">
-                                    VITE_VAULT_PIN_HASH is missing from environment. <br/> System functionality locked.
+                                    System PIN hash is missing. <br/> Please configure via Settings or ENV.
                                 </p>
                             </div>
                          </div>

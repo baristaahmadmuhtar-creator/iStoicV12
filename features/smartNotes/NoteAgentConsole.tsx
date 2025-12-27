@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, BrainCircuit, Sparkles, ListTodo, Lightbulb, Library, ArrowRight, Check, Loader2, ChevronLeft, GripHorizontal } from 'lucide-react';
+import { X, BrainCircuit, Sparkles, ListTodo, Lightbulb, Library, ArrowRight, Check, Loader2, ChevronLeft, GripHorizontal, Database } from 'lucide-react';
 import { type Note } from '../../types';
 import { NOTE_AGENTS, type AgentType } from '../../services/noteAgentService';
+import { VectorDB } from '../../services/vectorDb';
 
 interface NoteAgentConsoleProps {
     isOpen: boolean;
@@ -16,21 +17,20 @@ export const NoteAgentConsole: React.FC<NoteAgentConsoleProps> = ({ isOpen, onCl
     // Mobile Navigation State ('MENU' | 'RESULT')
     const [mobileView, setMobileView] = useState<'MENU' | 'RESULT'>('MENU');
     const [result, setResult] = useState<any>(null);
-    const [activeAgent, setActiveAgent] = useState<AgentType | null>(null);
+    const [activeAgent, setActiveAgent] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [progress, setProgress] = useState(0);
 
-    // Reset state when opened & Manage Navigation Visibility
+    // Reset state when opened
     useEffect(() => {
         if (isOpen) {
             setMobileView('MENU');
             setResult(null);
             setActiveAgent(null);
-            // Hide Sidebar/MobileNav via Navigation Intelligence
             document.body.style.overflow = 'hidden';
         } else {
             document.body.style.overflow = '';
         }
-        
         return () => { document.body.style.overflow = ''; };
     }, [isOpen]);
 
@@ -54,6 +54,24 @@ export const NoteAgentConsole: React.FC<NoteAgentConsoleProps> = ({ isOpen, onCl
         } catch (e) {
             console.error(e);
             setResult({ error: "Agent execution failed." });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const runIndexing = async () => {
+        setIsLoading(true);
+        setActiveAgent('INDEXING');
+        setMobileView('RESULT');
+        setProgress(0);
+
+        try {
+            const count = await VectorDB.indexNotes(notes, (current, total) => {
+                setProgress(Math.round((current / total) * 100));
+            });
+            setResult(`Successfully indexed ${count} notes into local vector database.`);
+        } catch (e: any) {
+            setResult({ error: `Indexing failed: ${e.message}` });
         } finally {
             setIsLoading(false);
         }
@@ -132,6 +150,18 @@ export const NoteAgentConsole: React.FC<NoteAgentConsoleProps> = ({ isOpen, onCl
                             onClick={() => runAgent('TASKS')}
                             isActive={activeAgent === 'TASKS'}
                         />
+                        
+                        <div className="h-[1px] bg-black/5 dark:bg-white/5 my-2"></div>
+                        
+                        <AgentCard 
+                            id="INDEXING" 
+                            label="SEMANTIC_INDEXING" 
+                            desc="Embed notes into vector database for AI search." 
+                            icon={<Database size={18}/>} 
+                            color="text-pink-500 bg-pink-500/10 border-pink-500/20"
+                            onClick={runIndexing}
+                            isActive={activeAgent === 'INDEXING'}
+                        />
                     </div>
                 </div>
 
@@ -155,8 +185,12 @@ export const NoteAgentConsole: React.FC<NoteAgentConsoleProps> = ({ isOpen, onCl
                                 <Sparkles size={24} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-purple-500 animate-pulse" />
                             </div>
                             <div>
-                                <h4 className="text-sm font-black uppercase tracking-[0.2em] text-black dark:text-white mb-2">AGENT_WORKING</h4>
-                                <p className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest">Processing {notes.length} Neural Nodes...</p>
+                                <h4 className="text-sm font-black uppercase tracking-[0.2em] text-black dark:text-white mb-2">
+                                    {activeAgent === 'INDEXING' ? 'MAPPING_VECTOR_SPACE' : 'AGENT_WORKING'}
+                                </h4>
+                                <p className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest">
+                                    {activeAgent === 'INDEXING' ? `Embedding Progress: ${progress}%` : `Processing ${notes.length} Neural Nodes...`}
+                                </p>
                             </div>
                         </div>
                     ) : result ? (
@@ -168,6 +202,16 @@ export const NoteAgentConsole: React.FC<NoteAgentConsoleProps> = ({ isOpen, onCl
                             </div>
                             
                             <div className="flex-1 overflow-y-auto custom-scroll p-6 md:p-8 pb-32 md:pb-8">
+                                {activeAgent === 'INDEXING' && typeof result === 'string' && (
+                                    <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+                                        <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-2 animate-bounce">
+                                            <Check size={32} />
+                                        </div>
+                                        <h3 className="text-lg font-black uppercase tracking-tight text-emerald-500">INDEXING COMPLETE</h3>
+                                        <p className="text-xs text-neutral-500 font-medium max-w-sm">{result}</p>
+                                    </div>
+                                )}
+
                                 {activeAgent === 'ORGANIZER' && Array.isArray(result) && (
                                     <div className="space-y-4">
                                         <p className="text-xs font-medium text-neutral-500 mb-4">{result.length} updates proposed.</p>
@@ -210,8 +254,8 @@ export const NoteAgentConsole: React.FC<NoteAgentConsoleProps> = ({ isOpen, onCl
                                 )}
                             </div>
 
-                            {/* Actions Footer (Fixed Bottom for Mobile Visibility) */}
-                            {activeAgent !== 'INSIGHT' && (
+                            {/* Actions Footer */}
+                            {activeAgent !== 'INSIGHT' && activeAgent !== 'INDEXING' && (
                                 <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-black/5 dark:border-white/5 bg-white/95 dark:bg-[#0a0a0b]/95 backdrop-blur-md shrink-0 pb-safe z-20">
                                     <button 
                                         onClick={handleApply}

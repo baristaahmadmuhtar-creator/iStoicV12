@@ -4,7 +4,6 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { VaultProvider } from './contexts/VaultContext';
 import { FeatureProvider } from './contexts/FeatureContext';
-import { NeuralLinkProvider } from './contexts/NeuralLinkContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -16,9 +15,7 @@ root.render(
   <React.StrictMode>
     <FeatureProvider>
       <VaultProvider>
-        <NeuralLinkProvider>
           <App />
-        </NeuralLinkProvider>
       </VaultProvider>
     </FeatureProvider>
   </React.StrictMode>

@@ -10,7 +10,7 @@ interface KeyRecord {
   status: KeyStatus;
   usageCount: number;
   fails: number;
-  cooldownUntil: number;
+  cooldownUntil: number; // Timestamp
 }
 
 export interface ProviderStatus {
@@ -27,129 +27,187 @@ export class HydraVault {
       this.refreshPools();
   }
 
+  /**
+   * Scans environment variables to populate the vault.
+   * EXCLUSIVELY uses Environment Variables. User LocalStorage keys are no longer supported.
+   */
   public refreshPools() {
-    // SECURITY UPDATE: Hardcoded keys removed. 
-    // Now pulling strictly from Environment Variables injected by Vite/Vercel.
-    
-    const envKeys: Partial<Record<Provider, string | undefined>> = {
-        GEMINI: process.env.VITE_GEMINI_API_KEY || process.env.API_KEY,
-        GROQ: process.env.VITE_GROQ_API_KEY,
-        OPENAI: process.env.VITE_OPENAI_API_KEY,
-        DEEPSEEK: process.env.VITE_DEEPSEEK_API_KEY,
-        MISTRAL: process.env.VITE_MISTRAL_API_KEY,
-        OPENROUTER: process.env.VITE_OPENROUTER_API_KEY,
-        ELEVENLABS: process.env.VITE_ELEVENLABS_API_KEY
-    };
+    const env = { ...((import.meta as any).env || {}), ...((typeof process !== 'undefined' && process.env) || {}) };
+    const providers: Provider[] = ['GEMINI', 'GROQ', 'OPENAI', 'DEEPSEEK', 'MISTRAL', 'OPENROUTER', 'ELEVENLABS'];
 
-    // Reset Vault
-    this.vault = {};
-
-    Object.entries(envKeys).forEach(([provider, key]) => {
-        if (key && key.trim() !== '') {
-            const p = provider as Provider;
-            
-            // Check for comma-separated keys (Rotation support in Env Var)
-            const keys = key.split(',').map(k => k.trim()).filter(k => k.length > 0);
-            
-            this.vault[p] = keys.map(k => ({
-                key: k,
-                provider: p,
-                status: 'ACTIVE',
-                usageCount: 0,
-                fails: 0,
-                cooldownUntil: 0
-            }));
-        }
-    });
-    
-    // Check LocalStorage for User Overrides (Settings Menu)
+    // READ PROVIDER VISIBILITY (ON/OFF TOGGLES)
+    let visibility: Record<string, boolean> = {};
     try {
-        const userKeysStr = localStorage.getItem('user_api_keys');
-        if (userKeysStr) {
-            const userKeys = JSON.parse(userKeysStr);
-            Object.entries(userKeys).forEach(([provider, key]) => {
-                if (typeof key === 'string' && key.trim() !== '') {
-                    const p = provider as Provider;
-                    if (!this.vault[p]) this.vault[p] = [];
-                    // User keys get priority (unshift)
-                    this.vault[p].unshift({
-                        key: key.trim(),
-                        provider: p,
-                        status: 'ACTIVE',
-                        usageCount: 0,
-                        fails: 0,
-                        cooldownUntil: 0
-                    });
-                }
-            });
+        if (typeof window !== 'undefined') {
+            const stored = window.localStorage.getItem('provider_visibility');
+            if (stored) visibility = JSON.parse(stored);
         }
     } catch (e) {
-        console.warn("Failed to load user keys from storage");
+        // ignore
     }
 
-    const totalKeys = Object.values(this.vault).reduce((acc, curr) => acc + curr.length, 0);
-    debugService.log('KERNEL', 'HYDRA_VAULT', 'SECURE_INIT', `Vault initialized securely. Active Keys: ${totalKeys}`);
+    providers.forEach(provider => {
+        // If provider is explicitly disabled in settings, skip it entirely
+        if (visibility[provider] === false) {
+            this.vault[provider] = [];
+            return;
+        }
+
+        const keys = new Set<string>(); // Use Set to avoid duplicates
+        
+        // Helper to add keys (handles commas, quotes, and multiple formats)
+        const addKey = (val: string | undefined) => {
+            if (val && typeof val === 'string' && val.length > 5) {
+                // Remove quotes if present (e.g. "key1,key2")
+                const cleanVal = val.replace(/['"]/g, '').trim();
+                
+                if (cleanVal.includes(',')) {
+                    // Split by comma for multiple keys in one variable
+                    cleanVal.split(',').forEach(v => {
+                        const trimmed = v.trim();
+                        if (trimmed.length > 5) keys.add(trimmed);
+                    });
+                } else {
+                    keys.add(cleanVal);
+                }
+            }
+        };
+
+        // 1. Generic Scan (Includes provider name)
+        Object.keys(env).forEach(keyName => {
+            if (keyName.toUpperCase().includes(provider)) {
+                addKey(env[keyName]);
+            }
+        });
+
+        // 2. Explicit Standard Names (Backup)
+        addKey(env[`VITE_${provider}_API_KEY`]);
+        addKey(env[`${provider}_API_KEY`]);
+
+        // 3. Explicit Numbered Scan (Force check for VITE_GEMINI_KEY_1 to 50)
+        for (let i = 1; i <= 20; i++) {
+            addKey(env[`VITE_${provider}_KEY_${i}`]);
+            addKey(env[`${provider}_KEY_${i}`]);
+            addKey(env[`VITE_${provider}_API_KEY_${i}`]);
+            addKey(env[`${provider}_API_KEY_${i}`]);
+        }
+
+        // Initialize or Update Pool
+        this.vault[provider] = Array.from(keys).map(k => ({
+            key: k,
+            provider,
+            status: 'ACTIVE',
+            usageCount: 0,
+            fails: 0,
+            cooldownUntil: 0
+        }));
+    });
+    
+    const totalKeys = Object.values(this.vault).flat().length;
+    debugService.log('KERNEL', 'HYDRA_VAULT', 'INIT', `Vault initialized with ${totalKeys} keys across ${providers.length} providers.`);
   }
 
+  /**
+   * Retrieves an available API Key.
+   * IMPLEMENTS: Random Active Selection & Emergency Revive Threshold.
+   */
   public getKey(provider: Provider): string | null {
     const pool = this.vault[provider];
     if (!pool || pool.length === 0) return null;
 
+    // 1. Try to find ACTIVE keys
     const activeKeys = pool.filter((k) => k.status === 'ACTIVE');
+
     if (activeKeys.length > 0) {
-      // Rotasi acak untuk distribusi beban yang merata
+      // Return a random active key to distribute load (stochastic load balancing)
       const randomKey = activeKeys[Math.floor(Math.random() * activeKeys.length)];
       randomKey.usageCount++;
       return randomKey.key;
     }
 
+    // 2. REVIVE THRESHOLD LOGIC
+    // If NO active keys, check COOLDOWN keys.
+    // Logic: If a key has < 5000ms remaining in cooldown, we deem it "safe enough"
+    // for an emergency revive to prevent total service outage.
     const now = Date.now();
-    const emergencyKey = pool.find((k) => k.status === 'COOLDOWN' && k.cooldownUntil <= now);
+    const emergencyKey = pool.find((k) => {
+      return k.status === 'COOLDOWN' && (k.cooldownUntil - now < 5000);
+    });
+
     if (emergencyKey) {
+      debugService.log('WARN', 'HYDRA_VAULT', 'EMERGENCY_REVIVE', `Forcing revive on ${provider} key (ending ...${emergencyKey.key.slice(-4)})`);
       emergencyKey.status = 'ACTIVE';
+      emergencyKey.cooldownUntil = 0;
+      emergencyKey.usageCount++;
       return emergencyKey.key;
     }
 
+    debugService.log('ERROR', 'HYDRA_VAULT', 'EXHAUSTED', `No keys available for ${provider}. All ${pool.length} keys in cooldown.`);
     return null;
   }
 
+  /**
+   * Reports a key failure and applies penalty logic.
+   */
   public reportFailure(provider: Provider, keyString: string, error: any): void {
     const pool = this.vault[provider];
     const keyRecord = pool?.find((k) => k.key === keyString);
+
     if (!keyRecord) return;
 
     const errStr = JSON.stringify(error).toLowerCase();
-    const isRateLimit = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('quota');
-    
+    // 429 = Rate Limit, 402 = Quota Exceeded / Payment Required
+    const isRateLimit = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('402') || errStr.includes('quota') || errStr.includes('capacity');
+
     keyRecord.fails++;
     keyRecord.status = 'COOLDOWN';
-    // Cooldown logic: 60s for Rate Limit, 10s for Generic Error
-    keyRecord.cooldownUntil = Date.now() + (isRateLimit ? 60000 : 10000); 
+
+    const now = Date.now();
+
+    // PENALTY LOGIC
+    // Rate Limit (429) = 60 Seconds (Aggressive rotation, try others)
+    // Standard Error (500, Network) = 15 Seconds (Temporary blip)
+    const penaltyMs = isRateLimit ? 60_000 : 15_000;
     
-    debugService.log('WARN', 'HYDRA_VAULT', 'KEY_OFFLINE', `Key for ${provider} suspended. Reason: ${isRateLimit ? 'RATE_LIMIT' : 'NET_ERROR'}`);
+    keyRecord.cooldownUntil = now + penaltyMs;
+
+    debugService.log('WARN', 'HYDRA_VAULT', 'PENALTY', `Freezing ${provider} key (...${keyRecord.key.slice(-4)}) for ${penaltyMs/1000}s. Reason: ${isRateLimit ? 'RATE_LIMIT' : 'ERROR'}`);
+
+    // Auto-heal scheduling
+    setTimeout(() => {
+      if (keyRecord.status === 'COOLDOWN' && keyRecord.cooldownUntil <= Date.now()) {
+        keyRecord.status = 'ACTIVE';
+        keyRecord.cooldownUntil = 0;
+        debugService.log('INFO', 'HYDRA_VAULT', 'HEAL', `${provider} key recovered.`);
+      }
+    }, penaltyMs);
   }
 
   public reportSuccess(provider: Provider) {
-      // Logic for heat-mapping / reliability score could be added here
+      // Optional: Reset fail count on success if implementing partial forgiveness
   }
 
   public isProviderHealthy(provider: Provider): boolean {
-      return this.vault[provider]?.some(k => k.status === 'ACTIVE') || false;
+      return !!this.getKey(provider);
   }
 
   public getAllProviderStatuses(): ProviderStatus[] {
       return Object.keys(this.vault).map(id => {
           const pool = this.vault[id];
           const hasActive = pool.some(k => k.status === 'ACTIVE');
-          const now = Date.now();
-          const cooldowns = pool.filter(k => k.status === 'COOLDOWN').map(k => k.cooldownUntil);
-          const minCooldown = cooldowns.length > 0 ? Math.max(0, Math.ceil((Math.min(...cooldowns) - now) / 1000 / 60)) : 0;
           
+          // Calculate max cooldown remaining for display
+          let maxCooldown = 0;
+          if (!hasActive) {
+              const now = Date.now();
+              maxCooldown = Math.max(0, ...pool.map(k => Math.ceil((k.cooldownUntil - now) / 1000 / 60)));
+          }
+
           return {
-              id,
-              status: hasActive ? 'HEALTHY' : 'COOLDOWN',
+              id, 
+              status: hasActive ? 'HEALTHY' : 'COOLDOWN', 
               keyCount: pool.length,
-              cooldownRemaining: minCooldown
+              cooldownRemaining: maxCooldown
           };
       });
   }

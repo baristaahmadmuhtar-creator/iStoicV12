@@ -1,12 +1,14 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
+import { isSystemPinConfigured } from '../utils/crypto';
 
 interface VaultContextType {
     isVaultUnlocked: boolean;
     unlockVault: () => void;
     lockVault: () => void;
     isVaultConfigEnabled: (persona: 'hanisah' | 'stoic') => boolean;
+    isPinSet: boolean;
 }
 
 const VaultContext = createContext<VaultContextType | undefined>(undefined);
@@ -14,10 +16,16 @@ const VaultContext = createContext<VaultContextType | undefined>(undefined);
 export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     // Session-based state (resets on refresh for security)
     const [isVaultUnlocked, setIsVaultUnlocked] = useState(false);
+    const [isPinSet, setIsPinSet] = useState(false);
 
     // Persistent Configs
     const [hanisahConfig] = useLocalStorage('hanisah_tools_config', { search: true, vault: true, visual: true });
     const [stoicConfig] = useLocalStorage('stoic_tools_config', { search: true, vault: true, visual: false });
+
+    // Check PIN status on mount
+    useEffect(() => {
+        setIsPinSet(isSystemPinConfigured());
+    }, []);
 
     const unlockVault = useCallback(() => setIsVaultUnlocked(true), []);
     const lockVault = useCallback(() => setIsVaultUnlocked(false), []);
@@ -28,7 +36,6 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // SECURITY: Auto-lock if the active configuration disables the vault
     useEffect(() => {
-        // We check both. If user disables vault globally in settings, we lock immediately.
         if (!hanisahConfig.vault && !stoicConfig.vault && isVaultUnlocked) {
             console.warn("[SECURITY] Vault disabled in settings. Locking session.");
             setIsVaultUnlocked(false);
@@ -36,7 +43,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, [hanisahConfig, stoicConfig, isVaultUnlocked]);
 
     return (
-        <VaultContext.Provider value={{ isVaultUnlocked, unlockVault, lockVault, isVaultConfigEnabled }}>
+        <VaultContext.Provider value={{ isVaultUnlocked, unlockVault, lockVault, isVaultConfigEnabled, isPinSet }}>
             {children}
         </VaultContext.Provider>
     );

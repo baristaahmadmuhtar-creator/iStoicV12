@@ -1,3 +1,4 @@
+
 import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Terminal, ZapOff, Copy, Check, ShieldAlert } from 'lucide-react';
 import { debugService } from '../services/debugService';
@@ -29,17 +30,15 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     copied: false
   };
 
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-  }
-
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error, errorInfo: null, copied: false };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Only update state if component is mounted (standard safety)
     this.setState({ errorInfo });
     
+    // Use this.props to access viewName
     const view = this.props.viewName || 'UNKNOWN_MODULE';
     const errStr = error.message.toLowerCase();
 

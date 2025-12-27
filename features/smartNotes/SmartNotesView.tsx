@@ -1,9 +1,8 @@
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   FileText, Search, Plus, CheckSquare, 
   Archive, FolderOpen, Database, 
-  ListTodo, ArrowUpRight, Hash, Pin, Trash2, X, Filter, BrainCircuit, AlertTriangle, ShieldAlert
+  ListTodo, ArrowUpRight, Hash, Pin, Trash2, X, Filter, BrainCircuit, AlertTriangle, ShieldAlert, Sparkles, Brain, Loader2
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { type Note } from '../../types';
@@ -12,7 +11,7 @@ import { NoteBatchActions } from './NoteBatchActions';
 import { NoteAgentConsole } from './NoteAgentConsole';
 import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
 import { debugService } from '../../services/debugService';
-import { db } from '../../services/storage';
+import { VectorDB } from '../../services/vectorDb';
 
 interface SmartNotesViewProps {
   notes: Note[];
@@ -29,26 +28,16 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
   const [editorFontSize, setEditorFontSize] = useState(16);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   
+  // NEW: Semantic Search State
+  const [isSemanticMode, setIsSemanticMode] = useState(false);
+  const [semanticIds, setSemanticIds] = useState<string[]>([]);
+  const [isSearchingVector, setIsSearchingVector] = useState(false);
+  
+  // NEW: Agent Console State
   const [showAgentConsole, setShowAgentConsole] = useState(false);
+
+  // NEW: Delete Confirmation State
   const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
-
-  // Load Notes from DB on Mount
-  useEffect(() => {
-      const loadNotes = async () => {
-          const storedNotes = await db.getAll<Note>('NOTES');
-          storedNotes.sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
-          setNotes(storedNotes);
-      };
-      loadNotes();
-  }, [setNotes]);
-
-  // DB Sync Helper
-  const updateNotesAndDB = useCallback((newNotes: Note[]) => {
-      setNotes(newNotes);
-      // Debounce saving all? Or save changed ones?
-      // For reliability, saving all is safer in V1, but optimize later.
-      db.saveAll('NOTES', newNotes).catch(e => console.warn(e));
-  }, [setNotes]);
 
   // Safety check: if active note is deleted externally
   useEffect(() => {
@@ -58,7 +47,44 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       }
   }, [notes, activeNoteId]);
 
+  // Semantic Search Effect
+  useEffect(() => {
+      if (!searchQuery.trim() || !isSemanticMode) {
+          setSemanticIds([]);
+          setIsSearchingVector(false);
+          return;
+      }
+
+      const timer = setTimeout(async () => {
+          setIsSearchingVector(true);
+          try {
+              // Search with a higher limit for UI list
+              const ids = await VectorDB.search(searchQuery, 20);
+              setSemanticIds(ids);
+          } catch (e) {
+              console.error("Vector search error", e);
+          } finally {
+              setIsSearchingVector(false);
+          }
+      }, 600);
+
+      return () => clearTimeout(timer);
+  }, [searchQuery, isSemanticMode]);
+
   const filteredNotes = useMemo(() => {
+    // 1. Semantic Mode Logic
+    if (isSemanticMode && searchQuery.trim()) {
+        if (semanticIds.length === 0 && !isSearchingVector) return [];
+        // Map IDs to notes and preserve order (relevance)
+        const matchedNotes = semanticIds
+            .map(id => notes.find(n => n.id === id))
+            .filter((n): n is Note => !!n);
+            
+        // Still apply archive filter
+        return matchedNotes.filter(n => filterType === 'archived' ? n.is_archived : !n.is_archived);
+    }
+
+    // 2. Standard Keyword Logic
     return notes
       .filter(n => {
         const matchesSearch = n.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -72,7 +98,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
          if (!a.is_pinned && b.is_pinned) return 1;
          return new Date(b.updated).getTime() - new Date(a.updated).getTime();
       });
-  }, [notes, searchQuery, filterType]);
+  }, [notes, searchQuery, filterType, isSemanticMode, semanticIds, isSearchingVector]);
 
   const activeNote = useMemo(() => notes.find(n => n.id === activeNoteId), [notes, activeNoteId]);
 
@@ -90,7 +116,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       is_pinned: false,
       is_archived: false
     };
-    updateNotesAndDB([newNote, ...notes]);
+    setNotes(prev => [newNote, ...prev]);
     setActiveNoteId(newNote.id);
     setViewMode('editor');
   };
@@ -134,10 +160,9 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       if (!noteToDelete) return;
 
       if (debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, noteToDelete)) {
-          const updated = notes.filter(n => n.id !== noteToDelete);
-          updateNotesAndDB(updated);
-          db.deleteItem('NOTES', noteToDelete); // Ensure individual deletion from DB
+          setNotes(prevNotes => prevNotes.filter(n => n.id !== noteToDelete));
           
+          // If we deleted the active note (from within editor), go back to grid
           if (activeNoteId === noteToDelete) {
               setActiveNoteId(null);
               setViewMode('grid');
@@ -148,21 +173,20 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
 
   const handleSaveNote = useCallback((title: string, content: string, tasks?: any[], tags?: string[]) => {
     if (!activeNoteId) return;
-    const updated = notes.map(n => {
+    setNotes(prevNotes => prevNotes.map(n => {
       if (n.id === activeNoteId) {
          return { 
              ...n, 
              content, 
              title: title.trim() || 'Untitled Note', 
              tasks: tasks || n.tasks, 
-             tags: tags || n.tags,
+             tags: tags || n.tags, 
              updated: new Date().toISOString() 
          };
       }
       return n;
-    });
-    updateNotesAndDB(updated);
-  }, [activeNoteId, notes, updateNotesAndDB]);
+    }));
+  }, [activeNoteId, setNotes]);
 
   const handleBackFromEditor = useCallback(() => {
       if (activeNoteId) {
@@ -170,15 +194,13 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
           if (current) {
               const isEmpty = !current.title.trim() && (!current.content || current.content === '<div><br></div>') && (!current.tasks || current.tasks.length === 0);
               if (isEmpty) {
-                  const updated = notes.filter(n => n.id !== activeNoteId);
-                  updateNotesAndDB(updated);
-                  db.deleteItem('NOTES', activeNoteId);
+                  setNotes(prev => prev.filter(n => n.id !== activeNoteId));
               }
           }
       }
       setActiveNoteId(null);
       setViewMode('grid');
-  }, [activeNoteId, notes, updateNotesAndDB]);
+  }, [activeNoteId, notes, setNotes]);
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);
@@ -198,14 +220,11 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
 
     if (confirmPurge) {
         debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'PURGE_EXECUTE', { count });
-        const updated = notes.filter(n => !idsToDelete.has(n.id));
-        updateNotesAndDB(updated);
-        // Force DB sync for deletions
-        selectedIds.forEach(id => db.deleteItem('NOTES', id));
+        setNotes(prevNotes => prevNotes.filter(n => !idsToDelete.has(n.id)));
         setSelectedIds(new Set());
         setIsSelectionMode(false);
     }
-  }, [selectedIds, notes, updateNotesAndDB]);
+  }, [selectedIds, setNotes]);
 
   const batchArchive = useCallback(() => {
       debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'ARCHIVE_MANY');
@@ -213,11 +232,10 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       const allArchived = selected.every(n => n.is_archived);
       const targetState = !allArchived;
 
-      const updated = notes.map(n => selectedIds.has(n.id) ? { ...n, is_archived: targetState } : n);
-      updateNotesAndDB(updated);
+      setNotes(prevNotes => prevNotes.map(n => selectedIds.has(n.id) ? { ...n, is_archived: targetState } : n));
       setSelectedIds(new Set());
       setIsSelectionMode(false);
-  }, [notes, selectedIds, updateNotesAndDB]);
+  }, [notes, selectedIds, setNotes]);
   
   const batchPin = useCallback(() => {
       debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'PIN_MANY');
@@ -225,11 +243,10 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       const allPinned = selected.every(n => n.is_pinned);
       const targetState = !allPinned;
 
-      const updated = notes.map(n => selectedIds.has(n.id) ? { ...n, is_pinned: targetState } : n);
-      updateNotesAndDB(updated);
+      setNotes(prevNotes => prevNotes.map(n => selectedIds.has(n.id) ? { ...n, is_pinned: targetState } : n));
       setSelectedIds(new Set());
       setIsSelectionMode(false);
-  }, [notes, selectedIds, updateNotesAndDB]);
+  }, [notes, selectedIds, setNotes]);
 
   const handleSelectAll = useCallback(() => {
       const visibleIds = filteredNotes.map(n => n.id);
@@ -246,11 +263,10 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
 
   // --- AGENT HANDLERS ---
   const handleAgentApply = (updates: Partial<Note>[]) => {
-      const updated = notes.map(n => {
+      setNotes(prev => prev.map(n => {
           const update = updates.find(u => u.id === n.id);
           return update ? { ...n, ...update, updated: new Date().toISOString() } : n;
-      });
-      updateNotesAndDB(updated);
+      }));
   };
 
   const handleAgentTasks = (tasks: any[]) => {
@@ -264,16 +280,16 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
           tasks: tasks.map(t => ({ id: uuidv4(), text: t.text, isCompleted: false })),
           is_pinned: true
       };
-      updateNotesAndDB([newNote, ...notes]);
+      setNotes(prev => [newNote, ...prev]);
   };
 
+  // Helper to find title of note being deleted for the modal
   const noteToDeleteTitle = useMemo(() => {
       if (!noteToDelete) return "";
       const n = notes.find(x => x.id === noteToDelete);
       return n?.title || "Untitled Note";
   }, [noteToDelete, notes]);
 
-  // ... (REST OF THE UI REMAINS THE SAME - No functional changes to JSX, just using new handlers) ...
   return (
     <div className="h-[calc(100dvh-2rem)] md:h-[calc(100vh-2rem)] flex flex-col animate-fade-in bg-noise overflow-hidden">
       
@@ -304,15 +320,28 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                      onChange={e => setSearchQuery(e.target.value)}
                      onFocus={handleSearchFocus}
                      onBlur={() => setIsSearchFocused(false)}
-                     placeholder={isSearchFocused ? "SEARCH VAULT..." : "SEARCH..."}
-                     className="w-full h-12 bg-white dark:bg-[#0f0f11] border border-black/5 dark:border-white/10 rounded-2xl pl-11 pr-4 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:border-accent/50 focus:shadow-[0_0_30px_-10px_var(--accent-glow)] transition-all placeholder:text-neutral-500"
+                     placeholder={isSearchFocused ? (isSemanticMode ? "NEURAL SEARCH..." : "KEYWORD SEARCH...") : "SEARCH..."}
+                     className={`w-full h-12 bg-white dark:bg-[#0f0f11] border rounded-2xl pl-11 pr-12 text-[10px] font-black uppercase tracking-widest focus:outline-none transition-all placeholder:text-neutral-500 
+                        ${isSemanticMode 
+                            ? 'border-purple-500/50 shadow-[0_0_20px_rgba(168,85,247,0.2)] text-purple-500' 
+                            : 'border-black/5 dark:border-white/10 focus:border-accent/50 focus:shadow-[0_0_30px_-10px_var(--accent-glow)]'
+                        }
+                     `}
                   />
-                  <Search className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isSearchFocused ? 'text-accent' : 'text-neutral-400'}`} size={16} />
-                  {searchQuery && (
-                      <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-black dark:hover:text-white active:scale-90 transition-transform">
-                          <X size={12} />
-                      </button>
-                  )}
+                  <Search className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isSemanticMode ? 'text-purple-500' : isSearchFocused ? 'text-accent' : 'text-neutral-400'}`} size={16} />
+                  
+                  {/* Semantic Toggle */}
+                  <button 
+                    onClick={() => { setIsSemanticMode(!isSemanticMode); setSearchQuery(''); }}
+                    className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all ${
+                        isSemanticMode 
+                        ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30' 
+                        : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                    }`}
+                    title="Toggle Neural Search"
+                  >
+                      {isSearchingVector ? <Loader2 size={14} className="animate-spin" /> : <Brain size={14} />}
+                  </button>
                </div>
 
                {/* Action Buttons - Grouped for Mobile */}
@@ -356,12 +385,12 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       {(filterType === 'archived' || searchQuery) && (
           <div className="px-4 md:px-8 lg:px-12 pb-4 flex items-center gap-2 animate-fade-in">
               <div className="h-[1px] bg-black/5 dark:bg-white/10 flex-1"></div>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-white/5 border border-black/5 dark:border-white/5 text-[9px] font-black uppercase tracking-widest text-neutral-500 shadow-sm">
-                  <Filter size={10} /> 
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-widest shadow-sm ${isSemanticMode ? 'bg-purple-500/10 border-purple-500/20 text-purple-500' : 'bg-zinc-100 dark:bg-white/5 border-black/5 dark:border-white/5 text-neutral-500'}`}>
+                  {isSemanticMode ? <Sparkles size={10} /> : <Filter size={10} />}
                   {filterType === 'archived' && <span>ARCHIVE_MODE</span>}
                   {filterType === 'archived' && searchQuery && <span>+</span>}
-                  {searchQuery && <span>SEARCH_RESULTS</span>}
-                  <span className="ml-1 text-accent border-l border-black/10 dark:border-white/10 pl-2">{filteredNotes.length} ITEMS</span>
+                  {searchQuery && (isSemanticMode ? <span>NEURAL_MATCH</span> : <span>KEYWORD_MATCH</span>)}
+                  <span className={`ml-1 border-l pl-2 ${isSemanticMode ? 'text-purple-400 border-purple-500/20' : 'text-accent border-black/10 dark:border-white/10'}`}>{filteredNotes.length} ITEMS</span>
               </div>
               <div className="h-[1px] bg-black/5 dark:bg-white/10 flex-1"></div>
           </div>
@@ -372,11 +401,11 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
           {filteredNotes.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-neutral-400 opacity-40 gap-6 animate-fade-in">
                   <div className="w-32 h-32 rounded-[40px] bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center justify-center rotate-3">
-                      {filterType === 'archived' ? <Archive size={48} strokeWidth={1} /> : <FolderOpen size={48} strokeWidth={1} />}
+                      {isSemanticMode ? <BrainCircuit size={48} strokeWidth={1} className="text-purple-500" /> : filterType === 'archived' ? <Archive size={48} strokeWidth={1} /> : <FolderOpen size={48} strokeWidth={1} />}
                   </div>
                   <div className="text-center space-y-2">
-                      <p className="text-xs font-black uppercase tracking-[0.3em]">NO_RECORDS_FOUND</p>
-                      <p className="text-[10px] font-mono">Vault sector is empty.</p>
+                      <p className="text-xs font-black uppercase tracking-[0.3em]">{isSemanticMode ? "NO_SEMANTIC_MATCHES" : "NO_RECORDS_FOUND"}</p>
+                      <p className="text-[10px] font-mono">{isSemanticMode ? "Try rephrasing your query." : "Vault sector is empty."}</p>
                   </div>
               </div>
           ) : (

@@ -1,31 +1,28 @@
+
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-    // Load env file based on `mode` in the current working directory.
-    // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
-    const env = loadEnv(mode, (process as any).cwd(), '');
+    // Load local .env
+    const env = loadEnv(mode, '.', '');
     
-    const processEnv: Record<string, string> = {};
-    
-    // Explicitly include keys needed for the app
-    // Note: VITE_ keys are included by default, but we manually map non-VITE keys if they exist in system env (Vercel)
-    const keysToExpose = [
-        'API_KEY', // Fallback
-        'GOOGLE_API_KEY',
+    // Explicit list for Hydra Multi-Link Engine & Security
+    const keyPatterns = [
+        'GEMINI', 'GROQ', 'DEEPSEEK', 'OPENAI', 
+        'XAI', 'MISTRAL', 'OPENROUTER', 'ELEVENLABS', 
+        'API_KEY', 'VAULT_PIN_HASH', 'GOOGLE'
     ];
 
-    // 1. Load VITE_ keys automatically
-    Object.keys(env).forEach(key => {
-        if (key.startsWith('VITE_')) {
-            processEnv[key] = env[key];
-        }
-    });
+    const processEnv: Record<string, string> = {};
+    
+    // Check local env file AND system environment (Vercel)
+    const allSources = { ...process.env, ...env };
 
-    // 2. Load specific whitelisted keys
-    keysToExpose.forEach(key => {
-        if (env[key]) processEnv[key] = env[key];
+    Object.keys(allSources).forEach(key => {
+        if (key.startsWith('VITE_') || keyPatterns.some(p => key.includes(p))) {
+            processEnv[key] = allSources[key] as string;
+        }
     });
 
     return {
@@ -35,6 +32,7 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
+        // Injects gathered vars into global browser context
         'process.env': JSON.stringify(processEnv)
       },
       resolve: {
@@ -45,16 +43,7 @@ export default defineConfig(({ mode }) => {
       build: {
         outDir: 'dist',
         sourcemap: false,
-        minify: 'esbuild',
-        rollupOptions: {
-            output: {
-                manualChunks: {
-                    vendor: ['react', 'react-dom'],
-                    icons: ['lucide-react'],
-                    ai: ['@google/genai', 'openai', 'groq-sdk']
-                }
-            }
-        }
+        minify: 'esbuild'
       }
     };
 });

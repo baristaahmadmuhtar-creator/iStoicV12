@@ -8,9 +8,11 @@ import { VaultPinModal } from '../../components/VaultPinModal';
 import { useVault } from '../../contexts/VaultContext';
 import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
 import { debugService } from '../../services/debugService';
+import { DailyStoicWidget } from './components/DailyStoicWidget';
 
 interface DashboardProps {
     onNavigate: (feature: FeatureID) => void;
+    notes: Note[]; // Receive notes from App state
 }
 
 // Strictly Typed StatBox
@@ -81,8 +83,8 @@ const BentoCard: React.FC<{
     );
 };
 
-const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
-    const [notes] = useLocalStorage<Note[]>('notes', []);
+const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
+    // Note: 'notes' are now passed via props from App IDB state
     const { isVaultUnlocked, unlockVault, lockVault, isVaultConfigEnabled } = useVault();
     const [personaMode] = useLocalStorage<'hanisah' | 'stoic'>('ai_persona_mode', 'hanisah');
     const [language] = useLocalStorage<string>('app_language', 'id');
@@ -247,6 +249,9 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate }) => {
 
                 <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-6 md:gap-8">
                     
+                    {/* DAILY STOIC WIDGET */}
+                    <DailyStoicWidget />
+
                     {/* Primary Bento: Chat (Wider on large screens) */}
                     <BentoCard 
                         title={t.chatTitle} 

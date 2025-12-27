@@ -1,21 +1,20 @@
 
 import { GoogleGenAI } from "@google/genai";
 import Groq from "groq-sdk";
-import { GLOBAL_VAULT, type Provider } from "./hydraVault"; 
+import { GLOBAL_VAULT, type Provider } from "./hydraVault"; // Import Vault
 
 // ============================================================================
-// 1. CONFIG & PRIORITAS KECEPATAN (FREE TIER OPTIMIZED)
+// 1. CONFIG & PRIORITAS KECEPATAN
 // ============================================================================
 let activeController: AbortController | null = null;
 const MAX_RETRIES = 3;
 
 // Optimized for Free Tier Speed & Quality
-// Pro models removed from Race to prevent hitting 2 RPM limit immediately
 const CANDIDATES = [
-  { provider: 'google', model: 'gemini-2.0-flash-exp', speed: 1 }, // Fastest
-  { provider: 'groq', model: 'llama-3.3-70b-versatile', speed: 1 }, // Very Fast
-  { provider: 'google', model: 'gemini-1.5-flash', speed: 2 }, // Stable Fallback
-  { provider: 'groq', model: 'llama-3.1-8b-instant', speed: 2 }, // Lightweight
+  { provider: 'google', model: 'gemini-3-flash-preview', speed: 1 },
+  { provider: 'groq', model: 'llama-3.3-70b-versatile', speed: 1 },
+  { provider: 'google', model: 'gemini-2.0-flash-exp', speed: 2 }, 
+  { provider: 'groq', model: 'llama-3.1-8b-instant', speed: 3 }, 
 ];
 
 let chatHistory: Array<{ role: string, content: string }> = [];
@@ -138,6 +137,7 @@ const callSingleApi = async (candidate: any, userContent: any, signal: AbortSign
                     systemInstruction: SYSTEM_PROMPT,
                     temperature: 0.9,
                     topP: 0.95, 
+                    maxOutputTokens: 2048,
                   }
                 });
                 
@@ -173,18 +173,15 @@ const callSingleApi = async (candidate: any, userContent: any, signal: AbortSign
                 return completion.choices[0]?.message?.content || "";
             }
         } catch (error: any) {
-            // Only stop if user explicitly aborted. Otherwise, treat as API failure and retry.
             if (signal.aborted || error.name === 'AbortError') throw new Error("Dibatalkan.");
-            
             GLOBAL_VAULT.reportFailure(providerEnum, key, error);
-            console.warn(`[OMNI] ${candidate.model} failed. Retrying with next key...`);
             continue;
         }
     }
     throw new Error(`Gagal menghubungi ${candidate.provider}.`);
 };
 
-export const runHanisahRace = async (message: string, imageData: any = null): Promise<{ text: string, provider: string, model: string }> => {
+export const runHanisahRace = async (message: string, imageData: any = null): Promise<string> => {
   if (chatHistory.length === 0) resetHistory();
   
   stopResponse(); 
@@ -208,9 +205,9 @@ export const runHanisahRace = async (message: string, imageData: any = null): Pr
             updateHistory("user", cleanMessage + " [Image]");
             updateHistory("assistant", String(replyText));
             activeController = null;
-            return { text: String(replyText), provider: 'GEMINI', model: candidate.model };
+            return String(replyText);
         } catch (error: any) {
-            if (error.message === "Dibatalkan.") return { text: "Dibatalkan.", provider: 'SYSTEM', model: 'ABORT' };
+            if (error.message === "Dibatalkan.") return "Dibatalkan.";
         }
     }
   } 
@@ -226,7 +223,7 @@ export const runHanisahRace = async (message: string, imageData: any = null): Pr
         .catch(error => ({ error, candidate, status: 'fail' }))
     );
 
-    const raceTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error("RACE TIMEOUT")), 12000));
+    const raceTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error("RACE TIMEOUT")), 10000));
 
     try {
         const result: any = await Promise.race([
@@ -239,35 +236,28 @@ export const runHanisahRace = async (message: string, imageData: any = null): Pr
             updateHistory("user", cleanMessage);
             updateHistory("assistant", String(replyText));
             activeController = null;
-            
-            const winningProvider = result.candidate.provider === 'google' ? 'GEMINI' : 'GROQ';
-            return { text: String(replyText), provider: winningProvider, model: result.candidate.model };
+            return String(replyText);
         } else {
             throw result.error;
         }
 
     } catch (e: any) {
-        if (e.message === "Dibatalkan.") return { text: "Dibatalkan.", provider: 'SYSTEM', model: 'ABORT' };
+        if (e.message === "Dibatalkan.") return "Dibatalkan.";
         
-        // Fallback Strategy for Free Tier Robustness
-        // If primary racers failed (likely rate limit), try the "slower" but stable candidates
-        logRace("PRIMARY RACE FAILED. ENGAGING BACKUP.");
+        // Fallback
         const fallbackCandidates = CANDIDATES.filter(c => c.speed > 1);
-        
         for (const candidate of fallbackCandidates) {
             try {
                 const replyText = await callSingleApi(candidate, userContent, signal);
                 updateHistory("user", cleanMessage);
                 updateHistory("assistant", String(replyText));
                 activeController = null;
-                
-                const winningProvider = candidate.provider === 'google' ? 'GEMINI' : 'GROQ';
-                return { text: String(replyText), provider: winningProvider, model: candidate.model };
+                return String(replyText);
             } catch (error: any) {}
         }
     }
   }
 
   activeController = null;
-  return { text: "Maaf sayang, semua jaringan lagi sibuk banget (Rate Limit). Coba lagi bentar ya.", provider: 'SYSTEM', model: 'ERROR' };
+  return "Duh, sinyal aku jelek banget sayang. Bentar ya.";
 };

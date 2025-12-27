@@ -40,19 +40,13 @@ class StoicLogicKernel {
         effectiveModelId = 'llama-3.3-70b-versatile'; 
     }
 
-    // Updated plan to use gemini-3-flash-preview instead of deprecated 1.5
-    const plan = [effectiveModelId, 'gemini-3-flash-preview', 'llama-3.3-70b-versatile', 'gpt-4o-mini'];
+    const plan = [effectiveModelId, 'gemini-1.5-flash', 'llama-3.3-70b-versatile', 'gpt-4o-mini'];
     const uniquePlan = [...new Set(plan)];
 
     for (const currentModelId of uniquePlan) {
         if (signal?.aborted) break;
 
-        // Robust lookup with fallback to gemini-3-flash-preview if the specific ID is missing from catalog
-        let selectedModel = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-3-flash-preview');
-        
-        // Final safety check if catalog is somehow empty or missing default
-        if (!selectedModel && MODEL_CATALOG.length > 0) selectedModel = MODEL_CATALOG[0];
-        
+        let selectedModel = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-1.5-flash');
         if (!selectedModel) continue;
 
         const key = KEY_MANAGER.getKey(selectedModel.provider);
@@ -160,7 +154,7 @@ class StoicLogicKernel {
     let effectiveModelId = modelId;
     if (effectiveModelId === 'auto-best') effectiveModelId = 'llama-3.3-70b-versatile';
 
-    let selectedModel = MODEL_CATALOG.find(m => m.id === effectiveModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-3-flash-preview');
+    let selectedModel = MODEL_CATALOG.find(m => m.id === effectiveModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-1.5-flash');
     if (!selectedModel) throw new Error("CRITICAL_KERNEL_ERROR: No valid model found.");
 
     const systemPrompt = HANISAH_BRAIN.getSystemInstruction('stoic', context);

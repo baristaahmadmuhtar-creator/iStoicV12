@@ -5,7 +5,7 @@ import { HANISAH_BRAIN } from "./melsaBrain";
 import { noteTools, visualTools, searchTools, universalTools } from "./geminiService";
 import { GLOBAL_VAULT, Provider } from "./hydraVault"; 
 import { mechanicTools } from "../features/mechanic/mechanicTools";
-import { streamOpenAICompatible, streamPuterChat } from "./providerEngine";
+import { streamOpenAICompatible } from "./providerEngine";
 import { runHanisahRace } from "./melsaOmni"; 
 import { type ModelMetadata } from "../types";
 import { KEY_MANAGER } from "./geminiService"; 
@@ -13,63 +13,63 @@ import { KEY_MANAGER } from "./geminiService";
 export const MODEL_CATALOG: ModelMetadata[] = [
   // --- GEMINI (GOOGLE) ---
   { 
-    id: 'gemini-2.0-flash-exp', 
-    name: 'Gemini 2.0 Flash (Exp)', 
-    category: 'GEMINI_2_5', 
-    provider: 'GEMINI', 
-    description: 'Model tercepat & terpintar. Sangat disarankan untuk Vercel.', 
-    specs: { context: '1M', speed: 'INSTANT', intelligence: 9.7 } 
-  },
-  { 
-    id: 'gemini-1.5-flash', 
-    name: 'Gemini 1.5 Flash', 
-    category: 'GEMINI_2_5', 
-    provider: 'GEMINI', 
-    description: 'Fallback paling stabil & cepat.', 
-    specs: { context: '1M', speed: 'FAST', intelligence: 9.0 } 
-  },
-  { 
-    id: 'gemini-1.5-pro-latest', 
-    name: 'Gemini 1.5 Pro', 
+    id: 'gemini-3-flash-preview', 
+    name: 'Gemini 3 Flash', 
     category: 'GEMINI_3', 
     provider: 'GEMINI', 
-    description: 'Reasoning tinggi. Warning: Lambat (Timeout Risk).', 
-    specs: { context: '2M', speed: 'THINKING', intelligence: 9.9 } 
+    description: 'Model Google terbaru untuk task cepat dan gratis (Preview).', 
+    specs: { context: '1M', speed: 'INSTANT', intelligence: 9.2 } 
+  },
+  { 
+    id: 'gemini-2.0-flash-exp', 
+    name: 'Gemini 2.0 Flash Exp', 
+    category: 'GEMINI_2_5', 
+    provider: 'GEMINI', 
+    description: 'Experimental: Multimodal & Low Latency.', 
+    specs: { context: '1M', speed: 'INSTANT', intelligence: 9.5 } 
   },
   {
     id: 'auto-best',
     name: 'Auto Pilot (Hydra)',
     category: 'GEMINI_2_5',
     provider: 'GEMINI', 
-    description: 'Otomatis memilih jalur tercepat.',
+    description: 'Hanisah Engine: Omni-Race (Gemini 3 Flash vs Llama 3.3).',
     specs: { context: 'AUTO', speed: 'INSTANT', intelligence: 9.8 } 
   },
-
-  // --- PUTER (X.AI) ---
   { 
-    id: 'x-ai/grok-4.1-fast', 
-    name: 'Grok 4.1 Fast (Puter)', 
-    category: 'GROQ_VELOCITY', 
-    provider: 'PUTER', 
-    description: 'Ultra-fast inference from X.AI via Puter.js.', 
+    id: 'gemini-3-pro-preview', 
+    name: 'Gemini 3 Pro', 
+    category: 'GEMINI_3', 
+    provider: 'GEMINI', 
+    description: 'Complex Reasoning Tasks.', 
+    specs: { context: '2M', speed: 'THINKING', intelligence: 9.9 } 
+  },
+
+  // --- OPENAI ---
+  { 
+    id: 'gpt-4o', 
+    name: 'GPT-4o (Omni)', 
+    category: 'OPEN_ROUTER_ELITE', 
+    provider: 'OPENAI', 
+    description: 'Flagship OpenAI (Paid API Key Required).', 
+    specs: { context: '128K', speed: 'FAST', intelligence: 9.8 } 
+  },
+  { 
+    id: 'gpt-4o-mini', 
+    name: 'GPT-4o Mini', 
+    category: 'OPEN_ROUTER_ELITE', 
+    provider: 'OPENAI', 
+    description: 'Versi ringan dari Omni. Sangat cepat.', 
     specs: { context: '128K', speed: 'INSTANT', intelligence: 9.2 } 
   },
-  { 
-    id: 'x-ai/grok-2-1212', 
-    name: 'Grok 2 (Puter)', 
-    category: 'GROQ_VELOCITY', 
-    provider: 'PUTER', 
-    description: 'Advanced reasoning by X.AI via Puter.js.', 
-    specs: { context: '128K', speed: 'FAST', intelligence: 9.4 } 
-  },
 
-  // --- GROQ (LLAMA - BEST FREE FALLBACK) ---
+  // --- GROQ (LLAMA & MIXTRAL) ---
   { 
     id: 'llama-3.3-70b-versatile', 
     name: 'Llama 3.3 70B (Groq)', 
     category: 'GROQ_VELOCITY', 
     provider: 'GROQ', 
-    description: 'Speed Demon. Sempurna untuk Vercel.', 
+    description: 'Flagship Meta terbaru via LPU Groq. Sangat serbaguna.', 
     specs: { context: '128K', speed: 'INSTANT', intelligence: 9.3 } 
   },
   { 
@@ -77,36 +77,16 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     name: 'Llama 3.1 8B (Groq)', 
     category: 'GROQ_VELOCITY', 
     provider: 'GROQ', 
-    description: 'Ultra ringan.', 
+    description: 'Model ultra-cepat untuk tugas ringan dan chat santai.', 
     specs: { context: '128K', speed: 'INSTANT', intelligence: 8.5 } 
   },
-
-  // --- MISTRAL ---
   { 
-    id: 'mistral-large-latest', 
-    name: 'Mistral Large', 
-    category: 'MISTRAL_NATIVE', 
-    provider: 'MISTRAL', 
-    description: 'Model flagship Eropa. Sangat logis & akurat.', 
-    specs: { context: '128K', speed: 'FAST', intelligence: 9.6 } 
-  },
-  { 
-    id: 'mistral-small-latest', 
-    name: 'Mistral Small', 
-    category: 'MISTRAL_NATIVE', 
-    provider: 'MISTRAL', 
-    description: 'Ringan, cepat, efisien.', 
-    specs: { context: '32K', speed: 'INSTANT', intelligence: 8.9 } 
-  },
-
-  // --- OPENAI ---
-  { 
-    id: 'gpt-4o-mini', 
-    name: 'GPT-4o Mini', 
-    category: 'OPEN_ROUTER_ELITE', 
-    provider: 'OPENAI', 
-    description: 'Efisien & Murah.', 
-    specs: { context: '128K', speed: 'INSTANT', intelligence: 9.2 } 
+    id: 'mixtral-8x7b-32768', 
+    name: 'Mixtral 8x7B (Groq)', 
+    category: 'GROQ_VELOCITY', 
+    provider: 'GROQ', 
+    description: 'Mixture of Experts. Seimbang antara kecepatan dan logika.', 
+    specs: { context: '32K', speed: 'FAST', intelligence: 9.0 } 
   },
 
   // --- DEEPSEEK ---
@@ -115,8 +95,26 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     name: 'DeepSeek V3', 
     category: 'DEEPSEEK_OFFICIAL', 
     provider: 'DEEPSEEK', 
-    description: 'Alternatif coding.', 
+    description: 'Model efisien dengan kemampuan coding yang kuat.', 
     specs: { context: '64K', speed: 'FAST', intelligence: 9.5 } 
+  },
+  { 
+    id: 'deepseek-reasoner', 
+    name: 'DeepSeek R1 (Reasoning)', 
+    category: 'DEEPSEEK_OFFICIAL', 
+    provider: 'DEEPSEEK', 
+    description: 'Model CoT (Chain of Thought) untuk logika berat.', 
+    specs: { context: '64K', speed: 'THINKING', intelligence: 9.9 } 
+  },
+
+  // --- MISTRAL ---
+  { 
+    id: 'mistral-large-latest', 
+    name: 'Mistral Large 2', 
+    category: 'MISTRAL_NATIVE', 
+    provider: 'MISTRAL', 
+    description: 'Flagship Eropa. Sangat fasih multi-bahasa.', 
+    specs: { context: '128K', speed: 'FAST', intelligence: 9.6 } 
   }
 ];
 
@@ -132,7 +130,7 @@ export class HanisahKernel {
 
   private getActiveTools(provider: string, isThinking: boolean): any[] {
       if (provider === 'GEMINI') {
-          if (isThinking) return []; 
+          if (isThinking) return []; // Thinking models restricted
           
           const configStr = localStorage.getItem('hanisah_tools_config');
           const config = configStr ? JSON.parse(configStr) : { search: true, vault: true, visual: true };
@@ -163,83 +161,52 @@ export class HanisahKernel {
     const systemPrompt = configOverride?.systemInstruction || HANISAH_BRAIN.getSystemInstruction('hanisah', context);
     const signal = configOverride?.signal; 
 
-    // FORCE OVERRIDE: If user selected a "ghost" model ID (like 3.0 preview which might not be in API yet), fallback to 2.0 Flash
     let currentModelId = initialModelId;
-    if (currentModelId.includes('3-pro') || currentModelId.includes('3.0')) {
-        // Safe check: assume 3.0 is unstable on Vercel unless explicitly whitelisted
-        // currentModelId = 'gemini-1.5-pro-latest'; 
-    }
+    
+    // Auto Fallback for older IDs if stored
+    if (currentModelId === 'gemini-1.5-flash') currentModelId = 'gemini-3-flash-preview';
 
     if (initialModelId === 'auto-best') {
         const isEnabled = this.isOmniRaceEnabled();
         if (!isEnabled) {
-            yield { metadata: { systemStatus: "Omni-Race Disabled. Switching to Flash...", isRerouting: true } };
-            currentModelId = 'gemini-2.0-flash-exp'; 
+            yield { metadata: { systemStatus: "Omni-Race Disabled. Switching to Gemini 3 Flash...", isRerouting: true } };
+            currentModelId = 'gemini-3-flash-preview'; 
         } else {
             try {
                 const hanisahImg = imageData ? { data: imageData.data, mimeType: imageData.mimeType } : null;
                 const response = await runHanisahRace(msg, hanisahImg);
                 if (signal?.aborted) throw new Error("ABORTED");
-                
-                yield { text: response.text };
-                
-                if (response.provider && response.model) {
-                    yield { 
-                        metadata: { 
-                            provider: response.provider, 
-                            model: response.model,
-                            status: 'success'
-                        } 
-                    };
-                }
-
-                this.updateHistory(msg, response.text);
+                yield { text: response };
+                this.updateHistory(msg, response);
                 return;
             } catch (e: any) {
                 if (e.message === "ABORTED" || signal?.aborted) return;
-                yield { metadata: { systemStatus: `Omni-Engine Busy. Switching to Flash...`, isRerouting: true } };
-                currentModelId = 'gemini-2.0-flash-exp';
+                yield { metadata: { systemStatus: `Omni-Engine Failed. Switching to Standard...`, isRerouting: true } };
+                currentModelId = 'gemini-3-flash-preview';
             }
         }
     }
 
     let attempts = 0;
-    const maxAttempts = 15; // Increased attempts to cycle through all keys if needed
+    const maxAttempts = 3;
 
     while (attempts < maxAttempts) {
         if (signal?.aborted) break;
         attempts++;
-        
-        // Find model metadata, default to Flash if ID not found
         const model = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG[0];
         const provider = model.provider;
-        
-        // REQUEST KEY FROM HYDRA (Will get the least-used ACTIVE key)
         const key = GLOBAL_VAULT.getKey(provider as Provider);
 
         if (!key) {
-            debugService.log('WARN', 'KERNEL', 'NO_KEY', `All keys for ${provider} are exhausted/cooldown.`);
-            
-            // EMERGENCY FALLBACK CHAIN (Cross-Provider)
+            debugService.log('WARN', 'KERNEL', 'NO_KEY', `No keys for ${provider}. Attempting fallback switch.`);
             if (provider === 'GEMINI') {
                 if (KEY_MANAGER.getKey('GROQ')) {
                     currentModelId = 'llama-3.3-70b-versatile';
-                    yield { metadata: { systemStatus: "Gemini Exhausted. Rerouting to Groq...", isRerouting: true } };
-                    continue;
-                } else if (KEY_MANAGER.getKey('MISTRAL')) {
-                    currentModelId = 'mistral-small-latest';
-                    yield { metadata: { systemStatus: "Gemini Exhausted. Rerouting to Mistral...", isRerouting: true } };
+                    yield { metadata: { systemStatus: "Gemini Exhausted. Rerouting to Groq LPU...", isRerouting: true } };
                     continue;
                 }
-            } else if (provider === 'GROQ') {
-                 if (KEY_MANAGER.getKey('GEMINI')) {
-                    currentModelId = 'gemini-1.5-flash'; 
-                    yield { metadata: { systemStatus: "Groq Exhausted. Rerouting to Gemini...", isRerouting: true } };
-                    continue;
-                 }
             }
-            
-            yield { text: `\n\n> ⛔ *CRITICAL: No active API keys found. Please check Environment Variables.*` };
+            yield { text: `\n\n> ⛔ *CRITICAL: No keys available for ${provider} or fallbacks.*` };
             break;
         }
 
@@ -251,8 +218,13 @@ export class HanisahKernel {
                 const ai = new GoogleGenAI({ apiKey: key });
                 const config: any = { systemInstruction: systemPrompt, temperature: 0.7 };
                 
-                if (activeTools.length > 0 && !isThinking) config.tools = activeTools;
-                if (isThinking) config.thinkingConfig = { thinkingBudget: 1024 }; 
+                if (activeTools.length > 0) config.tools = activeTools;
+                
+                if (isThinking) {
+                    const budgetStr = localStorage.getItem('thinking_budget');
+                    const budget = budgetStr ? parseInt(budgetStr) : 4096;
+                    config.thinkingConfig = { thinkingBudget: budget };
+                }
 
                 const contents = [
                     ...this.history.map(h => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }] })), 
@@ -265,17 +237,6 @@ export class HanisahKernel {
                     if (signal?.aborted) break;
                     if (chunk.text) { fullText += chunk.text; yield { text: chunk.text }; }
                     if (chunk.functionCalls?.length) yield { functionCall: chunk.functionCalls[0] };
-                }
-                if (signal?.aborted) return;
-                this.updateHistory(msg, fullText);
-                GLOBAL_VAULT.reportSuccess(provider as Provider);
-                return;
-            } else if (provider === 'PUTER') {
-                const stream = streamPuterChat(model.id, [{ role: 'user', content: msg }], systemPrompt, signal);
-                let fullText = "";
-                for await (const chunk of stream) {
-                    if (signal?.aborted) break;
-                    if (chunk.text) { fullText += chunk.text; yield { text: chunk.text }; }
                 }
                 if (signal?.aborted) return;
                 this.updateHistory(msg, fullText);
@@ -296,55 +257,30 @@ export class HanisahKernel {
             }
         } catch (err: any) {
             if (signal?.aborted) return;
-            
-            // REPORT FAILURE TO HYDRA (Will trigger penalty/cooldown for this key)
             GLOBAL_VAULT.reportFailure(provider as Provider, key, err);
+            const errStr = JSON.stringify(err);
+            const isQuota = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('limit');
+            const isBalance = errStr.includes('402');
             
-            // Fix: Include message in stringification to ensure 429 matches
-            const errStr = (err.message + ' ' + JSON.stringify(err)).toLowerCase();
-            const isQuota = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('quota') || errStr.includes('rate limit');
-            const isNotFound = errStr.includes('404') || errStr.includes('not found');
-            const isTimeout = errStr.includes('timeout') || errStr.includes('504');
-            const isServiceUnavailable = errStr.includes('503') || errStr.includes('500') || errStr.includes('service unavailable');
-            
-            console.warn(`[KERNEL] Error on ${model.id} (Key ending in ...${key.slice(-4)}): ${err.message}`);
-
-            if (isQuota || isNotFound || isTimeout || isServiceUnavailable) {
-                // IMPORTANT: Check for alternative keys within the SAME provider first
-                // HydraVault has already marked the bad key as COOLDOWN, so calling getKey() again
-                // will return a different key if one exists.
-                if (GLOBAL_VAULT.hasAlternativeKeys(provider as Provider)) {
-                    yield { metadata: { systemStatus: `${provider} Limit (${isQuota ? '429' : 'ERR'}). Rotating key...`, isRerouting: true } };
-                    continue; // Loop again -> Get New Key -> Retry
-                }
-
-                // Only if NO keys left for this provider, downgrade/switch
-                if (currentModelId.includes('pro') || currentModelId.includes('3')) {
-                    currentModelId = 'gemini-1.5-flash'; 
-                    yield { metadata: { systemStatus: "Model Timeout/Limit on Vercel. Downgrading to Flash...", isRerouting: true } };
-                } else if (provider === 'GEMINI') {
+            if (isQuota || isBalance) {
+                if (provider === 'GEMINI') {
                     if (KEY_MANAGER.getKey('GROQ')) {
+                        yield { metadata: { systemStatus: "Gemini Stalled. Rerouting to Groq LPU...", isRerouting: true } };
                         currentModelId = 'llama-3.3-70b-versatile';
-                        yield { metadata: { systemStatus: "Gemini Unstable. Switching to Groq...", isRerouting: true } };
-                    }
+                        continue;
+                    } 
                 }
-                continue; 
+                yield { text: `\n\n> ⛔ *Resource Exhausted on ${provider}. No fallback available.*` };
+                throw err;
             }
-            
-            // For other unexpected errors, try to retry if we haven't maxed out attempts
-            if (attempts < maxAttempts) {
-                 yield { metadata: { systemStatus: `API Error. Retrying... (${attempts}/${maxAttempts})`, isRerouting: true } };
-                 continue;
-            }
-            
-            yield { text: `\n\n> ⚠️ *Connection Error:* ${err.message}. Check Vercel Logs.` };
+            yield { text: `\n\n> ⚠️ *Connection Error:* ${err.message}` };
             throw err;
         }
     }
   }
 
-  async execute(msg: string, modelId: string, context?: string, configOverride?: any): Promise<StreamChunk> {
-    const it = this.streamExecute(msg, modelId, context, undefined, configOverride);
+  async execute(msg: string, modelId: string, context?: string): Promise<StreamChunk> {
+    const it = this.streamExecute(msg, modelId, context);
     let fullText = "";
     let finalChunk: StreamChunk = {};
     for await (const chunk of it) {

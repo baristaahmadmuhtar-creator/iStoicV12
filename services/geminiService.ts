@@ -51,10 +51,10 @@ class KeyManagerProxy {
 
 export const KEY_MANAGER = new KeyManagerProxy();
 
-// --- GEMINI IMAGE GENERATION (FLASH IMAGE - FREE TIER FRIENDLY) ---
+// --- GEMINI IMAGE GENERATION (NANO BANANA / FLASH IMAGE) ---
 async function generateGeminiImage(prompt: string, apiKey: string): Promise<string | null> {
     const ai = new GoogleGenAI({ apiKey });
-    // Use gemini-2.5-flash-image which is currently the accessible multimodal generation model
+    // Use gemini-2.5-flash-image (Nano Banana) which is optimized for fast/free generation
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: { parts: [{ text: prompt }] },
@@ -73,6 +73,7 @@ async function generateGeminiImage(prompt: string, apiKey: string): Promise<stri
 export async function generateImage(prompt: string): Promise<string | null> {
   const geminiKey = KEY_MANAGER.getKey('GEMINI');
 
+  // Priority: Gemini Flash Image (Free/Fast)
   if (geminiKey) {
       try {
           const result = await generateGeminiImage(prompt, geminiKey);
@@ -81,10 +82,8 @@ export async function generateImage(prompt: string): Promise<string | null> {
               return result;
           }
       } catch (e) {
-          debugService.log('ERROR', 'IMG_GEN', 'GEMINI_FAIL', 'Gemini Flash Image failed. Checking fallback...');
+          debugService.log('ERROR', 'IMG_GEN', 'GEMINI_FAIL', 'Gemini Flash Image failed.');
           GLOBAL_VAULT.reportFailure('GEMINI', geminiKey, e);
-          
-          // Retry logic handled by Hydra Vault on next call, but here we return null to trigger error UI
       }
   }
   
@@ -111,13 +110,11 @@ export async function generateVideo(prompt: string, config: any): Promise<string
         }
         const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
         if (!downloadLink) return null;
-        // User must check billing for Veo, often waitlisted/paid.
         const response = await fetch(`${downloadLink}&key=${key}`);
         const blob = await response.blob();
         return URL.createObjectURL(blob);
     } catch (e) {
-        // Veo failures are common on free tier, log but don't strictly penalize key for general text
-        debugService.log('WARN', 'VIDEO_GEN', 'FAIL', 'Veo generation failed (likely tier restriction).');
+        GLOBAL_VAULT.reportFailure('GEMINI', key, e);
     }
     return null;
 }
@@ -128,7 +125,7 @@ export async function editImage(base64: string, mimeType: string, prompt: string
     const ai = new GoogleGenAI({ apiKey: key });
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image', // Supports editing
+            model: 'gemini-2.5-flash-image', // Flash Image supports editing
             contents: {
                 parts: [
                     { inlineData: { data: base64, mimeType } },
@@ -230,6 +227,7 @@ const readNoteTool: FunctionDeclaration = {
     }
 };
 
+// --- VISUAL GENERATION TOOL ---
 const generateVisualTool: FunctionDeclaration = {
     name: 'generate_visual',
     description: 'Generate an image based on a detailed text prompt. Use this when the user asks to see, draw, or generate a picture.',
@@ -249,7 +247,7 @@ export const noteTools = { functionDeclarations: [manageNoteTool, searchNotesToo
 export const visualTools = { functionDeclarations: [generateVisualTool] }; 
 export const searchTools = { googleSearch: {} }; 
 
-// Universal tools for Non-Gemini providers (OpenAI/Groq do not support Google Search tool yet)
+// Universal tools for Non-Gemini providers
 export const universalTools = {
     functionDeclarations: [manageNoteTool, searchNotesTool, readNoteTool, generateVisualTool]
 };

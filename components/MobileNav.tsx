@@ -25,8 +25,8 @@ export const MobileNav: React.FC<MobileNavProps> = memo(({ activeFeature, setAct
         /* FIX BUG #1: High Z-Index to beat content, pointer-events toggle */
         z-[100] ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'}
         ${isVisible 
-          ? 'opacity-100 scale-100 duration-500 delay-100 bottom-[calc(1.5rem+env(safe-area-inset-bottom))]' 
-          : 'opacity-0 translate-y-10 scale-90 duration-300 bottom-0' 
+          ? 'bottom-6 opacity-100 translate-y-0 scale-100 duration-500 delay-100' 
+          : 'bottom-0 opacity-0 translate-y-10 scale-90 duration-300' 
         }
       `}
       role="navigation"

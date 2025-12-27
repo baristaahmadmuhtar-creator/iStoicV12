@@ -1,7 +1,7 @@
 
 import { debugService } from './debugService';
 
-export type Provider = 'GEMINI' | 'GROQ' | 'OPENAI' | 'DEEPSEEK' | 'MISTRAL' | 'OPENROUTER' | 'ELEVENLABS' | 'PUTER';
+export type Provider = 'GEMINI' | 'GROQ' | 'OPENAI' | 'DEEPSEEK' | 'MISTRAL' | 'OPENROUTER' | 'ELEVENLABS';
 type KeyStatus = 'ACTIVE' | 'COOLDOWN';
 
 interface KeyRecord {
@@ -29,11 +29,11 @@ export class HydraVault {
 
   /**
    * Scans environment variables to populate the vault.
-   * EXCLUSIVELY uses Environment Variables.
+   * EXCLUSIVELY uses Environment Variables. User LocalStorage keys are no longer supported.
    */
   public refreshPools() {
     const env = { ...((import.meta as any).env || {}), ...((typeof process !== 'undefined' && process.env) || {}) };
-    const providers: Provider[] = ['GEMINI', 'GROQ', 'OPENAI', 'DEEPSEEK', 'MISTRAL', 'OPENROUTER', 'ELEVENLABS', 'PUTER'];
+    const providers: Provider[] = ['GEMINI', 'GROQ', 'OPENAI', 'DEEPSEEK', 'MISTRAL', 'OPENROUTER', 'ELEVENLABS'];
 
     // READ PROVIDER VISIBILITY (ON/OFF TOGGLES)
     let visibility: Record<string, boolean> = {};
@@ -55,79 +55,61 @@ export class HydraVault {
 
         const keys = new Set<string>(); // Use Set to avoid duplicates
         
-        // PUTER SPECIAL HANDLING (No Env Vars needed)
-        if (provider === 'PUTER') {
-            this.vault['PUTER'] = [{
-                key: 'PUTER_JS_NATIVE',
-                provider: 'PUTER',
-                status: 'ACTIVE',
-                usageCount: 0,
-                fails: 0,
-                cooldownUntil: 0
-            }];
-            return;
-        }
-
-        // Helper to add keys (handles commas, quotes, PIPES, NEWLINES, SEMICOLONS, SPACES)
+        // Helper to add keys (handles commas, quotes, and multiple formats)
         const addKey = (val: string | undefined) => {
             if (val && typeof val === 'string' && val.length > 5) {
-                // 1. Remove quotes
-                let cleanVal = val.replace(/['"]/g, '').trim();
+                // Remove quotes if present (e.g. "key1,key2")
+                const cleanVal = val.replace(/['"]/g, '').trim();
                 
-                // 2. Normalize delimiters: Replace newlines, pipes, semicolons, and literal "\n" with commas
-                cleanVal = cleanVal.replace(/[\n|\s;]/g, ','); 
-                cleanVal = cleanVal.replace(/\\n/g, ','); 
-
-                // 3. Split by comma (to handle multi-key string in one var)
-                const parts = cleanVal.split(',');
-
-                parts.forEach(v => {
-                    const trimmed = v.trim();
-                    if (trimmed.length > 10) { 
-                        keys.add(trimmed);
-                    }
-                });
+                if (cleanVal.includes(',')) {
+                    // Split by comma for multiple keys in one variable
+                    cleanVal.split(',').forEach(v => {
+                        const trimmed = v.trim();
+                        if (trimmed.length > 5) keys.add(trimmed);
+                    });
+                } else {
+                    keys.add(cleanVal);
+                }
             }
         };
 
-        // 1. Explicit Numbered Scan (VITE_GROQ_API_KEY_1 ... 50)
-        // Scan up to 50 to ensure we catch all your keys
-        for (let i = 1; i <= 50; i++) {
-            addKey(env[`VITE_${provider}_KEY_${i}`]);
-            addKey(env[`${provider}_KEY_${i}`]);
-            addKey(env[`VITE_${provider}_API_KEY_${i}`]);
-            addKey(env[`${provider}_API_KEY_${i}`]);
-        }
-
-        // 2. Generic Scan (Backups)
+        // 1. Generic Scan (Includes provider name)
         Object.keys(env).forEach(keyName => {
             if (keyName.toUpperCase().includes(provider)) {
                 addKey(env[keyName]);
             }
         });
 
+        // 2. Explicit Standard Names (Backup)
+        addKey(env[`VITE_${provider}_API_KEY`]);
+        addKey(env[`${provider}_API_KEY`]);
+
+        // 3. Explicit Numbered Scan (Force check for VITE_GEMINI_KEY_1 to 50)
+        for (let i = 1; i <= 20; i++) {
+            addKey(env[`VITE_${provider}_KEY_${i}`]);
+            addKey(env[`${provider}_KEY_${i}`]);
+            addKey(env[`VITE_${provider}_API_KEY_${i}`]);
+            addKey(env[`${provider}_API_KEY_${i}`]);
+        }
+
         // Initialize or Update Pool
-        // Preserve usageCount if key already exists to maintain rotation logic across reloads if persistent
-        this.vault[provider] = Array.from(keys).map(k => {
-            const existing = this.vault[provider]?.find(ex => ex.key === k);
-            return {
-                key: k,
-                provider,
-                status: 'ACTIVE',
-                usageCount: existing ? existing.usageCount : 0,
-                fails: 0,
-                cooldownUntil: 0
-            };
-        });
+        this.vault[provider] = Array.from(keys).map(k => ({
+            key: k,
+            provider,
+            status: 'ACTIVE',
+            usageCount: 0,
+            fails: 0,
+            cooldownUntil: 0
+        }));
     });
     
     const totalKeys = Object.values(this.vault).flat().length;
-    console.log(`[HYDRA] Vault initialized. Total Keys: ${totalKeys}`);
+    debugService.log('KERNEL', 'HYDRA_VAULT', 'INIT', `Vault initialized with ${totalKeys} keys across ${providers.length} providers.`);
   }
 
   /**
-   * Retrieves an available API Key using LEAST-USED strategy.
-   * This ensures strict rotation: Key 1 -> Key 2 -> ... -> Key 8 -> Key 1.
+   * Retrieves an available API Key.
+   * IMPLEMENTS: Random Active Selection & Emergency Revive Threshold.
    */
   public getKey(provider: Provider): string | null {
     const pool = this.vault[provider];
@@ -137,27 +119,23 @@ export class HydraVault {
     const activeKeys = pool.filter((k) => k.status === 'ACTIVE');
 
     if (activeKeys.length > 0) {
-      // SORT BY USAGE COUNT ASCENDING (Least Used First)
-      // This forces the system to use fresh keys before reusing old ones.
-      activeKeys.sort((a, b) => a.usageCount - b.usageCount);
-      
-      const bestKey = activeKeys[0];
-      bestKey.usageCount++;
-      
-      // Log usage for debugging balance
-      // console.debug(`[HYDRA] Selected ${provider} key (Used: ${bestKey.usageCount} times)`);
-      
-      return bestKey.key;
+      // Return a random active key to distribute load (stochastic load balancing)
+      const randomKey = activeKeys[Math.floor(Math.random() * activeKeys.length)];
+      randomKey.usageCount++;
+      return randomKey.key;
     }
 
-    // 2. REVIVE LOGIC: Check COOLDOWN keys
+    // 2. REVIVE THRESHOLD LOGIC
+    // If NO active keys, check COOLDOWN keys.
+    // Logic: If a key has < 5000ms remaining in cooldown, we deem it "safe enough"
+    // for an emergency revive to prevent total service outage.
     const now = Date.now();
     const emergencyKey = pool.find((k) => {
-      return k.status === 'COOLDOWN' && k.cooldownUntil <= now;
+      return k.status === 'COOLDOWN' && (k.cooldownUntil - now < 5000);
     });
 
     if (emergencyKey) {
-      debugService.log('INFO', 'HYDRA_VAULT', 'REVIVE', `Restoring ${provider} key from cooldown.`);
+      debugService.log('WARN', 'HYDRA_VAULT', 'EMERGENCY_REVIVE', `Forcing revive on ${provider} key (ending ...${emergencyKey.key.slice(-4)})`);
       emergencyKey.status = 'ACTIVE';
       emergencyKey.cooldownUntil = 0;
       emergencyKey.usageCount++;
@@ -169,16 +147,6 @@ export class HydraVault {
   }
 
   /**
-   * Checks if there are other ACTIVE keys available for a provider.
-   * Used by Kernel to decide whether to retry same model or switch providers.
-   */
-  public hasAlternativeKeys(provider: Provider): boolean {
-      const pool = this.vault[provider];
-      if (!pool) return false;
-      return pool.some(k => k.status === 'ACTIVE');
-  }
-
-  /**
    * Reports a key failure and applies penalty logic.
    */
   public reportFailure(provider: Provider, keyString: string, error: any): void {
@@ -187,20 +155,9 @@ export class HydraVault {
 
     if (!keyRecord) return;
 
-    // Fix: Properly stringify error object, including message property
-    const errStr = (
-        (error instanceof Error ? error.message : '') + 
-        ' ' + 
-        JSON.stringify(error)
-    ).toLowerCase();
-    
-    // DETECT 429 / RATE LIMITS (Specific patterns for Groq/Gemini)
-    const isRateLimit = 
-        errStr.includes('429') || 
-        errStr.includes('resource_exhausted') || 
-        errStr.includes('quota') || 
-        errStr.includes('rate limit') ||
-        errStr.includes('too many requests');
+    const errStr = JSON.stringify(error).toLowerCase();
+    // 429 = Rate Limit, 402 = Quota Exceeded / Payment Required
+    const isRateLimit = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('402') || errStr.includes('quota') || errStr.includes('capacity');
 
     keyRecord.fails++;
     keyRecord.status = 'COOLDOWN';
@@ -208,13 +165,13 @@ export class HydraVault {
     const now = Date.now();
 
     // PENALTY LOGIC
-    // Rate Limit (429) = 60 Seconds (Give it a full minute to recover)
-    // Standard Error = 10 Seconds
-    const penaltyMs = isRateLimit ? 60_000 : 10_000;
+    // Rate Limit (429) = 60 Seconds (Aggressive rotation, try others)
+    // Standard Error (500, Network) = 15 Seconds (Temporary blip)
+    const penaltyMs = isRateLimit ? 60_000 : 15_000;
     
     keyRecord.cooldownUntil = now + penaltyMs;
 
-    debugService.log('WARN', 'HYDRA_VAULT', 'PENALTY', `Freezing ${provider} key for ${penaltyMs/1000}s. Reason: ${isRateLimit ? 'RATE_LIMIT_429' : 'ERROR'}`);
+    debugService.log('WARN', 'HYDRA_VAULT', 'PENALTY', `Freezing ${provider} key (...${keyRecord.key.slice(-4)}) for ${penaltyMs/1000}s. Reason: ${isRateLimit ? 'RATE_LIMIT' : 'ERROR'}`);
 
     // Auto-heal scheduling
     setTimeout(() => {
@@ -227,15 +184,11 @@ export class HydraVault {
   }
 
   public reportSuccess(provider: Provider) {
-      // We don't reset usageCount because we want cumulative balancing
+      // Optional: Reset fail count on success if implementing partial forgiveness
   }
 
   public isProviderHealthy(provider: Provider): boolean {
-      const pool = this.vault[provider];
-      if (!pool) return false;
-      // It's healthy if at least one key is ACTIVE or ready to be revived
-      const now = Date.now();
-      return pool.some(k => k.status === 'ACTIVE' || (k.status === 'COOLDOWN' && k.cooldownUntil <= now));
+      return !!this.getKey(provider);
   }
 
   public getAllProviderStatuses(): ProviderStatus[] {
@@ -243,6 +196,7 @@ export class HydraVault {
           const pool = this.vault[id];
           const hasActive = pool.some(k => k.status === 'ACTIVE');
           
+          // Calculate max cooldown remaining for display
           let maxCooldown = 0;
           if (!hasActive) {
               const now = Date.now();

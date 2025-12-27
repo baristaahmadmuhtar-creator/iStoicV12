@@ -62,7 +62,7 @@ export interface ModelMetadata {
   id: string;
   name: string;
   category: 'GEMINI_3' | 'GEMINI_2_5' | 'DEEPSEEK_OFFICIAL' | 'GROQ_VELOCITY' | 'OPEN_ROUTER_ELITE' | 'MISTRAL_NATIVE';
-  provider: 'GEMINI' | 'GROQ' | 'DEEPSEEK' | 'OPENAI' | 'XAI' | 'MISTRAL' | 'OPENROUTER' | 'PUTER';
+  provider: 'GEMINI' | 'GROQ' | 'DEEPSEEK' | 'OPENAI' | 'XAI' | 'MISTRAL' | 'OPENROUTER';
   description: string;
   specs: { context: string; speed: 'INSTANT' | 'FAST' | 'THINKING' | 'DEEP'; intelligence: number; }
 }

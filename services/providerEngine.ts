@@ -232,61 +232,22 @@ export async function* streamOpenAICompatible(
     }
 }
 
-/**
- * Streams chat response using Puter.js (X.AI / Grok models)
- */
-export async function* streamPuterChat(
-    modelId: string,
-    messages: StandardMessage[],
-    systemInstruction?: string,
-    signal?: AbortSignal
-): AsyncGenerator<{ text?: string; }> {
-    const puter = (window as any).puter;
-    if (!puter) throw new Error("Puter.js not initialized");
-
-    const history = messages.map(m => ({
-        role: m.role,
-        content: typeof m.content === 'string' ? m.content : '[Visual Content]'
-    }));
-
-    if (systemInstruction) {
-        history.unshift({ role: 'system', content: systemInstruction });
-    }
-
-    try {
-        const response = await puter.ai.chat(history, {
-            model: modelId,
-            stream: true
-        });
-
-        for await (const part of response) {
-            if (signal?.aborted) break;
-            if (part?.text) {
-                yield { text: part.text };
-            }
-        }
-    } catch (e: any) {
-        debugService.log('ERROR', 'PUTER', 'STREAM_FAIL', e.message);
-        throw e;
-    }
-}
-
 export async function analyzeMultiModalMedia(provider: string, modelId: string, data: string, mimeType: string, prompt: string): Promise<string> {
     const apiKey = KEY_MANAGER.getKey(provider);
-    if (!apiKey && provider !== 'PUTER') throw new Error(`API Key for ${provider} not found`);
+    if (!apiKey) throw new Error(`API Key for ${provider} not found`);
 
     // --- GEMINI VISION ---
     if (provider === 'GEMINI') {
         try {
-            const ai = new GoogleGenAI({ apiKey: apiKey! });
+            const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
-                model: modelId || 'gemini-3-flash-preview',
+                model: modelId || 'gemini-1.5-flash',
                 contents: { parts: [{ inlineData: { data, mimeType } }, { text: prompt }] }
             });
             KEY_MANAGER.reportSuccess('GEMINI');
             return response.text || "No response.";
         } catch (e: any) {
-            KEY_MANAGER.reportFailure('GEMINI', apiKey!, e);
+            KEY_MANAGER.reportFailure('GEMINI', apiKey, e);
             throw new Error(`Gemini Vision Failed: ${e.message}`);
         }
     }
@@ -341,30 +302,12 @@ export async function analyzeMultiModalMedia(provider: string, modelId: string, 
             }
 
             const json = await response.json();
-            KEY_MANAGER.reportSuccess(provider as any);
+            KEY_MANAGER.reportSuccess(provider);
             return json.choices[0]?.message?.content || "No analysis generated.";
         } catch (e: any) {
             console.error("Vision API Error:", e);
-            KEY_MANAGER.reportFailure(provider as any, e);
+            KEY_MANAGER.reportFailure(provider, e);
             throw new Error(`${provider} Vision Error: ${e.message}`);
-        }
-    }
-
-    // --- PUTER VISION (Uses chat interface for now as seen in examples) ---
-    if (provider === 'PUTER') {
-        const puter = (window as any).puter;
-        if (!puter) throw new Error("Puter.js not loaded");
-        try {
-            const response = await puter.ai.chat(
-                prompt,
-                `data:${mimeType};base64,${data}`,
-                { model: modelId || "x-ai/grok-4.1-fast" }
-            );
-            KEY_MANAGER.reportSuccess('PUTER');
-            return response.message.content;
-        } catch(e: any) {
-            KEY_MANAGER.reportFailure('PUTER', 'PUTER_JS_NATIVE', e);
-            throw new Error(`Puter Vision Error: ${e.message}`);
         }
     }
 
@@ -373,18 +316,19 @@ export async function analyzeMultiModalMedia(provider: string, modelId: string, 
 
 export async function generateMultiModalImage(provider: string, modelId: string, prompt: string, options: any): Promise<string> {
     const apiKey = KEY_MANAGER.getKey(provider);
-    if (!apiKey && provider !== 'PUTER') throw new Error(`API Key for ${provider} not found`);
+    if (!apiKey) throw new Error(`API Key for ${provider} not found`);
     
     // --- GEMINI (IMAGEN 3) ---
     if (provider === 'GEMINI') {
         try {
-            const ai = new GoogleGenAI({ apiKey: apiKey! });
+            const ai = new GoogleGenAI({ apiKey });
             const validRatios = ["1:1", "16:9", "9:16", "4:3", "3:4"];
             const ratio = validRatios.includes(options?.aspectRatio) ? options.aspectRatio : "1:1";
 
-            // Using gemini-2.5-flash-image which is the proper endpoint for image generation
+            // Using standard model for image gen call, which will use the tool internally or specific endpoint
+            // gemini-2.0-flash-exp supports generation
             const response = await ai.models.generateContent({
-                model: modelId || 'gemini-2.5-flash-image', 
+                model: modelId || 'gemini-2.0-flash-exp', 
                 contents: { parts: [{ text: prompt }] },
                 config: { imageConfig: { aspectRatio: ratio } } 
             });
@@ -399,34 +343,6 @@ export async function generateMultiModalImage(provider: string, modelId: string,
         } catch(e) {
             KEY_MANAGER.reportFailure('GEMINI', e);
             throw e;
-        }
-    }
-
-    // --- PUTER (GROK/FLUX) ---
-    if (provider === 'PUTER') {
-        const puter = (window as any).puter;
-        if (!puter) throw new Error("Puter.js not loaded");
-        try {
-            const imgElement = await puter.ai.txt2img({
-                prompt: prompt,
-                model: modelId || 'grok-2-image',
-                provider: 'xai'
-            });
-            
-            // Create a temporary canvas to extract base64
-            const canvas = document.createElement('canvas');
-            canvas.width = imgElement.naturalWidth;
-            canvas.height = imgElement.naturalHeight;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error("Canvas context failed");
-            
-            ctx.drawImage(imgElement, 0, 0);
-            const dataURL = canvas.toDataURL('image/png');
-            KEY_MANAGER.reportSuccess('PUTER');
-            return dataURL;
-        } catch (e: any) {
-            KEY_MANAGER.reportFailure('PUTER', 'PUTER_JS_NATIVE', e);
-            throw new Error(`Puter Gen Failed: ${e.message}`);
         }
     }
 

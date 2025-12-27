@@ -118,12 +118,6 @@ body {
 .pt-safe {
   padding-top: env(safe-area-inset-top);
 }
-.mb-safe {
-  margin-bottom: env(safe-area-inset-bottom);
-}
-.bottom-safe {
-  bottom: env(safe-area-inset-bottom);
-}
 
 /* --- HIGH PERFORMANCE OVERRIDES (GLASSMORPHIC ENGINE OFF) --- */
 body.low-perf * {

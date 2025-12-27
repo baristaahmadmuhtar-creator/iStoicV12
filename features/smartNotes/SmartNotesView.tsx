@@ -12,6 +12,7 @@ import { NoteBatchActions } from './NoteBatchActions';
 import { NoteAgentConsole } from './NoteAgentConsole';
 import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
 import { debugService } from '../../services/debugService';
+import { db } from '../../services/storage';
 
 interface SmartNotesViewProps {
   notes: Note[];
@@ -28,11 +29,26 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
   const [editorFontSize, setEditorFontSize] = useState(16);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   
-  // NEW: Agent Console State
   const [showAgentConsole, setShowAgentConsole] = useState(false);
-
-  // NEW: Delete Confirmation State
   const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
+
+  // Load Notes from DB on Mount
+  useEffect(() => {
+      const loadNotes = async () => {
+          const storedNotes = await db.getAll<Note>('NOTES');
+          storedNotes.sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+          setNotes(storedNotes);
+      };
+      loadNotes();
+  }, [setNotes]);
+
+  // DB Sync Helper
+  const updateNotesAndDB = useCallback((newNotes: Note[]) => {
+      setNotes(newNotes);
+      // Debounce saving all? Or save changed ones?
+      // For reliability, saving all is safer in V1, but optimize later.
+      db.saveAll('NOTES', newNotes).catch(e => console.warn(e));
+  }, [setNotes]);
 
   // Safety check: if active note is deleted externally
   useEffect(() => {
@@ -74,7 +90,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       is_pinned: false,
       is_archived: false
     };
-    setNotes(prev => [newNote, ...prev]);
+    updateNotesAndDB([newNote, ...notes]);
     setActiveNoteId(newNote.id);
     setViewMode('editor');
   };
@@ -118,9 +134,10 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       if (!noteToDelete) return;
 
       if (debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, noteToDelete)) {
-          setNotes(prevNotes => prevNotes.filter(n => n.id !== noteToDelete));
+          const updated = notes.filter(n => n.id !== noteToDelete);
+          updateNotesAndDB(updated);
+          db.deleteItem('NOTES', noteToDelete); // Ensure individual deletion from DB
           
-          // If we deleted the active note (from within editor), go back to grid
           if (activeNoteId === noteToDelete) {
               setActiveNoteId(null);
               setViewMode('grid');
@@ -131,7 +148,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
 
   const handleSaveNote = useCallback((title: string, content: string, tasks?: any[], tags?: string[]) => {
     if (!activeNoteId) return;
-    setNotes(prevNotes => prevNotes.map(n => {
+    const updated = notes.map(n => {
       if (n.id === activeNoteId) {
          return { 
              ...n, 
@@ -143,8 +160,9 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
          };
       }
       return n;
-    }));
-  }, [activeNoteId, setNotes]);
+    });
+    updateNotesAndDB(updated);
+  }, [activeNoteId, notes, updateNotesAndDB]);
 
   const handleBackFromEditor = useCallback(() => {
       if (activeNoteId) {
@@ -152,13 +170,15 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
           if (current) {
               const isEmpty = !current.title.trim() && (!current.content || current.content === '<div><br></div>') && (!current.tasks || current.tasks.length === 0);
               if (isEmpty) {
-                  setNotes(prev => prev.filter(n => n.id !== activeNoteId));
+                  const updated = notes.filter(n => n.id !== activeNoteId);
+                  updateNotesAndDB(updated);
+                  db.deleteItem('NOTES', activeNoteId);
               }
           }
       }
       setActiveNoteId(null);
       setViewMode('grid');
-  }, [activeNoteId, notes, setNotes]);
+  }, [activeNoteId, notes, updateNotesAndDB]);
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);
@@ -178,11 +198,14 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
 
     if (confirmPurge) {
         debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'PURGE_EXECUTE', { count });
-        setNotes(prevNotes => prevNotes.filter(n => !idsToDelete.has(n.id)));
+        const updated = notes.filter(n => !idsToDelete.has(n.id));
+        updateNotesAndDB(updated);
+        // Force DB sync for deletions
+        selectedIds.forEach(id => db.deleteItem('NOTES', id));
         setSelectedIds(new Set());
         setIsSelectionMode(false);
     }
-  }, [selectedIds, setNotes]);
+  }, [selectedIds, notes, updateNotesAndDB]);
 
   const batchArchive = useCallback(() => {
       debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'ARCHIVE_MANY');
@@ -190,10 +213,11 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       const allArchived = selected.every(n => n.is_archived);
       const targetState = !allArchived;
 
-      setNotes(prevNotes => prevNotes.map(n => selectedIds.has(n.id) ? { ...n, is_archived: targetState } : n));
+      const updated = notes.map(n => selectedIds.has(n.id) ? { ...n, is_archived: targetState } : n);
+      updateNotesAndDB(updated);
       setSelectedIds(new Set());
       setIsSelectionMode(false);
-  }, [notes, selectedIds, setNotes]);
+  }, [notes, selectedIds, updateNotesAndDB]);
   
   const batchPin = useCallback(() => {
       debugService.logAction(UI_REGISTRY.NOTES_BTN_BATCH_MODE, FN_REGISTRY.NOTE_BATCH_ACTION, 'PIN_MANY');
@@ -201,10 +225,11 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       const allPinned = selected.every(n => n.is_pinned);
       const targetState = !allPinned;
 
-      setNotes(prevNotes => prevNotes.map(n => selectedIds.has(n.id) ? { ...n, is_pinned: targetState } : n));
+      const updated = notes.map(n => selectedIds.has(n.id) ? { ...n, is_pinned: targetState } : n);
+      updateNotesAndDB(updated);
       setSelectedIds(new Set());
       setIsSelectionMode(false);
-  }, [notes, selectedIds, setNotes]);
+  }, [notes, selectedIds, updateNotesAndDB]);
 
   const handleSelectAll = useCallback(() => {
       const visibleIds = filteredNotes.map(n => n.id);
@@ -221,10 +246,11 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
 
   // --- AGENT HANDLERS ---
   const handleAgentApply = (updates: Partial<Note>[]) => {
-      setNotes(prev => prev.map(n => {
+      const updated = notes.map(n => {
           const update = updates.find(u => u.id === n.id);
           return update ? { ...n, ...update, updated: new Date().toISOString() } : n;
-      }));
+      });
+      updateNotesAndDB(updated);
   };
 
   const handleAgentTasks = (tasks: any[]) => {
@@ -238,16 +264,16 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
           tasks: tasks.map(t => ({ id: uuidv4(), text: t.text, isCompleted: false })),
           is_pinned: true
       };
-      setNotes(prev => [newNote, ...prev]);
+      updateNotesAndDB([newNote, ...notes]);
   };
 
-  // Helper to find title of note being deleted for the modal
   const noteToDeleteTitle = useMemo(() => {
       if (!noteToDelete) return "";
       const n = notes.find(x => x.id === noteToDelete);
       return n?.title || "Untitled Note";
   }, [noteToDelete, notes]);
 
+  // ... (REST OF THE UI REMAINS THE SAME - No functional changes to JSX, just using new handlers) ...
   return (
     <div className="h-[calc(100dvh-2rem)] md:h-[calc(100vh-2rem)] flex flex-col animate-fade-in bg-noise overflow-hidden">
       

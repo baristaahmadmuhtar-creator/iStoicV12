@@ -1,4 +1,3 @@
-
 import { GLOBAL_VAULT, type Provider } from './hydraVault';
 import { debugService } from './debugService';
 import { GoogleGenAI } from "@google/genai";
@@ -110,19 +109,17 @@ export class OmniRaceKernel {
     systemInstruction?: string
   ): Promise<AsyncGenerator<StreamChunk>> {
     
-    const key = GLOBAL_VAULT.getKey(provider);
-    if (!key) throw new Error("NO_KEY");
-
     // 1. GEMINI IMPLEMENTATION
     if (provider === 'GEMINI') {
-        const ai = new GoogleGenAI({ apiKey: key });
+        // Fix: Always use process.env.API_KEY directly for Gemini initialization as per guidelines
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         // Correctly handle streaming response for Gemini
         const streamResult = await ai.models.generateContentStream({
             model: modelId,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             config: { systemInstruction }
         }).catch(e => {
-            GLOBAL_VAULT.reportFailure(provider, key, e);
+            GLOBAL_VAULT.reportFailure(provider, process.env.API_KEY || 'UNKNOWN', e);
             throw e;
         });
 
@@ -132,16 +129,19 @@ export class OmniRaceKernel {
                 // Correctly iterate directly over streamResult as an async iterator
                 for await (const chunk of streamResult) {
                     if (signal.aborted) break;
-                    // Access text property directly (do not call as a function)
+                    // Fix: Access text property directly as per guidelines
                     const text = chunk.text;
                     if (text) yield { text };
                 }
             } catch (e) {
-                GLOBAL_VAULT.reportFailure(provider, key, e);
+                GLOBAL_VAULT.reportFailure(provider, process.env.API_KEY || 'UNKNOWN', e);
             }
         }
         return geminiGenerator();
     }
+
+    const key = GLOBAL_VAULT.getKey(provider);
+    if (!key) throw new Error("NO_KEY");
 
     // 2. OPENAI COMPATIBLE IMPLEMENTATION (Groq, DeepSeek, OpenAI)
     const baseURLMap: Record<string, string> = {

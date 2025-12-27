@@ -1,26 +1,30 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Flame, Brain, MicOff, Radio, X, Mic, Activity } from 'lucide-react';
+import { Flame, Brain, MicOff, Radio, X, Mic, Activity, Minimize2, Loader2 } from 'lucide-react';
 import { type NeuralLinkStatus } from '../../../services/neuralLink';
 import { useFeatures } from '../../../contexts/FeatureContext'; 
 
 interface NeuralLinkOverlayProps {
   isOpen: boolean;
   status: NeuralLinkStatus;
+  activeTask: string | null;
   personaMode: 'hanisah' | 'stoic';
   transcriptHistory: Array<{role: 'user' | 'model', text: string}>;
   interimTranscript: {role: 'user' | 'model', text: string} | null;
   onTerminate: () => void;
+  onMinimize: () => void;
   analyser?: AnalyserNode | null;
 }
 
 export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
   isOpen,
   status,
+  activeTask,
   personaMode,
   transcriptHistory,
   interimTranscript,
   onTerminate,
+  onMinimize,
   analyser
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,11 +32,9 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(0);
 
-  // Check Feature Flag
   const { isFeatureEnabled } = useFeatures();
   const isVisualEngineEnabled = isFeatureEnabled('VISUAL_ENGINE');
 
-  // Prevent Body Scroll when open
   useEffect(() => {
       if (isOpen) {
           document.body.style.overflow = 'hidden';
@@ -42,11 +44,9 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
       return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
 
-  // Auto-scroll transcript
   useEffect(() => {
       if (scrollRef.current) {
           const el = scrollRef.current;
-          // Use smooth scroll only if not manually scrolled way up
           const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 300;
           if (isNearBottom) {
               el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
@@ -54,12 +54,10 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
       }
   }, [transcriptHistory, interimTranscript]);
 
-  // Enhanced Audio Visualizer
   useEffect(() => {
     if (!isOpen || !analyser || !canvasRef.current) return;
-    
     if (!isVisualEngineEnabled) {
-        setVolume(128); // Static volume for orb
+        setVolume(128);
         return;
     }
 
@@ -71,7 +69,6 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
 
-    // Resize handler inside effect
     const resizeCanvas = () => {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -83,25 +80,19 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
       animationId = requestAnimationFrame(draw);
       analyser.getByteFrequencyData(dataArray);
 
-      // Calculate average volume for reactivity
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
       const avg = sum / bufferLength;
       setVolume(avg); 
 
-      // Clear with trail effect
       ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; 
       ctx.fillRect(0, 0, canvas.width, canvas.height); 
       
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
       const maxRadius = Math.min(centerX, centerY) * 0.45;
-      
-      // Determine Core Color
       const hue = personaMode === 'hanisah' ? 25 : 190; 
-      
-      // Draw Circular Spectrum
-      const bars = 64; // Reduced for performance/mobile
+      const bars = 64; 
       const step = Math.floor(bufferLength / bars);
       
       ctx.beginPath();
@@ -110,13 +101,10 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
           const percent = value / 256;
           const height = maxRadius * 0.6 * percent;
           const angle = (i / bars) * Math.PI * 2;
-          
           const x = centerX + Math.cos(angle) * (maxRadius * 0.8 + height);
           const y = centerY + Math.sin(angle) * (maxRadius * 0.8 + height);
-          
           const xBase = centerX + Math.cos(angle) * (maxRadius * 0.8);
           const yBase = centerY + Math.sin(angle) * (maxRadius * 0.8);
-
           ctx.strokeStyle = `hsla(${hue}, 100%, ${60 + percent * 40}%, ${Math.max(0.3, percent)})`;
           ctx.lineWidth = 4;
           ctx.beginPath();
@@ -125,7 +113,6 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
           ctx.stroke();
       }
     };
-
     draw();
     return () => {
         cancelAnimationFrame(animationId);
@@ -138,15 +125,10 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
   return (
     <div className="fixed inset-0 z-[5000] bg-black flex flex-col animate-fade-in font-sans touch-none">
       
-      {/* 1. VISUALIZER LAYER */}
       {isVisualEngineEnabled && (
-          <canvas 
-            ref={canvasRef} 
-            className="absolute inset-0 pointer-events-none z-0"
-          />
+          <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-0" />
       )}
 
-      {/* 2. AMBIENT ORB LAYER */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 transition-transform duration-100 ease-out"
            style={{ transform: `scale(${1 + (volume / 256) * 0.15})` }}
       >
@@ -158,29 +140,39 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
           </div>
       </div>
 
-      {/* 3. UI LAYER */}
       <div className="relative z-20 flex flex-col h-full justify-between pointer-events-none">
-          
-          {/* HEADER */}
           <div className="p-6 pt-safe flex justify-between items-center pointer-events-auto">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                   <div className={`px-4 py-2 rounded-full border bg-black/40 backdrop-blur-md flex items-center gap-2 ${status === 'ERROR' ? 'border-red-500 text-red-500' : 'border-white/10 text-white'}`}>
                       <Radio size={16} className={status === 'ACTIVE' ? 'animate-pulse text-green-400' : ''} />
                       <span className="text-xs font-black uppercase tracking-widest">{status}</span>
                   </div>
+                  {activeTask && (
+                      <div className="px-4 py-2 rounded-full border border-accent/30 bg-accent/10 text-accent backdrop-blur-md flex items-center gap-2 animate-slide-up">
+                          <Loader2 size={14} className="animate-spin" />
+                          <span className="text-[10px] font-black uppercase tracking-wider">{activeTask}</span>
+                      </div>
+                  )}
               </div>
-              <button 
-                onClick={onTerminate} 
-                className="w-12 h-12 rounded-full bg-white/10 hover:bg-red-500/20 text-white hover:text-red-500 flex items-center justify-center transition-all border border-white/5 active:scale-90"
-              >
-                  <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                  <button 
+                    onClick={onMinimize} 
+                    className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all border border-white/5 active:scale-90"
+                    title="Minimize to Background"
+                  >
+                      <Minimize2 size={20} />
+                  </button>
+                  <button 
+                    onClick={onTerminate} 
+                    className="w-12 h-12 rounded-full bg-red-500/20 text-white hover:bg-red-500 hover:text-white flex items-center justify-center transition-all border border-red-500/30 active:scale-90"
+                    title="Terminate Session"
+                  >
+                      <X size={20} />
+                  </button>
+              </div>
           </div>
 
-          {/* DYNAMIC TRANSCRIPT AREA */}
           <div ref={scrollRef} className="flex-1 w-full max-w-2xl mx-auto px-6 overflow-y-auto no-scrollbar pointer-events-auto flex flex-col justify-end pb-8 space-y-4 mask-fade-top touch-pan-y">
-              
-              {/* History */}
               {transcriptHistory.map((item, idx) => (
                   <div key={idx} className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
                       <div className={`max-w-[85%] px-5 py-3 rounded-2xl text-sm md:text-base font-medium leading-relaxed backdrop-blur-sm shadow-sm ${
@@ -193,7 +185,6 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
                   </div>
               ))}
 
-              {/* Interim (Live Streaming) */}
               {interimTranscript && (
                   <div className={`flex ${interimTranscript.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
                       <div className={`max-w-[85%] px-5 py-3 rounded-2xl text-base md:text-lg font-bold leading-relaxed backdrop-blur-md border shadow-lg ${
@@ -206,16 +197,8 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
                       </div>
                   </div>
               )}
-              
-              {/* Status Text when Idle */}
-              {!interimTranscript && status === 'ACTIVE' && transcriptHistory.length === 0 && (
-                  <div className="text-center text-white/40 text-xs font-mono uppercase tracking-widest animate-pulse mt-4">
-                      Listening for voice input...
-                  </div>
-              )}
           </div>
 
-          {/* CONTROLS FOOTER */}
           <div className="p-8 pb-safe flex justify-center items-center gap-6 pointer-events-auto bg-gradient-to-t from-black via-black/80 to-transparent">
               <button 
                   onClick={() => setIsMuted(!isMuted)}
@@ -235,7 +218,6 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
               </button>
           </div>
       </div>
-
       <style>{`
         .mask-fade-top {
             mask-image: linear-gradient(to bottom, transparent 0%, black 15%);

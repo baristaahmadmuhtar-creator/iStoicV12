@@ -8,42 +8,63 @@ import { STOIC_KERNEL } from '../../../services/stoicKernel';
 import { executeNeuralTool } from '../services/toolHandler';
 import { speakWithHanisah } from '../../../services/elevenLabsService';
 import { useVault } from '../../../contexts/VaultContext';
-import { debugService } from '../../../services/debugService';
+import { useNeuralLink } from '../../../contexts/NeuralLinkContext';
+import { db } from '../../../services/storage';
 
 export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) => {
-    const [threads, setThreads] = useLocalStorage<ChatThread[]>('chat_threads', []);
+    // We keep `threads` in state for React rendering, but initialize empty
+    const [threads, setThreads] = useState<ChatThread[]>([]);
+    // Track active thread ID in localStorage for persistence across reloads
     const [activeThreadId, setActiveThreadId] = useLocalStorage<string | null>('active_thread_id', null);
     const [globalModelId, setGlobalModelId] = useLocalStorage<string>('global_model_preference', 'llama-3.3-70b-versatile');
     
     const { isVaultUnlocked, lockVault, unlockVault, isVaultConfigEnabled } = useVault();
-    const [isAutoSpeak, setIsAutoSpeak] = useLocalStorage<boolean>('is_auto_speak', false);
+    const [isAutoSpeak] = useLocalStorage<boolean>('is_auto_speak', false);
     
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [isLiveModeActive, setIsLiveModeActive] = useState(false);
+    const [, setIsLiveModeActive] = useState(false);
 
-    // PERSISTENT REF: To prevent race condition during thread creation
+    const { setActiveTask } = useNeuralLink();
+
     const pendingThreadId = useRef<string | null>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+
+    // Load threads from DB on mount
+    useEffect(() => {
+        const loadThreads = async () => {
+            const storedThreads = await db.getAll<ChatThread>('CHATS');
+            // Sort by updated descending
+            storedThreads.sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+            setThreads(storedThreads);
+        };
+        loadThreads();
+    }, []);
+
+    // Persist threads to DB whenever they change
+    useEffect(() => {
+        if (threads.length > 0) {
+            // Debounce or save individually? For safety, we save individually in actions, but bulk save here just in case.
+            // Actually, better to save in actions to avoid perf hit.
+            // But for simplicity in migration, we can do a bulk save for now or optimize later.
+            // Let's rely on specific actions updating the DB.
+        }
+    }, [threads]);
+
+    // Helper to update state AND DB
+    const updateThreadsAndDB = useCallback((newThreads: ChatThread[]) => {
+        setThreads(newThreads);
+        // Fire and forget save
+        db.saveAll('CHATS', newThreads).catch(e => console.warn("DB Save Failed", e));
+    }, []);
 
     const activeThread = useMemo(() => {
         const targetId = activeThreadId || pendingThreadId.current;
         return threads.find(t => t.id === targetId) || null;
     }, [threads, activeThreadId]);
 
-    // MIGRATION LOGIC: Fix Stale IDs
-    useEffect(() => {
-        if (activeThread?.model_id === 'gemini-2.5-flash') {
-            console.log("[MIGRATION] Fixing stale model ID gemini-2.5-flash -> gemini-2.0-flash-exp");
-            const newModel = 'gemini-2.0-flash-exp';
-            setThreads(prev => prev.map(t => t.id === activeThreadId ? { ...t, model_id: newModel } : t));
-            setGlobalModelId(newModel);
-        }
-    }, [activeThread, activeThreadId, setThreads, setGlobalModelId]);
-
     const activeModel = useMemo(() => {
         const id = activeThread?.model_id || globalModelId;
-        // Strict fallback to avoid 404s
         const validId = id === 'gemini-2.5-flash' ? 'gemini-2.0-flash-exp' : id;
         return MODEL_CATALOG.find(m => m.id === validId) || MODEL_CATALOG[0];
     }, [activeThread, globalModelId]);
@@ -53,15 +74,15 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
     const handleNewChat = useCallback(async (persona: 'hanisah' | 'stoic' = 'stoic') => {
         const welcome = persona === 'hanisah' 
-            ? "⚡ **HANISAH PLATINUM ONLINE.**\n\n*Halo Sayang, aku sudah siap. Apa yang bisa kubantu hari ini?*" 
-            : "🧠 **STOIC_LOGIC ACTIVE.**\n\nMari kita bedah masalah Anda dengan akal budi dan ketenangan.";
+            ? "Hanisah online. Sistem siap bantu Tuan. Apa rencana besar hari ini? Jangan yang bikin pusing ya, lagi pengen santai nih." 
+            : "🧠 **STOIC_LOGIC ACTIVE.**\n\nSelamat datang kembali. Mari kita analisis situasi Anda dengan perspektif kontrol internal.";
         
         const newId = uuidv4();
         pendingThreadId.current = newId;
 
         const newThread: ChatThread = {
             id: newId,
-            title: `NEW_SESSION_${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+            title: `SESSION_${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
             persona,
             model_id: globalModelId, 
             messages: [{ id: uuidv4(), role: 'model', text: welcome, metadata: { status: 'success', model: 'System' } }],
@@ -69,29 +90,30 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             isPinned: false
         };
         
-        setThreads(prev => [newThread, ...prev]);
+        const updatedThreads = [newThread, ...threads];
+        updateThreadsAndDB(updatedThreads);
         setActiveThreadId(newId);
-        
-        console.debug(`[CHAT_LOGIC] New session created: ${newId} (Persona: ${persona})`);
         return newThread;
-    }, [setActiveThreadId, setThreads, globalModelId]);
+    }, [setActiveThreadId, threads, globalModelId, updateThreadsAndDB]);
 
     const renameThread = useCallback(async (id: string, newTitle: string) => {
-        setThreads(prev => prev.map(t => t.id === id ? { ...t, title: newTitle, updated: new Date().toISOString() } : t));
-    }, [setThreads]);
+        const updated = threads.map(t => t.id === id ? { ...t, title: newTitle, updated: new Date().toISOString() } : t);
+        updateThreadsAndDB(updated);
+    }, [threads, updateThreadsAndDB]);
 
     const togglePinThread = useCallback(async (id: string) => {
-        setThreads(prev => prev.map(t => t.id === id ? { ...t, isPinned: !t.isPinned } : t));
-    }, [setThreads]);
+        const updated = threads.map(t => t.id === id ? { ...t, isPinned: !t.isPinned } : t);
+        updateThreadsAndDB(updated);
+    }, [threads, updateThreadsAndDB]);
 
     const stopGeneration = useCallback(() => {
         if (abortControllerRef.current) {
-            debugService.log('WARN', 'CHAT', 'ABORT', 'User stopped generation.');
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
             setIsLoading(false);
+            setActiveTask(null);
         }
-    }, []);
+    }, [setActiveTask]);
 
     const sendMessage = async (e?: React.FormEvent, attachment?: { data: string, mimeType: string }) => {
         const userMsg = input.trim();
@@ -100,47 +122,20 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         let targetThread = activeThread;
         let targetId = activeThreadId;
 
-        // DIAGNOSTIC LOG START
-        const transmissionId = uuidv4().slice(0,8);
-        console.group(`🧠 NEURAL_LINK_TRANSMISSION: ${transmissionId}`);
-        console.log("Payload:", { userMsg, attachment: !!attachment, model: activeModel.id });
-
-        // 1. ATOMIC SESSION INITIALIZATION
         if (!targetId || !targetThread) {
-            console.log("No active session. Initializing new thread...");
             targetThread = await handleNewChat(personaMode);
             targetId = targetThread.id;
         }
 
-        // 2. STATE PREPARATION
         const userMessageId = uuidv4();
         const modelMessageId = uuidv4();
         const now = new Date().toISOString();
 
-        const newUserMsg: ChatMessage = { 
-            id: userMessageId, 
-            role: 'user', 
-            text: attachment ? (userMsg || "Analyze attachment") : userMsg, 
-            metadata: { status: 'success' } 
-        };
+        const newUserMsg: ChatMessage = { id: userMessageId, role: 'user', text: attachment ? (userMsg || "Analyze attachment") : userMsg, metadata: { status: 'success' } };
+        const initialModelMsg: ChatMessage = { id: modelMessageId, role: 'model', text: '', metadata: { status: 'success', model: activeModel.name, provider: activeModel.provider } };
 
-        const initialModelMsg: ChatMessage = { 
-            id: modelMessageId, 
-            role: 'model', 
-            text: '', 
-            metadata: { 
-                status: 'success', 
-                model: activeModel.name, 
-                provider: activeModel.provider 
-            } 
-        };
-
-        // UI LOCK: Add messages immediately to lock the view into ChatWindow
-        setThreads(prev => prev.map(t => t.id === targetId ? { 
-            ...t, 
-            messages: [...t.messages, newUserMsg, initialModelMsg],
-            updated: now 
-        } : t));
+        const tempThreads = threads.map(t => t.id === targetId ? { ...t, messages: [...t.messages, newUserMsg, initialModelMsg], updated: now } : t);
+        updateThreadsAndDB(tempThreads);
 
         if (targetThread.messages.length <= 1 && userMsg) {
             renameThread(targetId, userMsg.slice(0, 30).toUpperCase());
@@ -149,140 +144,112 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         setInput('');
         setIsLoading(true);
 
-        // ABORT CONTROLLER INIT
         const controller = new AbortController();
         abortControllerRef.current = controller;
         const signal = controller.signal;
 
-        // 3. EXECUTION BLOCK
         try {
-            let noteContext = "";
-            if (isVaultUnlocked && vaultEnabled) {
-                noteContext = `[VAULT_UNLOCKED]\nNotes: ${notes.slice(0, 20).map(n => n.title).join(', ')}`;
+            // REAL VAULT GATING LOGIC
+            const vaultUnlockedFlag = isVaultUnlocked && vaultEnabled;
+            let vaultContext = "";
+            
+            if (vaultUnlockedFlag) {
+                vaultContext = `[VAULT_STATUS: DECRYPTED]\nYou have access to user nodes via 'search_notes' and 'read_note'. Current Node Count: ${notes.length}`;
+            } else {
+                vaultContext = `[VAULT_STATUS: ENCRYPTED]\nVault access is locked. Do not attempt to read notes. If the user asks about personal memory, tell them to unlock the vault via the PIN icon.`;
             }
 
             const kernel = personaMode === 'hanisah' ? HANISAH_KERNEL : STOIC_KERNEL;
             
             const stream = kernel.streamExecute(
-                userMsg || "Proceed with attachment analysis.", 
+                userMsg || "Analyze attachment", 
                 activeModel.id, 
-                noteContext, 
+                vaultContext, 
                 attachment,
-                { 
-                    signal,
-                } 
+                { signal, vaultUnlocked: vaultUnlockedFlag } 
             );
             
             let accumulatedText = "";
-            let chunkCount = 0;
 
             for await (const chunk of stream) {
-                if (signal.aborted) {
-                    throw new Error("ABORTED_BY_USER");
-                }
+                if (signal.aborted) throw new Error("ABORTED_BY_USER");
 
-                // HANDLE TEXT CHUNKS
                 if (chunk.text) {
                     accumulatedText += chunk.text;
-                    chunkCount++;
                 }
 
-                // HANDLE TOOL CALLS
                 if (chunk.functionCall) {
                     const toolName = chunk.functionCall.name;
-                    console.log(`[${transmissionId}] Tool Call Detected: ${toolName}`);
+                    setActiveTask(`ACCESSING: ${toolName.toUpperCase()}...`);
                     
-                    accumulatedText += `\n\n> ⚙️ **EXECUTING:** ${toolName.replace(/_/g, ' ').toUpperCase()}...\n`;
+                    const toolMarker = `!!TOOL_START:[${toolName}]:[${JSON.stringify(chunk.functionCall.args)}]!!`;
                     
+                    // We update state for UI feedback but don't DB save every token
+                    setThreads(prev => prev.map(t => t.id === targetId ? {
+                        ...t,
+                        messages: t.messages.map(m => m.id === modelMessageId ? { ...m, text: accumulatedText + toolMarker } : m)
+                    } : t));
+
                     try {
                         const toolResult = await executeNeuralTool(chunk.functionCall, notes, setNotes);
-                        
-                        // FIX: Better formatting for Images so they aren't stuck in blockquote
-                        // If toolResult contains image markdown, break out
-                        if (toolResult.includes('![Generated Visual]') || toolResult.trim().startsWith('![') || toolResult.trim().startsWith('\n![')) {
-                             accumulatedText += `\n\n${toolResult}\n\n`;
-                        } else {
-                             accumulatedText += `> ✅ **RESULT:** ${toolResult}\n\n`;
-                        }
+                        accumulatedText += `\n\n> ⚙️ **${toolName.toUpperCase()}**: _${toolResult.slice(0, 150)}${toolResult.length > 150 ? '...' : ''}_\n\n`;
                     } catch (toolError: any) {
-                        accumulatedText += `> ❌ **FAIL:** ${toolError.message}\n\n`;
+                        accumulatedText += `\n\n> ❌ **TOOL_FAIL**: ${toolError.message}\n\n`;
+                    } finally {
+                        setActiveTask(null);
                     }
-                    chunkCount++;
                 }
 
-                // Periodic UI update
                 setThreads(prev => prev.map(t => t.id === targetId ? {
                     ...t,
                     messages: t.messages.map(m => m.id === modelMessageId ? {
                         ...m,
                         text: accumulatedText,
-                        metadata: { 
-                            ...m.metadata, 
-                            ...(chunk.metadata || {}),
-                            groundingChunks: chunk.groundingChunks || m.metadata?.groundingChunks 
-                        }
+                        metadata: { ...m.metadata, ...(chunk.metadata || {}), groundingChunks: chunk.groundingChunks || m.metadata?.groundingChunks }
                     } : m)
                 } : t));
             }
 
-            // 4. RESPONSE VALIDATION
-            if (!accumulatedText.trim() && chunkCount === 0) {
-                console.warn(`[${transmissionId}] Zero token response detected.`);
-                throw new Error("EMPTY_AI_RESPONSE: Node returned zero tokens. Verify model capabilities.");
-            }
-
-            console.log(`Transmission success. Chunks: ${chunkCount}, Length: ${accumulatedText.length}`);
+            // Final DB Save on Completion
+            setThreads(prev => {
+                const finalThreads = prev.map(t => t.id === targetId ? {
+                    ...t,
+                    messages: t.messages.map(m => m.id === modelMessageId ? {
+                        ...m,
+                        text: accumulatedText
+                    } : m)
+                } : t);
+                db.saveAll('CHATS', finalThreads); // Background save
+                return finalThreads;
+            });
 
             if (isAutoSpeak && accumulatedText) {
                 speakWithHanisah(accumulatedText.replace(/[*#_`]/g, ''), personaMode === 'hanisah' ? 'Hanisah' : 'Fenrir');
             }
 
         } catch (err: any) {
-            console.error(`[${transmissionId}] CRITICAL_FAILURE:`, err);
+            let errorText = `⚠️ **COMMUNICATION_BREAK**: ${err.message}`;
+            if (err.message === "ABORTED_BY_USER") errorText = `\n\n> 🛑 **INTERRUPTED**`;
             
-            let errorText = `⚠️ **COMMUNICATION_BREAK**: ${err.message || "Unknown anomaly in logic stream."}\n\n_Sistem tetap aktif. Silakan coba lagi atau ganti model._`;
-            let status: 'error' | 'success' = 'error';
-
-            if (err.message === "ABORTED_BY_USER" || err.name === "AbortError") {
-                errorText = `\n\n> 🛑 **INTERRUPTED**: _Stream halted by operator._`;
-                status = 'success';
-                
-                setThreads(prev => prev.map(t => t.id === targetId ? {
-                    ...t,
-                    messages: t.messages.map(m => m.id === modelMessageId ? {
-                        ...m,
-                        text: m.text + errorText,
-                        metadata: { ...m.metadata, status: 'success' }
-                    } : m)
-                } : t));
-                return; 
-            }
-            
-            setThreads(prev => prev.map(t => t.id === targetId ? { 
+            const errThreads = threads.map(t => t.id === targetId ? { 
                 ...t, 
-                messages: t.messages.map(m => m.id === modelMessageId ? {
-                    ...m, 
-                    text: errorText, 
-                    metadata: { ...m.metadata, status: status, errorDetails: err.stack }
-                } : m)
-            } : t));
-
-            if (status === 'error') debugService.reportUIError("CHAT_STREAM_FAILURE");
+                messages: t.messages.map(m => m.id === modelMessageId ? { ...m, text: m.text + errorText } : m)
+            } : t);
+            updateThreadsAndDB(errThreads);
         } finally {
             setIsLoading(false);
+            setActiveTask(null);
             abortControllerRef.current = null;
-            console.groupEnd();
         }
     };
 
     return {
-        threads, setThreads,
+        threads, setThreads: updateThreadsAndDB, // Expose wrapped setter
         activeThread, activeThreadId, setActiveThreadId,
         isVaultSynced: isVaultUnlocked, 
         setIsVaultSynced: (val: boolean) => val ? unlockVault() : lockVault(),
         isVaultConfigEnabled: vaultEnabled,
-        isAutoSpeak, setIsAutoSpeak,
-        isLiveModeActive, setIsLiveModeActive, 
+        isLiveModeActive: false, setIsLiveModeActive, 
         input, setInput,
         isLoading,
         activeModel,

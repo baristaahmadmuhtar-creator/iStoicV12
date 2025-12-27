@@ -22,14 +22,15 @@ interface ErrorBoundaryState {
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null,
+    errorInfo: null,
+    copied: false
+  };
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-      copied: false
-    };
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -37,10 +38,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Only update state if component is mounted (standard safety)
     this.setState({ errorInfo });
     
-    // Use this.props to access viewName
     const view = this.props.viewName || 'UNKNOWN_MODULE';
     const errStr = error.message.toLowerCase();
 

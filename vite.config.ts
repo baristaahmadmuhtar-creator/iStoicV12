@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => {
         rollupOptions: {
             output: {
                 manualChunks: {
-                    vendor: ['react', 'react-dom', 'framer-motion'],
+                    vendor: ['react', 'react-dom'],
                     icons: ['lucide-react'],
                     ai: ['@google/genai', 'openai', 'groq-sdk']
                 }

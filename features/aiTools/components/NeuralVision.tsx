@@ -24,7 +24,7 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const [editResult, setEditResult] = useState<string | null>(null);
     
-    // Default to Gemini Flash (Free & Good Vision capabilities)
+    // Default to Gemini 3 Flash (Latest Vision)
     const [selectedProvider, setSelectedProvider] = useState<string>('GEMINI');
     const [selectedModel, setSelectedModel] = useState<string>('gemini-3-flash-preview');
 
@@ -239,14 +239,14 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
                 {/* Internal Close Button */}
                 <button 
                     onClick={(e) => { e.stopPropagation(); handleToggle(); }}
-                    className="absolute top-2 right-2 md:top-4 md:right-4 p-2 rounded-full hover:bg-white/5 text-neutral-400 hover:text-white transition-colors z-20"
+                    className="absolute top-2 right-2 md:top-4 md:right-4 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 text-neutral-400 hover:text-black dark:hover:text-white transition-colors z-20"
                     title="Minimize Vision"
                 >
                     <X size={20} />
                 </button>
 
                 {/* SETTINGS HEADER */}
-                <div className="flex flex-col sm:flex-row gap-4 mb-4 bg-[#0f0f11] border border-white/5 p-5 rounded-[24px] shadow-sm">
+                <div className="flex flex-col sm:flex-row gap-4 mb-4 bg-white dark:bg-[#0f0f11] border border-black/5 dark:border-white/5 p-5 rounded-[24px] shadow-sm">
                     <div className="flex-1 space-y-2">
                         <VisualModelSelector 
                             label="Vision Engine"
@@ -291,16 +291,16 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
                         ) : (
                             <div 
                                 onClick={() => fileInputRef.current?.click()} 
-                                className="flex-1 border-2 border-dashed border-white/10 rounded-[32px] flex flex-col items-center justify-center text-center group hover:border-accent/50 hover:bg-accent/5 transition-all cursor-pointer relative overflow-hidden bg-[#0a0a0b]"
+                                className="flex-1 border-2 border-dashed border-black/5 dark:border-white/10 rounded-[32px] flex flex-col items-center justify-center text-center group hover:border-accent/50 hover:bg-accent/5 transition-all cursor-pointer relative overflow-hidden bg-white dark:bg-[#0a0a0b]"
                             >
-                                <div className="w-24 h-24 rounded-[32px] bg-white/5 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg border border-white/5">
+                                <div className="w-24 h-24 rounded-[32px] bg-zinc-100 dark:bg-white/5 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg border border-black/5 dark:border-white/5">
                                     <ImageIcon size={40} className="text-neutral-400 group-hover:text-accent transition-colors" strokeWidth={1.5} />
                                 </div>
-                                <p className="text-[10px] font-black uppercase tech-mono text-neutral-400 group-hover:text-white transition-colors tracking-[0.3em] mb-8">DRAG_DROP_VISUAL_DATA</p>
+                                <p className="text-[10px] font-black uppercase tech-mono text-neutral-400 group-hover:text-black dark:group-hover:text-white transition-colors tracking-[0.3em] mb-8">DRAG_DROP_VISUAL_DATA</p>
                                 
                                 <div className="flex gap-3 relative z-10" onClick={e => e.stopPropagation()}>
-                                    <button onClick={() => fileInputRef.current?.click()} className="px-6 py-3 bg-white/10 hover:bg-white text-white hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm border border-white/5">UPLOAD</button>
-                                    <button onClick={startCamera} className="px-6 py-3 bg-white/10 hover:bg-accent text-white hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm border border-white/5"><Camera size={14}/> CAM</button>
+                                    <button onClick={() => fileInputRef.current?.click()} className="px-6 py-3 bg-zinc-100 dark:bg-white/10 hover:bg-white text-black dark:text-white hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm border border-black/5 dark:border-white/5">UPLOAD</button>
+                                    <button onClick={startCamera} className="px-6 py-3 bg-zinc-100 dark:bg-white/10 hover:bg-accent text-black dark:text-white hover:text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm border border-black/5 dark:border-white/5"><Camera size={14}/> CAM</button>
                                 </div>
                                 <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => e.target.files?.[0] && handleMediaUpload(e.target.files[0], 'ANALYZE')} accept="image/*,video/*" />
                             </div>
@@ -311,9 +311,9 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
                                 value={prompt} 
                                 onChange={(e) => setPrompt(e.target.value)} 
                                 placeholder="INSTRUCTION_SET..." 
-                                className="w-full bg-[#0a0a0b] p-6 rounded-[24px] border border-white/10 focus:border-accent/30 focus:shadow-lg focus:outline-none text-white font-mono text-xs h-32 resize-none placeholder:text-neutral-400 transition-all shadow-inner" 
+                                className="w-full bg-white dark:bg-[#0a0a0b] p-6 rounded-[24px] border border-black/5 dark:border-white/10 focus:border-accent/30 focus:shadow-lg focus:outline-none text-black dark:text-white font-mono text-xs h-32 resize-none placeholder:text-neutral-400 transition-all shadow-inner" 
                             />
-                            <button onClick={() => editInputRef.current?.click()} className="absolute bottom-4 right-4 p-2.5 bg-white/5 hover:bg-white/10 text-neutral-500 hover:text-white rounded-xl transition-all" title="Edit Mode">
+                            <button onClick={() => editInputRef.current?.click()} className="absolute bottom-4 right-4 p-2.5 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-neutral-500 hover:text-black dark:hover:text-white rounded-xl transition-all" title="Edit Mode">
                                 <Layout size={16} />
                                 <input type="file" ref={editInputRef} className="hidden" onChange={(e) => e.target.files?.[0] && handleMediaUpload(e.target.files[0], 'EDIT')} accept="image/*" />
                             </button>
@@ -321,22 +321,22 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
                     </div>
 
                     {/* RIGHT: OUTPUT ZONE */}
-                    <div className="flex-1 bg-[#0a0a0b] rounded-[32px] border border-white/5 overflow-hidden relative flex flex-col shadow-lg">
-                        <div className="h-16 bg-white/[0.02] border-b border-white/5 flex items-center px-8 justify-between shrink-0">
+                    <div className="flex-1 bg-white dark:bg-[#0a0a0b] rounded-[32px] border border-black/5 dark:border-white/5 overflow-hidden relative flex flex-col shadow-lg">
+                        <div className="h-16 bg-zinc-50 dark:bg-white/[0.02] border-b border-black/5 dark:border-white/5 flex items-center px-8 justify-between shrink-0">
                             <div className="flex items-center gap-3">
                                 <ScanEye size={20} className="text-accent" />
-                                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white">ANALYSIS_LOG</span>
+                                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-black dark:text-white">ANALYSIS_LOG</span>
                             </div>
                             <div className="flex gap-2">
                                 {(analysisResult) && (
                                     <>
-                                        <button onClick={handleSpeak} className="text-neutral-400 hover:text-accent transition-colors p-2 rounded-lg hover:bg-white/5"><Volume2 size={18}/></button>
-                                        <button onClick={handleCopy} className="text-neutral-400 hover:text-accent transition-colors p-2 rounded-lg hover:bg-white/5"><Copy size={18}/></button>
-                                        <div className="w-[1px] h-6 bg-white/10 mx-1"></div>
+                                        <button onClick={handleSpeak} className="text-neutral-400 hover:text-accent transition-colors p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5"><Volume2 size={18}/></button>
+                                        <button onClick={handleCopy} className="text-neutral-400 hover:text-accent transition-colors p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5"><Copy size={18}/></button>
+                                        <div className="w-[1px] h-6 bg-black/5 dark:bg-white/10 mx-1"></div>
                                     </>
                                 )}
                                 {(analysisResult || editResult) && (
-                                    <button onClick={() => { setAnalysisResult(null); setEditResult(null); }} className="text-neutral-400 hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-white/5"><Trash2 size={18}/></button>
+                                    <button onClick={() => { setAnalysisResult(null); setEditResult(null); }} className="text-neutral-400 hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5"><Trash2 size={18}/></button>
                                 )}
                             </div>
                         </div>
@@ -348,14 +348,14 @@ export const NeuralVision: React.FC<NeuralVisionProps> = ({ isOpen, onToggle, ic
                                     <p className="text-[10px] tech-mono font-black text-accent animate-pulse uppercase tracking-[0.3em]">{statusMsg}</p>
                                 </div>
                             ) : editResult ? (
-                                <img src={editResult} alt="Result" className="w-full h-full object-contain rounded-2xl border border-white/5" />
+                                <img src={editResult} alt="Result" className="w-full h-full object-contain rounded-2xl border border-black/5 dark:border-white/5" />
                             ) : analysisResult ? (
-                                <div className="prose dark:prose-invert prose-sm max-w-none text-neutral-300 font-medium text-[13px] leading-loose animate-slide-up">
+                                <div className="prose dark:prose-invert prose-sm max-w-none text-black dark:text-neutral-300 font-medium text-[13px] leading-loose animate-slide-up">
                                     <Markdown>{analysisResult}</Markdown>
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full opacity-30 gap-6">
-                                    <Aperture size={64} className="text-white" strokeWidth={1} />
+                                    <Aperture size={64} className="text-black dark:text-white" strokeWidth={1} />
                                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500">AWAITING_VISUAL_INPUT</p>
                                 </div>
                             )}

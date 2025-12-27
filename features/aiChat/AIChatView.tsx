@@ -241,7 +241,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
             />
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col relative z-10 w-full max-w-5xl mx-auto transition-all duration-500 pb-[120px] md:pb-32">
+            <div className="flex-1 flex flex-col relative z-10 w-full max-w-5xl mx-auto transition-all duration-500 pb-[140px] md:pb-32">
                 
                 {/* 1. COMPACT HUD HEADER */}
                 <div className="sticky top-0 z-40 w-full px-4 pt-4 pb-2 flex justify-center pointer-events-none">
@@ -385,7 +385,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                         pointer-events-none flex justify-center
                         pb-safe px-4 md:px-0 md:left-[80px]
                         transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]
-                        ${isMobileNavVisible ? 'mb-[84px] md:mb-6' : 'mb-6'}
+                        ${isMobileNavVisible ? 'mb-[calc(6rem+env(safe-area-inset-bottom))] md:mb-6' : 'mb-[calc(1.5rem+env(safe-area-inset-bottom))] md:mb-6'}
                         animate-slide-up
                     `}>
                         <div className="w-full max-w-[900px] pointer-events-auto relative">

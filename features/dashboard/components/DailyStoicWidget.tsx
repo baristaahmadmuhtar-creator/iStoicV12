@@ -43,7 +43,9 @@ export const DailyStoicWidget: React.FC = () => {
             }
             `;
 
-            const result = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview');
+            // Fix: Pass empty tools array to prevent 400 error "Tool use with function calling is unsupported"
+            // This force-disables search and mechanic tools for this specific pure-text request.
+            const result = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview', undefined, { tools: [] });
             
             // Robust JSON Extraction
             let cleanText = result.text || '';

@@ -26,8 +26,7 @@ export class OmniRaceKernel {
     'GROQ_70B': { provider: 'GROQ', model: 'llama-3.3-70b-versatile' },
     'GROQ_8B': { provider: 'GROQ', model: 'llama-3.1-8b-instant' },
     'OPENAI_MINI': { provider: 'OPENAI', model: 'gpt-4o-mini' },
-    'DEEPSEEK': { provider: 'DEEPSEEK', model: 'deepseek-chat' },
-    'MISTRAL': { provider: 'MISTRAL', model: 'mistral-small-latest' }
+    'DEEPSEEK': { provider: 'DEEPSEEK', model: 'deepseek-chat' }
   };
 
   /**
@@ -144,7 +143,7 @@ export class OmniRaceKernel {
         return geminiGenerator();
     }
 
-    // 2. OPENAI COMPATIBLE IMPLEMENTATION (Groq, DeepSeek, OpenAI, Mistral)
+    // 2. OPENAI COMPATIBLE IMPLEMENTATION (Groq, DeepSeek, OpenAI)
     const baseURLMap: Record<string, string> = {
         'GROQ': 'https://api.groq.com/openai/v1',
         'OPENAI': 'https://api.openai.com/v1',

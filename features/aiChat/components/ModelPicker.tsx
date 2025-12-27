@@ -16,7 +16,98 @@ interface ModelPickerProps {
   onSelectModel: (id: string) => void;
 }
 
-// ... existing code ...
+// --- VISUAL COMPONENTS ---
+
+const TechStatBar: React.FC<{ label: string; value: number; max: number; color: string }> = ({ label, value, max, color }) => {
+    const segments = 12;
+    const filledSegments = Math.round((value / max) * segments);
+    
+    return (
+        <div className="flex flex-col gap-1 w-full">
+            <div className="flex justify-between items-center">
+                <span className="text-[7px] font-black text-neutral-500 uppercase tracking-widest">{label}</span>
+                <span className={`text-[8px] font-mono font-bold ${color}`}>{value}/{max}</span>
+            </div>
+            <div className="flex gap-0.5 h-1.5">
+                {Array.from({ length: segments }).map((_, i) => (
+                    <div 
+                        key={i} 
+                        className={`flex-1 rounded-[1px] transition-all duration-500 ${
+                            i < filledSegments ? color.replace('text-', 'bg-') : 'bg-white/5'
+                        } ${i < filledSegments ? 'shadow-[0_0_5px_currentColor]' : ''}`}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const StatusBadge: React.FC<{ status: 'HEALTHY' | 'COOLDOWN' | 'OFFLINE'; cooldown?: number }> = ({ status, cooldown }) => {
+    if (status === 'HEALTHY') {
+        return (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/5 border border-emerald-500/20 text-emerald-500">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_currentColor]"></div>
+                <span className="text-[7px] font-black uppercase tracking-wider">ONLINE</span>
+            </div>
+        );
+    }
+    if (status === 'COOLDOWN') {
+        return (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-500/5 border border-amber-500/20 text-amber-500">
+                <AlertTriangle size={8} />
+                <span className="text-[7px] font-black uppercase tracking-wider">COOLING ({cooldown}m)</span>
+            </div>
+        );
+    }
+    return (
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/5 border border-red-500/20 text-red-500">
+            <Lock size={8} />
+            <span className="text-[7px] font-black uppercase tracking-wider">OFFLINE</span>
+        </div>
+    );
+};
+
+const ThinkingSlider: React.FC = () => {
+    const [budget, setBudget] = useState(4096);
+
+    useEffect(() => {
+        const stored = localStorage.getItem('thinking_budget');
+        if (stored) setBudget(parseInt(stored));
+    }, []);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = parseInt(e.target.value);
+        setBudget(val);
+        localStorage.setItem('thinking_budget', val.toString());
+    };
+
+    return (
+        <div className="mt-4 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+            <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center gap-2 text-indigo-400">
+                    <Brain size={14} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">THINKING_BUDGET</span>
+                </div>
+                <span className="text-[10px] font-mono font-bold text-white">{budget} TOKENS</span>
+            </div>
+            <input 
+                type="range" 
+                min="1024" 
+                max="32768" 
+                step="1024" 
+                value={budget} 
+                onChange={handleChange}
+                className="w-full h-1.5 bg-black/20 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+            />
+            <div className="flex justify-between mt-1 text-[7px] text-neutral-500 font-mono">
+                <span>1K (FAST)</span>
+                <span>32K (DEEP)</span>
+            </div>
+        </div>
+    );
+};
+
+// --- MAIN COMPONENT ---
 
 export const ModelPicker: React.FC<ModelPickerProps> = ({
   isOpen,
@@ -24,7 +115,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   activeModelId,
   onSelectModel
 }) => {
-  const [activeTab, setActiveTab] = useState<'AUTO' | 'GOOGLE' | 'PUTER' | 'OPENAI' | 'DEEPSEEK' | 'GROQ' | 'MISTRAL'>('AUTO');
+  const [activeTab, setActiveTab] = useState<'AUTO' | 'GOOGLE' | 'OPENAI' | 'DEEPSEEK' | 'GROQ' | 'MISTRAL'>('AUTO');
   const [statuses, setStatuses] = useState<ProviderStatus[]>([]);
   const { features } = useFeatures(); // Get Feature Flags
   const [visibleTabs, setVisibleTabs] = useState<string[]>([]);
@@ -45,9 +136,8 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
 
           const tabsToShow = ['AUTO'];
           if (isVisible('GEMINI')) tabsToShow.push('GOOGLE');
-          if (isVisible('PUTER')) tabsToShow.push('PUTER'); // Added
-          if (isVisible('GROQ')) tabsToShow.push('GROQ');
           if (isVisible('OPENAI')) tabsToShow.push('OPENAI');
+          if (isVisible('GROQ')) tabsToShow.push('GROQ');
           if (isVisible('DEEPSEEK')) tabsToShow.push('DEEPSEEK');
           if (isVisible('MISTRAL')) tabsToShow.push('MISTRAL');
           
@@ -92,15 +182,15 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
         border: 'border-blue-500/20',
         models: MODEL_CATALOG.filter(m => m.provider === 'GEMINI' && m.id !== 'auto-best') 
     },
-    'PUTER': { 
-        icon: <Box size={16}/>, 
-        label: 'X.AI', 
-        sub: 'PUTER',
-        desc: 'Access Grok models via Puter.js integration.',
-        accent: 'text-white',
-        bg: 'bg-white/10',
-        border: 'border-white/20',
-        models: MODEL_CATALOG.filter(m => m.provider === 'PUTER') 
+    'OPENAI': { 
+        icon: <Cpu size={16}/>, 
+        label: 'OPENAI', 
+        sub: 'GPT SERIES',
+        desc: 'Industry standard for reliability and reasoning (GPT-4o).',
+        accent: 'text-green-400',
+        bg: 'bg-green-500/10',
+        border: 'border-green-500/20',
+        models: MODEL_CATALOG.filter(m => m.provider === 'OPENAI') 
     },
     'GROQ': { 
         icon: <Zap size={16}/>, 
@@ -111,16 +201,6 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
         bg: 'bg-orange-500/10',
         border: 'border-orange-500/20',
         models: MODEL_CATALOG.filter(m => m.provider === 'GROQ') 
-    },
-    'OPENAI': { 
-        icon: <Cpu size={16}/>, 
-        label: 'OPENAI', 
-        sub: 'GPT SERIES',
-        desc: 'Industry standard for reliability and reasoning (GPT-4o).',
-        accent: 'text-green-400',
-        bg: 'bg-green-500/10',
-        border: 'border-green-500/20',
-        models: MODEL_CATALOG.filter(m => m.provider === 'OPENAI') 
     },
     'DEEPSEEK': { 
         icon: <Brain size={16}/>, 
@@ -290,46 +370,6 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   );
 };
 
-const ThinkingSlider: React.FC = () => {
-    const [budget, setBudget] = useState(4096);
-
-    useEffect(() => {
-        const stored = localStorage.getItem('thinking_budget');
-        if (stored) setBudget(parseInt(stored));
-    }, []);
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = parseInt(e.target.value);
-        setBudget(val);
-        localStorage.setItem('thinking_budget', val.toString());
-    };
-
-    return (
-        <div className="mt-4 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
-            <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-2 text-indigo-400">
-                    <Brain size={14} />
-                    <span className="text-[9px] font-black uppercase tracking-widest">THINKING_BUDGET</span>
-                </div>
-                <span className="text-[10px] font-mono font-bold text-white">{budget} TOKENS</span>
-            </div>
-            <input 
-                type="range" 
-                min="1024" 
-                max="32768" 
-                step="1024" 
-                value={budget} 
-                onChange={handleChange}
-                className="w-full h-1.5 bg-black/20 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-            />
-            <div className="flex justify-between mt-1 text-[7px] text-neutral-500 font-mono">
-                <span>1K (FAST)</span>
-                <span>32K (DEEP)</span>
-            </div>
-        </div>
-    );
-};
-
 const ArchitectureCard: React.FC<{ 
     model: any, 
     isActive: boolean, 
@@ -426,53 +466,4 @@ const ArchitectureCard: React.FC<{
         </div>
     </button>
   );
-};
-
-const TechStatBar: React.FC<{ label: string; value: number; max: number; color: string }> = ({ label, value, max, color }) => {
-    const segments = 12;
-    const filledSegments = Math.round((value / max) * segments);
-    
-    return (
-        <div className="flex flex-col gap-1 w-full">
-            <div className="flex justify-between items-center">
-                <span className="text-[7px] font-black text-neutral-500 uppercase tracking-widest">{label}</span>
-                <span className={`text-[8px] font-mono font-bold ${color}`}>{value}/{max}</span>
-            </div>
-            <div className="flex gap-0.5 h-1.5">
-                {Array.from({ length: segments }).map((_, i) => (
-                    <div 
-                        key={i} 
-                        className={`flex-1 rounded-[1px] transition-all duration-500 ${
-                            i < filledSegments ? color.replace('text-', 'bg-') : 'bg-white/5'
-                        } ${i < filledSegments ? 'shadow-[0_0_5px_currentColor]' : ''}`}
-                    />
-                ))}
-            </div>
-        </div>
-    );
-};
-
-const StatusBadge: React.FC<{ status: 'HEALTHY' | 'COOLDOWN' | 'OFFLINE'; cooldown?: number }> = ({ status, cooldown }) => {
-    if (status === 'HEALTHY') {
-        return (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/5 border border-emerald-500/20 text-emerald-500">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_currentColor]"></div>
-                <span className="text-[7px] font-black uppercase tracking-wider">ONLINE</span>
-            </div>
-        );
-    }
-    if (status === 'COOLDOWN') {
-        return (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-500/5 border border-amber-500/20 text-amber-500">
-                <AlertTriangle size={8} />
-                <span className="text-[7px] font-black uppercase tracking-wider">COOLING ({cooldown}m)</span>
-            </div>
-        );
-    }
-    return (
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/5 border border-red-500/20 text-red-500">
-            <Lock size={8} />
-            <span className="text-[7px] font-black uppercase tracking-wider">OFFLINE</span>
-        </div>
-    );
 };

@@ -31,7 +31,7 @@ interface ToolConfig {
     visual: boolean;
 }
 
-// ... existing helper components (CustomToggle, OptionButton, SettingsSection, SettingsItem, ToolRow, PromptEditorModal, ProviderToggleRow) ...
+// --- HELPER COMPONENTS ---
 
 const CustomToggle: React.FC<{ checked: boolean; onChange: () => void }> = ({ checked, onChange }) => (
     <button 
@@ -165,11 +165,13 @@ const ProviderToggleRow: React.FC<{
     );
 };
 
+// --- MAIN VIEW ---
+
 const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const { lockVault } = useVault();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // ... state ...
+    // Config State - REACTIVE
     const [persistedLanguage, setPersistedLanguage] = useLocalStorage<LanguageCode>('app_language', 'id');
     const [persistedTheme, setPersistedTheme] = useLocalStorage<string>('app_theme', 'cyan');
     const [persistedColorScheme, setPersistedColorScheme] = useLocalStorage<'system' | 'light' | 'dark'>('app_color_scheme', 'system');
@@ -252,7 +254,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
             setShowPinInput(false);
         }
 
+        // Simulate System Reconfiguration delay for UX
         setTimeout(() => {
+            // Updating these triggers the custom event in useLocalStorage, which updates App.tsx and other views INSTANTLY.
             setPersistedLanguage(language);
             setPersistedTheme(theme);
             setPersistedColorScheme(colorScheme);
@@ -263,9 +267,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
             setUserPersona(localPersona);
             setPersistedVisibility(localVisibility);
             
+            // CLEANUP: Remove any legacy stored keys for security
             localStorage.removeItem('user_api_keys'); 
             
-            KEY_MANAGER.refreshPools(); 
+            KEY_MANAGER.refreshPools(); // Force Hydra refresh to pick up new visibility immediately
 
             if ((!hanisahTools.vault && persistedHanisahTools.vault) || (!stoicTools.vault && persistedStoicTools.vault)) {
                 lockVault();
@@ -277,7 +282,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
         }, 1500);
     };
 
-    // ... handleGenerateBio, handleBackup, handleRestore, handleTestHanisahVoice, openKernelStream ...
     const handleGenerateBio = async () => {
         if (!localPersona.nama.trim()) {
             alert("Please enter a name/codename first.");
@@ -514,7 +518,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
 
                         {/* IDENTITY MATRIX */}
                         <SettingsSection title={t.identity_title || "IDENTITY MATRIX"} icon={<UserCheck size={18} />} delay={150}>
-                            {/* ... same as before ... */}
                             <div className="p-2 space-y-2">
                                 <div className="p-6 bg-white dark:bg-[#121214] rounded-[24px] border border-black/5 dark:border-white/5 space-y-5">
                                     <div className="flex items-center gap-4 mb-2">
@@ -528,6 +531,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
                                             <p className="text-[9px] text-neutral-500 font-mono">ID: {new Date().getFullYear()}-OP-01</p>
                                         </div>
                                     </div>
+                                    
                                     <div className="space-y-2">
                                         <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest pl-1">{t.user_name || "USER NAME"}</label>
                                         <input type="text" value={localPersona.nama} onChange={(e) => setLocalPersona({...localPersona, nama: e.target.value})} className="w-full bg-zinc-100 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-xl px-4 py-3 text-base md:text-sm font-bold text-black dark:text-white focus:outline-none focus:border-accent/50 transition-all"/>
@@ -535,7 +539,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center">
                                             <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest pl-1">{t.user_bio || "BIO CONTEXT"}</label>
-                                            <button onClick={handleGenerateBio} disabled={isGeneratingBio} className="text-[9px] font-black uppercase tracking-widest text-accent flex items-center gap-1 hover:underline disabled:opacity-50 active:scale-95 touch-manipulation">
+                                            <button 
+                                                onClick={handleGenerateBio} 
+                                                disabled={isGeneratingBio}
+                                                className="text-[9px] font-black uppercase tracking-widest text-accent flex items-center gap-1 hover:underline disabled:opacity-50 active:scale-95 touch-manipulation"
+                                            >
                                                 {isGeneratingBio ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} AI_AUTO_GEN
                                             </button>
                                         </div>
@@ -553,8 +561,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
                                         <span>MANAGE UPLINK AVAILABILITY</span>
                                         <span className="opacity-50">KEYS READ FROM ENV</span>
                                     </p>
-                                    <ProviderToggleRow provider="GEMINI" isEnabled={isProviderEnabled('GEMINI')} hasKey={hasProviderKey('GEMINI')} keyCount={getProviderKeyCount('GEMINI')} onToggle={() => toggleProvider('GEMINI')} />
-                                    <ProviderToggleRow provider="PUTER" isEnabled={isProviderEnabled('PUTER')} hasKey={hasProviderKey('PUTER')} keyCount={getProviderKeyCount('PUTER')} onToggle={() => toggleProvider('PUTER')} />
+                                    <ProviderToggleRow 
+                                        provider="GEMINI" 
+                                        isEnabled={isProviderEnabled('GEMINI')} 
+                                        hasKey={hasProviderKey('GEMINI')} 
+                                        keyCount={getProviderKeyCount('GEMINI')}
+                                        onToggle={() => toggleProvider('GEMINI')} 
+                                    />
                                     <ProviderToggleRow provider="GROQ" isEnabled={isProviderEnabled('GROQ')} hasKey={hasProviderKey('GROQ')} keyCount={getProviderKeyCount('GROQ')} onToggle={() => toggleProvider('GROQ')} />
                                     <ProviderToggleRow provider="OPENAI" isEnabled={isProviderEnabled('OPENAI')} hasKey={hasProviderKey('OPENAI')} keyCount={getProviderKeyCount('OPENAI')} onToggle={() => toggleProvider('OPENAI')} />
                                     <ProviderToggleRow provider="DEEPSEEK" isEnabled={isProviderEnabled('DEEPSEEK')} hasKey={hasProviderKey('DEEPSEEK')} keyCount={getProviderKeyCount('DEEPSEEK')} onToggle={() => toggleProvider('DEEPSEEK')} />
@@ -566,8 +579,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
                     </div>
 
                     <div className="space-y-12">
-                        {/* ... Right Column (Cognitive, Data, Developer) - same as before ... */}
+                        {/* ... Right Column (Cognitive, Data, Developer) ... */}
                         <SettingsSection title="COGNITIVE_MAPPING" icon={<Cpu size={18} />} delay={250}>
+                            {/* ... Hanisah & Stoic Config ... */}
                             <div className="space-y-6 p-2">
                                 {/* HANISAH CONFIG */}
                                 <div className="p-6 md:p-8 bg-gradient-to-br from-orange-600/10 to-transparent rounded-[32px] border border-orange-500/20 space-y-6 group relative overflow-hidden shadow-lg shadow-orange-900/5 transition-all hover:border-orange-500/40">

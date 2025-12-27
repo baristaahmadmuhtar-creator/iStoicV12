@@ -42,27 +42,25 @@ class StoicLogicKernel {
         effectiveModelId = 'llama-3.3-70b-versatile'; 
     }
 
-    // Stoic Retry Logic: Try requested model, then fallback to Gemini Flash if it fails
-    // This helps mitigate 429 errors on Pro/Flash-8b by falling back to the standard, high-quota Flash model.
-    // Updated fallback to gemini-1.5-flash as it is most stable
-    const plan = [effectiveModelId, 'gemini-1.5-flash'];
+    // --- ENHANCED FALLBACK STRATEGY ---
+    // Plan: Try Requested -> Gemini 1.5 Flash -> Groq Llama 3.3 -> OpenAI
+    const plan = [effectiveModelId, 'gemini-1.5-flash', 'llama-3.3-70b-versatile', 'gpt-4o-mini'];
     
-    // Remove duplicates if effectiveModelId IS Flash
-    if (effectiveModelId === 'gemini-1.5-flash') plan.pop();
+    // Remove duplicates
+    const uniquePlan = [...new Set(plan)];
 
-    for (const currentModelId of plan) {
+    for (const currentModelId of uniquePlan) {
         if (signal?.aborted) break;
 
         let selectedModel = MODEL_CATALOG.find(m => m.id === currentModelId) || MODEL_CATALOG.find(m => m.id === 'gemini-1.5-flash');
         
-        if (!selectedModel) {
-             selectedModel = { id: 'gemini-1.5-flash', name: 'Gemini Flash (Fallback)', category: 'GEMINI_2_5', provider: 'GEMINI', description: 'Fallback', specs: { context: '1M', speed: 'INSTANT', intelligence: 9 } };
-        }
+        if (!selectedModel) continue;
 
         const key = KEY_MANAGER.getKey(selectedModel.provider);
         const startTime = Date.now();
 
         if (!key) {
+            // If we are out of keys for this provider, verify we haven't exhausted the plan
             continue;
         }
 
@@ -149,12 +147,19 @@ class StoicLogicKernel {
           KEY_MANAGER.reportFailure(selectedModel.provider, err);
           
           // If this was the last fallback in the plan, yield error
-          if (currentModelId === plan[plan.length - 1]) {
+          if (currentModelId === uniquePlan[uniquePlan.length - 1]) {
              const isRateLimit = JSON.stringify(err).includes('429');
-             const errMsg = isRateLimit ? "System capacity limits reached. Please wait." : "Logical flow disrupted.";
+             const errMsg = isRateLimit ? "System capacity limits reached. All logical nodes failed." : "Logical flow disrupted.";
              yield { text: `\n\n> *${errMsg}*`, metadata: { status: 'error' } };
           } else {
-             yield { text: `\n\n> *Re-aligning logic stream...*\n\n` };
+             // CLEANFALLBACK: Yield metadata for visual bubble instead of raw text
+             const nextModelId = uniquePlan[uniquePlan.indexOf(currentModelId) + 1];
+             yield { 
+                 metadata: { 
+                     systemStatus: `Rerouting logic stream to ${nextModelId}...`, 
+                     isRerouting: true 
+                 } 
+             };
           }
         }
     }

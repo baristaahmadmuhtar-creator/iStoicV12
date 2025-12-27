@@ -6,7 +6,7 @@ import {
     Volume2, Mic2, Moon, Sun, Monitor, X, Check, HelpCircle, RefreshCw,
     Terminal, UserCheck, Sparkles, MessageSquare, ChevronRight, Activity, Zap, Globe, User, UserRound, Play, Info,
     Flame, Brain, DatabaseZap, Image as ImageIcon, HardDrive, Download, Upload, FileJson, Edit3, Undo2, Loader2,
-    Network, Key, Eye, EyeOff
+    Network, Key, Eye, EyeOff, ToggleLeft, ToggleRight, Power
 } from 'lucide-react';
 import { THEME_COLORS } from '../../App';
 import { speakWithHanisah } from '../../services/elevenLabsService';
@@ -163,36 +163,52 @@ const ToolRow: React.FC<{
     </button>
 );
 
-const ApiKeyRow: React.FC<{ 
+const ProviderConfigRow: React.FC<{ 
     provider: string; 
     value: string; 
-    onChange: (val: string) => void; 
-}> = ({ provider, value, onChange }) => {
-    const [show, setShow] = useState(false);
+    isEnabled: boolean;
+    onChangeValue: (val: string) => void;
+    onToggle: () => void;
+}> = ({ provider, value, isEnabled, onChangeValue, onToggle }) => {
+    const [showKey, setShowKey] = useState(false);
     return (
-        <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-[#0f0f11] border border-black/5 dark:border-white/5 shadow-sm group hover:border-accent/30 transition-all">
-            <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-white/5 flex items-center justify-center text-neutral-400 group-hover:text-accent transition-colors">
-                    <Key size={14} />
-                </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500 group-hover:text-white transition-colors">{provider}</span>
-            </div>
-            <div className="flex items-center gap-2 bg-zinc-100 dark:bg-white/5 rounded-lg px-2 border border-black/5 dark:border-white/5 group-hover:border-accent/20 transition-all">
-                <input 
-                    type={show ? "text" : "password"} 
-                    value={value} 
-                    onChange={(e) => onChange(e.target.value)} 
-                    placeholder="ENTER_API_KEY"
-                    className="bg-transparent text-right text-[10px] font-mono text-accent focus:outline-none w-32 md:w-48 placeholder:text-neutral-600 py-2"
-                    autoComplete="off"
-                />
+        <div className={`flex flex-col sm:flex-row items-center justify-between p-4 rounded-xl border transition-all ${isEnabled ? 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/5 shadow-sm' : 'bg-white/50 dark:bg-white/[0.02] border-transparent opacity-60'}`}>
+            <div className="flex items-center gap-3 w-full sm:w-auto mb-3 sm:mb-0">
                 <button 
-                    onClick={() => setShow(!show)}
-                    className="p-1 hover:text-white text-neutral-500 transition-colors"
-                    type="button"
+                    onClick={onToggle}
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isEnabled ? 'bg-emerald-500/10 text-emerald-500 shadow-inner' : 'bg-zinc-200 dark:bg-white/5 text-neutral-400'}`}
                 >
-                    {show ? <EyeOff size={12} /> : <Eye size={12} />}
+                    <Power size={16} />
                 </button>
+                <div className="flex flex-col">
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${isEnabled ? 'text-black dark:text-white' : 'text-neutral-500'}`}>{provider}</span>
+                    <span className="text-[8px] font-mono text-neutral-400">{isEnabled ? 'ACTIVE' : 'DISABLED'}</span>
+                </div>
+            </div>
+            
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className={`flex items-center flex-1 bg-zinc-100 dark:bg-white/5 rounded-xl px-3 border border-black/5 dark:border-white/5 transition-all focus-within:border-accent/50 ${!isEnabled && 'opacity-50 pointer-events-none'}`}>
+                    <Key size={12} className="text-neutral-400 mr-2" />
+                    <input 
+                        type={showKey ? "text" : "password"} 
+                        value={value} 
+                        onChange={(e) => onChangeValue(e.target.value)} 
+                        placeholder="API_KEY_STRING"
+                        className="bg-transparent text-[10px] font-mono text-accent focus:outline-none w-full sm:w-48 py-3 placeholder:text-neutral-600"
+                        autoComplete="off"
+                        disabled={!isEnabled}
+                    />
+                    <button 
+                        onClick={() => setShowKey(!showKey)}
+                        className="ml-2 text-neutral-500 hover:text-white transition-colors"
+                        type="button"
+                    >
+                        {showKey ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                </div>
+                <div className={`text-[10px] font-black uppercase tracking-widest px-2 ${isEnabled ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {isEnabled ? 'ON' : 'OFF'}
+                </div>
             </div>
         </div>
     );
@@ -226,6 +242,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     
     // API Keys Configuration
     const [persistedApiKeys, setPersistedApiKeys] = useLocalStorage<Record<string, string>>('user_api_keys', {});
+    const [persistedVisibility, setPersistedVisibility] = useLocalStorage<Record<string, boolean>>('provider_visibility', {});
 
     // Local UI State (For buffering changes before "Saving")
     const [language, setLanguage] = useState(persistedLanguage);
@@ -237,6 +254,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const [stoicTools, setStoicTools] = useState(persistedStoicTools);
     const [localPersona, setLocalPersona] = useState(userPersona);
     const [localApiKeys, setLocalApiKeys] = useState(persistedApiKeys);
+    const [localVisibility, setLocalVisibility] = useState(persistedVisibility);
 
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
@@ -267,8 +285,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
             setPersistedStoicTools(stoicTools);
             setUserPersona(localPersona);
             setPersistedApiKeys(localApiKeys);
+            setPersistedVisibility(localVisibility);
             
-            KEY_MANAGER.refreshPools(); // Force Hydra refresh to pick up new user keys immediately
+            KEY_MANAGER.refreshPools(); // Force Hydra refresh to pick up new user keys and visibility immediately
 
             if ((!hanisahTools.vault && persistedHanisahTools.vault) || (!stoicTools.vault && persistedStoicTools.vault)) {
                 lockVault();
@@ -337,6 +356,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const updateApiKey = (provider: string, val: string) => {
         setLocalApiKeys(prev => ({ ...prev, [provider]: val }));
     };
+
+    const toggleProvider = (provider: string) => {
+        setLocalVisibility(prev => ({
+            ...prev,
+            [provider]: prev[provider] === undefined ? false : !prev[provider]
+        }));
+    };
+
+    // Helper to get enabled state (defaults to true if undefined)
+    const isProviderEnabled = (p: string) => localVisibility[p] !== false;
 
     return (
         <div className="min-h-full flex flex-col p-4 md:p-12 lg:p-16 pb-40 animate-fade-in overflow-x-hidden bg-noise">
@@ -441,19 +470,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
                             </div>
                         </SettingsSection>
 
-                        {/* API KEYS / NEURAL UPLINKS */}
-                        <SettingsSection title="NEURAL_UPLINKS" icon={<Network size={18} />}>
+                        {/* API KEYS / NEURAL UPLINKS MATRIX */}
+                        <SettingsSection title="PROVIDER_MATRIX" icon={<Network size={18} />}>
                             <div className="p-2 space-y-2">
                                 <div className="p-4 bg-zinc-50 dark:bg-[#0f0f11] rounded-[24px] border border-black/5 dark:border-white/5 space-y-3">
                                     <p className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest px-1 pb-1">
-                                        USER_OVERRIDE_KEYS (LOCAL_STORAGE)
+                                        CONFIGURE UPLINKS & VISIBILITY (LOCAL_STORAGE)
                                     </p>
-                                    <ApiKeyRow provider="GEMINI" value={localApiKeys['GEMINI'] || ''} onChange={(v) => updateApiKey('GEMINI', v)} />
-                                    <ApiKeyRow provider="GROQ" value={localApiKeys['GROQ'] || ''} onChange={(v) => updateApiKey('GROQ', v)} />
-                                    <ApiKeyRow provider="OPENAI" value={localApiKeys['OPENAI'] || ''} onChange={(v) => updateApiKey('OPENAI', v)} />
-                                    <ApiKeyRow provider="DEEPSEEK" value={localApiKeys['DEEPSEEK'] || ''} onChange={(v) => updateApiKey('DEEPSEEK', v)} />
-                                    <ApiKeyRow provider="MISTRAL" value={localApiKeys['MISTRAL'] || ''} onChange={(v) => updateApiKey('MISTRAL', v)} />
-                                    <ApiKeyRow provider="ELEVENLABS" value={localApiKeys['ELEVENLABS'] || ''} onChange={(v) => updateApiKey('ELEVENLABS', v)} />
+                                    <ProviderConfigRow provider="GEMINI" value={localApiKeys['GEMINI'] || ''} isEnabled={isProviderEnabled('GEMINI')} onChangeValue={(v) => updateApiKey('GEMINI', v)} onToggle={() => toggleProvider('GEMINI')} />
+                                    <ProviderConfigRow provider="GROQ" value={localApiKeys['GROQ'] || ''} isEnabled={isProviderEnabled('GROQ')} onChangeValue={(v) => updateApiKey('GROQ', v)} onToggle={() => toggleProvider('GROQ')} />
+                                    <ProviderConfigRow provider="OPENAI" value={localApiKeys['OPENAI'] || ''} isEnabled={isProviderEnabled('OPENAI')} onChangeValue={(v) => updateApiKey('OPENAI', v)} onToggle={() => toggleProvider('OPENAI')} />
+                                    <ProviderConfigRow provider="DEEPSEEK" value={localApiKeys['DEEPSEEK'] || ''} isEnabled={isProviderEnabled('DEEPSEEK')} onChangeValue={(v) => updateApiKey('DEEPSEEK', v)} onToggle={() => toggleProvider('DEEPSEEK')} />
+                                    <ProviderConfigRow provider="MISTRAL" value={localApiKeys['MISTRAL'] || ''} isEnabled={isProviderEnabled('MISTRAL')} onChangeValue={(v) => updateApiKey('MISTRAL', v)} onToggle={() => toggleProvider('MISTRAL')} />
+                                    <ProviderConfigRow provider="ELEVENLABS" value={localApiKeys['ELEVENLABS'] || ''} isEnabled={isProviderEnabled('ELEVENLABS')} onChangeValue={(v) => updateApiKey('ELEVENLABS', v)} onToggle={() => toggleProvider('ELEVENLABS')} />
                                 </div>
                             </div>
                         </SettingsSection>

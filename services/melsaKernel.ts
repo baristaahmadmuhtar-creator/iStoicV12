@@ -6,8 +6,9 @@ import { noteTools, visualTools, searchTools, universalTools } from "./geminiSer
 import { GLOBAL_VAULT, Provider } from "./hydraVault"; 
 import { mechanicTools } from "../features/mechanic/mechanicTools";
 import { streamOpenAICompatible } from "./providerEngine";
-import { runMelsaRace } from "./melsaOmni"; // NEW IMPORT
+import { runHanisahRace } from "./melsaOmni"; // NEW IMPORT
 import { type ModelMetadata } from "../types";
+import { KEY_MANAGER } from "./geminiService"; // Ensure Key Manager is used
 
 export const MODEL_CATALOG: ModelMetadata[] = [
   // --- GEMINI (GOOGLE) ---
@@ -197,24 +198,24 @@ export class HanisahKernel {
         const isEnabled = this.isOmniRaceEnabled();
         
         if (!isEnabled) {
-            yield { text: `\n\n> 🛑 *Omni-Race disabled (Check Kernel Protocols). Switching to Gemini Flash...*\n\n` };
+            yield { metadata: { systemStatus: "Omni-Race Disabled. Switching to Gemini...", isRerouting: true } };
             currentModelId = 'gemini-2.0-flash-exp'; 
         } else {
-            // Melsa Engine: Non-Streaming Logic wrapped in Generator
+            // Hanisah Engine: Non-Streaming Logic wrapped in Generator
             try {
-                // Determine image data format for Melsa
-                const melsaImg = imageData ? { data: imageData.data, mimeType: imageData.mimeType } : null;
+                // Determine image data format for Hanisah
+                const hanisahImg = imageData ? { data: imageData.data, mimeType: imageData.mimeType } : null;
                 
-                // Note: runMelsaRace currently doesn't support AbortSignal cancellation mid-flight in the simplified wrapper
+                // Note: runHanisahRace currently doesn't support AbortSignal cancellation mid-flight in the simplified wrapper
                 // but we can check signal before yielding result
-                const response = await runMelsaRace(msg, melsaImg);
+                const response = await runHanisahRace(msg, hanisahImg);
                 if (signal?.aborted) throw new Error("ABORTED");
                 yield { text: response };
                 this.updateHistory(msg, response);
                 return;
             } catch (e: any) {
                 if (e.message === "ABORTED" || signal?.aborted) return;
-                yield { text: `\n\n> ⚠️ *Hanisah Engine Error: ${e.message}*` };
+                yield { metadata: { systemStatus: `Omni-Engine Failed. Switching to Standard...`, isRerouting: true } };
                 currentModelId = 'gemini-2.0-flash-exp'; // Fallback
             }
         }
@@ -231,17 +232,25 @@ export class HanisahKernel {
         const provider = model.provider;
         const key = GLOBAL_VAULT.getKey(provider as Provider);
 
+        // --- KEY CHECK & FAST SWITCH ---
         if (!key) {
-            // If keys are missing or exhausted, fallback to Llama (Groq) which is usually reliable
-            const fallbackModel = 'llama-3.3-70b-versatile';
-            if (currentModelId !== fallbackModel) {
-                yield { text: `\n\n> ⚠️ *Node ${provider} offline / No Key. Switching to ${fallbackModel}...*` };
-                currentModelId = fallbackModel;
-                continue;
-            } else {
-                yield { text: `\n\n> ⛔ *CRITICAL: No keys available for fallback.*` };
-                break;
+            debugService.log('WARN', 'KERNEL', 'NO_KEY', `No keys for ${provider}. Attempting fallback switch.`);
+            
+            // Intelligence Switch: If Gemini is dead, switch to Groq (Llama) or OpenAI
+            if (provider === 'GEMINI') {
+                if (KEY_MANAGER.getKey('GROQ')) {
+                    currentModelId = 'llama-3.3-70b-versatile';
+                    yield { metadata: { systemStatus: "Gemini Exhausted. Rerouting to Groq LPU...", isRerouting: true } };
+                    continue;
+                } else if (KEY_MANAGER.getKey('OPENAI')) {
+                    currentModelId = 'gpt-4o-mini';
+                    yield { metadata: { systemStatus: "Gemini Exhausted. Rerouting to OpenAI...", isRerouting: true } };
+                    continue;
+                }
             }
+            
+            yield { text: `\n\n> ⛔ *CRITICAL: No keys available for ${provider} or fallbacks.*` };
+            break;
         }
 
         try {
@@ -260,8 +269,6 @@ export class HanisahKernel {
                     { role: 'user', parts: imageData ? [{ inlineData: imageData }, { text: msg }] : [{ text: msg }] }
                 ];
 
-                // Note: generateContentStream returns a promise that resolves to an iterable.
-                // We cannot pass abort signal directly to config, but breaking the loop effectively stops it.
                 const stream = await ai.models.generateContentStream({ model: model.id, contents, config });
                 let fullText = "";
                 for await (const chunk of stream) {
@@ -294,28 +301,41 @@ export class HanisahKernel {
             const isQuota = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('limit');
             const isBalance = errStr.includes('402'); // DeepSeek/OpenAI Insufficient Balance
             const isBadModel = errStr.includes('404') || errStr.includes('not found') || errStr.includes('400');
+            const isServerErr = errStr.includes('500') || errStr.includes('503') || errStr.includes('overloaded');
 
-            if (isQuota || isBalance || isBadModel) {
-                // Primary Fallback: Llama 3.3 (Groq) since it's robust
-                const fallbackLlama = 'llama-3.3-70b-versatile';
-                const fallbackMistral = 'mistral-large-latest';
+            if (isQuota || isBalance || isBadModel || isServerErr) {
+                // --- ROBUST FALLBACK STRATEGY ---
+                // If primary choice fails, we MUST try another provider, not just retry the same one.
                 
-                // If current model is already Llama, switch to Mistral
-                if (currentModelId === fallbackLlama) {
-                     yield { text: `\n\n> 🔄 *Llama juga gagal. Mengalihkan ke Mistral...*` };
-                     currentModelId = fallbackMistral;
-                     continue;
+                if (provider === 'GEMINI') {
+                    // Fallback Chain: Gemini -> Groq -> OpenAI -> Mistral
+                    if (KEY_MANAGER.getKey('GROQ')) {
+                        yield { metadata: { systemStatus: "Gemini Stalled. Rerouting to Groq LPU...", isRerouting: true } };
+                        currentModelId = 'llama-3.3-70b-versatile';
+                        continue;
+                    } 
+                    if (KEY_MANAGER.getKey('OPENAI')) {
+                        yield { metadata: { systemStatus: "Gemini Stalled. Rerouting to OpenAI...", isRerouting: true } };
+                        currentModelId = 'gpt-4o-mini';
+                        continue;
+                    }
+                } else if (provider === 'GROQ') {
+                    // If Groq fails, try Gemini (if valid) or OpenAI
+                    if (KEY_MANAGER.getKey('GEMINI') && currentModelId !== 'gemini-2.0-flash-exp') {
+                        yield { metadata: { systemStatus: "Groq Stalled. Rerouting to Gemini...", isRerouting: true } };
+                        currentModelId = 'gemini-1.5-flash';
+                        continue;
+                    }
                 }
 
-                // If current model is already Mistral (and it failed), then we are done
+                // Generic Fallback within same provider if no other options or simple error
+                const fallbackMistral = 'mistral-large-latest';
+                
                 if (currentModelId === fallbackMistral) {
                      yield { text: `\n\n> ⛔ *Jalur Darurat (${fallbackMistral}) juga gagal: ${err.message || 'Unknown Error'}*` };
                      throw err; 
                 }
                 
-                // Otherwise, it was the original model or something else, so switch to Llama
-                yield { text: `\n\n> 🔄 *Jalur ${model.name} terganggu (${isBadModel ? 'Error 400/404' : isBalance ? 'Saldo Habis' : 'Quota'}). Mengalihkan ke ${fallbackLlama}...*` };
-                currentModelId = fallbackLlama;
                 continue;
             }
             yield { text: `\n\n> ⚠️ *Connection Error:* ${err.message}` };

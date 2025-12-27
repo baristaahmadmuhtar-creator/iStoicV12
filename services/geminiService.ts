@@ -56,11 +56,37 @@ export const KEY_MANAGER = new KeyManagerProxy();
 
 // --- UTILITIES ---
 
-export async function generateImage(prompt: string): Promise<string | null> {
-  const key = KEY_MANAGER.getKey('GEMINI');
-  if (!key) return null;
-  const ai = new GoogleGenAI({ apiKey: key });
-  try {
+// 1. OPENAI GENERATOR
+async function generateOpenAIImage(prompt: string, apiKey: string): Promise<string | null> {
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model: "dall-e-3",
+            prompt: prompt,
+            n: 1,
+            size: "1024x1024",
+            response_format: "b64_json",
+            quality: "standard",
+            style: "vivid" 
+        })
+    });
+
+    if (response.ok) {
+        const json = await response.json();
+        if (json.data?.[0]?.b64_json) {
+            return `data:image/png;base64,${json.data[0].b64_json}`;
+        }
+    }
+    throw new Error(await response.text());
+}
+
+// 2. GEMINI GENERATOR
+async function generateGeminiImage(prompt: string, apiKey: string): Promise<string | null> {
+    const ai = new GoogleGenAI({ apiKey });
     // Using gemini-2.0-flash-exp which handles image generation prompts natively.
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash-exp',
@@ -74,9 +100,48 @@ export async function generateImage(prompt: string): Promise<string | null> {
             }
         }
     }
-  } catch (e) {
-    GLOBAL_VAULT.reportFailure('GEMINI', key, e);
+    return null;
+}
+
+export async function generateImage(prompt: string): Promise<string | null> {
+  const openAiKey = KEY_MANAGER.getKey('OPENAI');
+  const geminiKey = KEY_MANAGER.getKey('GEMINI');
+
+  // Strategy: Try OpenAI -> Fallback Gemini (Higher quality first)
+  // BUT if OpenAI key is missing, go straight to Gemini
+  
+  if (openAiKey) {
+      try {
+          const result = await generateOpenAIImage(prompt, openAiKey);
+          if (result) {
+              KEY_MANAGER.reportSuccess('OPENAI');
+              return result;
+          }
+      } catch (e) {
+          debugService.log('WARN', 'IMG_GEN', 'OPENAI_FAIL', 'DALL-E 3 failed, trying Gemini fallback.');
+          GLOBAL_VAULT.reportFailure('OPENAI', openAiKey, e);
+      }
   }
+
+  if (geminiKey) {
+      try {
+          const result = await generateGeminiImage(prompt, geminiKey);
+          if (result) {
+              KEY_MANAGER.reportSuccess('GEMINI');
+              return result;
+          }
+      } catch (e) {
+          debugService.log('ERROR', 'IMG_GEN', 'GEMINI_FAIL', 'Imagen 3 failed.');
+          GLOBAL_VAULT.reportFailure('GEMINI', geminiKey, e);
+      }
+  }
+
+  // Last Resort: If User wanted Gemini originally (via UI) but it failed, maybe try OpenAI if we haven't already
+  if (!openAiKey && geminiKey) {
+      // Already tried Gemini.
+      return null;
+  }
+  
   return null;
 }
 
@@ -217,11 +282,27 @@ const readNoteTool: FunctionDeclaration = {
     }
 };
 
+// --- VISUAL GENERATION TOOL ---
+const generateVisualTool: FunctionDeclaration = {
+    name: 'generate_visual',
+    description: 'Generate an image based on a detailed text prompt. Use this when the user asks to see, draw, or generate a picture.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            prompt: { 
+                type: Type.STRING, 
+                description: 'A highly detailed visual description of the image to generate. Include style, lighting, and resolution keywords (e.g., 8k, photorealistic).' 
+            }
+        },
+        required: ['prompt']
+    }
+};
+
 export const noteTools = { functionDeclarations: [manageNoteTool, searchNotesTool, readNoteTool] };
-export const visualTools = null; 
+export const visualTools = { functionDeclarations: [generateVisualTool] }; 
 export const searchTools = { googleSearch: {} }; 
 
 // Universal tools for Non-Gemini providers
 export const universalTools = {
-    functionDeclarations: [manageNoteTool, searchNotesTool, readNoteTool]
+    functionDeclarations: [manageNoteTool, searchNotesTool, readNoteTool, generateVisualTool]
 };

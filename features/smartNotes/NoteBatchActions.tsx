@@ -98,7 +98,7 @@ export const NoteBatchActions: React.FC<NoteBatchActionsProps> = ({
                 <button 
                     onClick={(e) => { e.stopPropagation(); onCancel(); }}
                     type="button"
-                    className="w-8 h-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-black dark:hover:text-white transition-all ml-1"
+                    className="w-8 h-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-black dark:hover:text-white transition-all ml-1 active:scale-90"
                 >
                     <X size={14} />
                 </button>
@@ -116,8 +116,8 @@ const ActionButton: React.FC<{ icon: React.ReactNode, label: string, onClick: ()
             disabled 
             ? 'opacity-30 cursor-not-allowed text-neutral-500'
             : variant === 'danger' 
-                ? 'text-red-500 bg-red-500/10 hover:bg-red-500 hover:text-white' 
-                : 'text-neutral-500 hover:text-accent hover:bg-accent/10'
+                ? 'text-red-500 bg-red-500/10 hover:bg-red-500 hover:text-white hover:shadow-lg hover:shadow-red-500/20' 
+                : 'text-neutral-500 hover:text-accent hover:bg-accent/10 hover:shadow-lg hover:shadow-accent/10'
         }`}
         title={label}
     >

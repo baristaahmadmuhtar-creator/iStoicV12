@@ -196,7 +196,14 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
                     
                     try {
                         const toolResult = await executeNeuralTool(chunk.functionCall, notes, setNotes);
-                        accumulatedText += `> ✅ **RESULT:** ${toolResult}\n\n`;
+                        
+                        // FIX: Better formatting for Images so they aren't stuck in blockquote
+                        // If toolResult contains image markdown, break out
+                        if (toolResult.includes('![Generated Visual]') || toolResult.trim().startsWith('![') || toolResult.trim().startsWith('\n![')) {
+                             accumulatedText += `\n\n${toolResult}\n\n`;
+                        } else {
+                             accumulatedText += `> ✅ **RESULT:** ${toolResult}\n\n`;
+                        }
                     } catch (toolError: any) {
                         accumulatedText += `> ❌ **FAIL:** ${toolError.message}\n\n`;
                     }

@@ -234,7 +234,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
             w-full transition-all duration-300 ease-out
             bg-white/95 dark:bg-[#0a0a0b]/95 backdrop-blur-2xl
             border 
-            rounded-[28px] p-1.5 flex flex-col
+            rounded-[32px] p-2 flex flex-col
             shadow-[0_8px_40px_-10px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_40px_-10px_rgba(0,0,0,0.6)]
             ${isDictating 
                 ? 'border-red-500/50 ring-2 ring-red-500/20' 
@@ -259,7 +259,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                     <button 
                         onClick={() => setAttachment(null)}
                         aria-label="Remove Attachment"
-                        className="absolute -top-2 -right-2 bg-black text-white rounded-full p-1 shadow-md hover:bg-red-500 transition-colors border border-white/20"
+                        className="absolute -top-2 -right-2 bg-black text-white rounded-full p-1 shadow-md hover:bg-red-500 transition-colors border border-white/20 active:scale-90"
                     >
                         <X size={10} />
                     </button>
@@ -268,7 +268,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
         )}
 
         {/* INPUT AREA */}
-        <div className="relative px-3 pt-2 pb-1">
+        <div className="relative px-3 pt-2 pb-2">
             <textarea
                 ref={inputRef}
                 value={input}
@@ -281,19 +281,19 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 className="w-full bg-transparent text-base md:text-sm font-medium text-black dark:text-white placeholder:text-neutral-400 resize-none focus:outline-none max-h-60 custom-scroll leading-relaxed"
                 rows={1}
                 aria-label="Chat Input"
-                disabled={isLoading && !onStop} // Disable if loading but no stop capability
+                disabled={isLoading && !onStop} 
             />
         </div>
 
         {/* TOOLBAR & ACTIONS */}
-        <div className="flex items-center justify-between px-2 pb-1 pt-1 gap-2 border-t border-transparent transition-colors duration-300">
+        <div className="flex items-center justify-between px-2 pb-1 gap-2 border-t border-transparent transition-colors duration-300">
             
             {/* Left Tools */}
             <div className="flex gap-1 items-center">
                 <button 
                     onClick={handleNewChatClick}
                     aria-label="New Chat"
-                    className="w-8 h-8 flex items-center justify-center rounded-xl text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95"
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95"
                     title={t.newChat}
                 >
                     <Plus size={18} strokeWidth={2} />
@@ -302,10 +302,10 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 <button 
                     onClick={handleAttachClick}
                     aria-label="Attach Image"
-                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${attachment ? 'text-accent bg-accent/10' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
+                    className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-95 ${attachment ? 'text-accent bg-accent/10 shadow-sm' : 'text-neutral-400 hover:text-blue-500 hover:bg-blue-500/10'}`}
                     title="Attach Image"
                 >
-                    <Paperclip size={16} strokeWidth={2} />
+                    <Paperclip size={18} strokeWidth={2} />
                 </button>
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} accept="image/*" />
 
@@ -315,19 +315,19 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                     onClick={onToggleVaultSync}
                     disabled={!isVaultEnabled}
                     aria-label={isVaultEnabled ? (isVaultSynced ? "Vault Sync Active" : "Vault Sync Inactive") : "Vault Disabled"}
-                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${!isVaultEnabled ? 'opacity-30' : isVaultSynced ? 'text-accent bg-accent/5' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
+                    className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-95 ${!isVaultEnabled ? 'opacity-30' : isVaultSynced ? 'text-purple-500 bg-purple-500/10 shadow-sm' : 'text-neutral-400 hover:text-purple-500 hover:bg-purple-500/10'}`}
                     title={isVaultEnabled ? "Vault Sync" : "Vault Disabled"}
                 >
-                    {isVaultSynced ? <DatabaseZap size={16} /> : <Database size={16} />}
+                    {isVaultSynced ? <DatabaseZap size={18} /> : <Database size={18} />}
                 </button>
 
                 <button 
                     onClick={onTogglePersona}
                     aria-label={`Switch to ${personaMode === 'hanisah' ? 'Stoic' : 'Hanisah'} Persona`}
-                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${personaMode === 'hanisah' ? 'text-orange-500 bg-orange-500/5' : 'text-cyan-500 bg-cyan-500/5'}`}
+                    className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-95 ${personaMode === 'hanisah' ? 'text-orange-500 bg-orange-500/10 hover:bg-orange-500/20' : 'text-cyan-500 bg-cyan-500/10 hover:bg-cyan-500/20'}`}
                     title="Switch Persona"
                 >
-                    {personaMode === 'hanisah' ? <Flame size={16} /> : <Brain size={16} />}
+                    {personaMode === 'hanisah' ? <Flame size={18} /> : <Brain size={18} />}
                 </button>
             </div>
 
@@ -342,10 +342,10 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                 <button 
                     onClick={toggleDictation}
                     aria-label={isDictating ? "Stop Dictation" : "Start Dictation"}
-                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-95 ${isDictating ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'text-neutral-400 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
+                    className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 ${isDictating ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'text-neutral-400 hover:text-red-500 hover:bg-red-500/10'}`}
                     title="Real-time Dictation"
                 >
-                    {isDictating ? <MicOff size={16} /> : <Mic size={18} strokeWidth={2} />}
+                    {isDictating ? <MicOff size={18} /> : <Mic size={20} strokeWidth={2} />}
                 </button>
 
                 {/* Send / Stop Button */}
@@ -353,10 +353,10 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                     <button 
                         onClick={handleStop}
                         aria-label="Stop Generation"
-                        className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 bg-red-500 text-white shadow-lg hover:scale-105 active:scale-95 hover:shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse"
+                        className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 bg-red-500 text-white shadow-lg hover:scale-105 active:scale-95 hover:shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse"
                         title="Stop Generation"
                     >
-                        <Square size={16} fill="currentColor" />
+                        <Square size={18} fill="currentColor" />
                     </button>
                 ) : (
                     <button 
@@ -364,13 +364,13 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                         disabled={(!input.trim() && !attachment) || input.length > MAX_CHARS}
                         aria-label="Send Message"
                         className={`
-                            w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300
+                            w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300
                             ${(input.trim() || attachment) && input.length <= MAX_CHARS
                                 ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg hover:scale-105 active:scale-95 hover:shadow-[0_0_20px_var(--accent-glow)]' 
                                 : 'bg-black/5 dark:bg-white/5 text-neutral-400 cursor-not-allowed'}
                         `}
                     >
-                        <CornerDownLeft size={20} strokeWidth={2.5} />
+                        <CornerDownLeft size={22} strokeWidth={2.5} />
                     </button>
                 )}
             </div>

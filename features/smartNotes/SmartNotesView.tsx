@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   FileText, Search, Plus, CheckSquare, 
   Archive, FolderOpen, Database, 
-  ListTodo, ArrowUpRight, Hash, Pin, Trash2, X, Filter, BrainCircuit
+  ListTodo, ArrowUpRight, Hash, Pin, Trash2, X, Filter, BrainCircuit, AlertTriangle, ShieldAlert
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { type Note } from '../../types';
@@ -30,6 +30,9 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
   
   // NEW: Agent Console State
   const [showAgentConsole, setShowAgentConsole] = useState(false);
+
+  // NEW: Delete Confirmation State
+  const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
 
   // Safety check: if active note is deleted externally
   useEffect(() => {
@@ -103,23 +106,27 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       }
   };
 
-  const handleDeleteItem = (e: React.MouseEvent, id: string) => {
-      e.stopPropagation();
-      e.preventDefault();
-      
-      const confirmDelete = window.confirm(
-          "⚠️ PERMANENT DELETION\n\nAre you sure you want to delete this note? This action CANNOT be undone."
-      );
+  const initiateDelete = (e: React.MouseEvent | null, id: string) => {
+      if (e) {
+          e.stopPropagation();
+          e.preventDefault();
+      }
+      setNoteToDelete(id);
+  };
 
-      if (confirmDelete) {
-          if (debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, id)) {
-              setNotes(prevNotes => prevNotes.filter(n => n.id !== id));
-              if (activeNoteId === id) {
-                  setActiveNoteId(null);
-                  setViewMode('grid');
-              }
+  const confirmDelete = () => {
+      if (!noteToDelete) return;
+
+      if (debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, noteToDelete)) {
+          setNotes(prevNotes => prevNotes.filter(n => n.id !== noteToDelete));
+          
+          // If we deleted the active note (from within editor), go back to grid
+          if (activeNoteId === noteToDelete) {
+              setActiveNoteId(null);
+              setViewMode('grid');
           }
       }
+      setNoteToDelete(null);
   };
 
   const handleSaveNote = useCallback((title: string, content: string, tasks?: any[], tags?: string[]) => {
@@ -153,24 +160,6 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       setViewMode('grid');
   }, [activeNoteId, notes, setNotes]);
 
-  const handleDeleteNote = useCallback((id: string) => {
-      const confirmDelete = window.confirm(
-          "⚠️ PERMANENT DELETION\n\nAre you sure you want to delete this note? This action CANNOT be undone."
-      );
-
-      if (confirmDelete) {
-          debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, 'EXECUTE', { id });
-          setNotes(prevNotes => prevNotes.filter(n => n.id !== id));
-          
-          if (activeNoteId === id) {
-              setActiveNoteId(null);
-              setViewMode('grid');
-          }
-      } else {
-          debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_DELETE, 'CANCELLED');
-      }
-  }, [activeNoteId, setNotes]);
-
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);
     if (newSet.has(id)) newSet.delete(id);
@@ -181,6 +170,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
   const batchDelete = useCallback(() => {
     const count = selectedIds.size;
     if (count === 0) return;
+    
     const idsToDelete = new Set(selectedIds);
     const confirmPurge = window.confirm(
         `⚠️ SYSTEM PURGE PROTOCOL\n\nYou are about to PERMANENTLY DELETE ${count} selected item(s).\n\nThis is a destructive action. Data will be unrecoverable.\n\nProceed with purge?`
@@ -251,6 +241,13 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       setNotes(prev => [newNote, ...prev]);
   };
 
+  // Helper to find title of note being deleted for the modal
+  const noteToDeleteTitle = useMemo(() => {
+      if (!noteToDelete) return "";
+      const n = notes.find(x => x.id === noteToDelete);
+      return n?.title || "Untitled Note";
+  }, [noteToDelete, notes]);
+
   return (
     <div className="h-[calc(100dvh-2rem)] md:h-[calc(100vh-2rem)] flex flex-col animate-fade-in bg-noise overflow-hidden">
       
@@ -271,10 +268,10 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
           </div>
 
           {/* Controls */}
-          <div className="flex items-center gap-3 w-full xl:w-auto animate-slide-down" style={{ animationDelay: '100ms' }}>
+          <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto animate-slide-down" style={{ animationDelay: '100ms' }}>
                
-               {/* Search Bar */}
-               <div className={`relative transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${isSearchFocused ? 'flex-1 xl:w-96' : 'flex-1 xl:w-64'}`}>
+               {/* Search Bar - Responsive Growth */}
+               <div className={`relative transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${isSearchFocused ? 'flex-1 md:w-96' : 'flex-1 md:w-64'}`}>
                   <input 
                      type="text" 
                      value={searchQuery}
@@ -282,48 +279,48 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                      onFocus={handleSearchFocus}
                      onBlur={() => setIsSearchFocused(false)}
                      placeholder={isSearchFocused ? "SEARCH VAULT..." : "SEARCH..."}
-                     className="w-full h-12 bg-white dark:bg-[#0f0f11] border border-black/5 dark:border-white/10 rounded-xl pl-11 pr-4 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:border-accent/50 focus:shadow-[0_0_30px_-10px_var(--accent-glow)] transition-all placeholder:text-neutral-500"
+                     className="w-full h-12 bg-white dark:bg-[#0f0f11] border border-black/5 dark:border-white/10 rounded-2xl pl-11 pr-4 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:border-accent/50 focus:shadow-[0_0_30px_-10px_var(--accent-glow)] transition-all placeholder:text-neutral-500"
                   />
                   <Search className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isSearchFocused ? 'text-accent' : 'text-neutral-400'}`} size={16} />
                   {searchQuery && (
-                      <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black dark:hover:text-white">
+                      <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-black dark:hover:text-white active:scale-90 transition-transform">
                           <X size={12} />
                       </button>
                   )}
                </div>
 
-               {/* Action Buttons */}
+               {/* Action Buttons - Grouped for Mobile */}
                <div className="flex items-center gap-2">
-                   {/* Agent Button */}
+                   {/* Agent Button - Prominent */}
                    <button 
                      onClick={() => setShowAgentConsole(true)}
-                     className="w-12 h-12 flex items-center justify-center rounded-xl border bg-purple-500/10 text-purple-500 border-purple-500/20 hover:bg-purple-500 hover:text-white transition-all shadow-lg hover:shadow-purple-500/20"
+                     className="w-12 h-12 flex items-center justify-center rounded-2xl border bg-purple-500/10 text-purple-500 border-purple-500/20 hover:bg-purple-500/20 hover:border-purple-500/50 hover:text-purple-400 transition-all shadow-sm active:scale-90 group"
                      title="Neural Agents"
                    >
-                      <BrainCircuit size={20} />
+                      <BrainCircuit size={20} className="group-hover:scale-110 transition-transform" />
                    </button>
 
                    <button 
                      onClick={handleToggleBatchMode}
-                     className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-all ${isSelectionMode ? 'bg-accent text-black border-accent shadow-[0_0_15px_var(--accent-glow)]' : 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white'}`}
+                     className={`w-12 h-12 flex items-center justify-center rounded-2xl border transition-all active:scale-90 group ${isSelectionMode ? 'bg-accent text-black border-accent shadow-[0_0_20px_var(--accent-glow)]' : 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white hover:border-black/20 dark:hover:border-white/20'}`}
                      title="Batch Select"
                    >
-                      <CheckSquare size={18} />
+                      <CheckSquare size={18} className="group-hover:scale-110 transition-transform" />
                    </button>
                    
                    <button 
                      onClick={handleToggleFilter}
-                     className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-all ${filterType === 'archived' ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white'}`}
+                     className={`w-12 h-12 flex items-center justify-center rounded-2xl border transition-all active:scale-90 group ${filterType === 'archived' ? 'bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-500/20' : 'bg-white dark:bg-[#0f0f11] border-black/5 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white hover:border-black/20 dark:hover:border-white/20'}`}
                      title={filterType === 'all' ? "View Archive" : "Back to Active"}
                    >
-                      {filterType === 'archived' ? <Archive size={18} fill="currentColor" /> : <Archive size={18} />}
+                      {filterType === 'archived' ? <Archive size={18} fill="currentColor" /> : <Archive size={18} className="group-hover:scale-110 transition-transform" />}
                    </button>
 
                    <button 
                     onClick={handleCreateNote}
-                    className="h-12 px-6 bg-black dark:bg-white text-white dark:text-black rounded-xl flex items-center gap-3 font-black uppercase text-[10px] tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg hover:shadow-xl group border border-transparent hover:border-accent/50"
+                    className="h-12 px-6 bg-[var(--accent-color)] text-black rounded-2xl flex items-center gap-3 font-black uppercase text-[10px] tracking-widest hover:brightness-110 active:scale-95 transition-all shadow-[0_0_20px_var(--accent-glow)] group border border-white/20"
                   >
-                     <Plus size={16} className="group-hover:rotate-90 transition-transform" /> <span className="hidden md:inline">CREATE</span>
+                     <Plus size={16} strokeWidth={3} className="group-hover:rotate-90 transition-transform" /> <span className="hidden md:inline">CREATE</span>
                   </button>
                </div>
           </div>
@@ -333,12 +330,12 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
       {(filterType === 'archived' || searchQuery) && (
           <div className="px-4 md:px-8 lg:px-12 pb-4 flex items-center gap-2 animate-fade-in">
               <div className="h-[1px] bg-black/5 dark:bg-white/10 flex-1"></div>
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 dark:bg-white/5 border border-black/5 dark:border-white/5 text-[9px] font-black uppercase tracking-widest text-neutral-500">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-white/5 border border-black/5 dark:border-white/5 text-[9px] font-black uppercase tracking-widest text-neutral-500 shadow-sm">
                   <Filter size={10} /> 
                   {filterType === 'archived' && <span>ARCHIVE_MODE</span>}
                   {filterType === 'archived' && searchQuery && <span>+</span>}
                   {searchQuery && <span>SEARCH_RESULTS</span>}
-                  <span className="ml-1 text-accent">{filteredNotes.length} ITEMS</span>
+                  <span className="ml-1 text-accent border-l border-black/10 dark:border-white/10 pl-2">{filteredNotes.length} ITEMS</span>
               </div>
               <div className="h-[1px] bg-black/5 dark:bg-white/10 flex-1"></div>
           </div>
@@ -369,8 +366,8 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                               key={n.id} 
                               onClick={() => handleNoteClick(n)} 
                               className={`
-                                  break-inside-avoid relative p-6 rounded-[32px] cursor-pointer transition-all duration-500 ease-out group
-                                  border hover:-translate-y-2
+                                  break-inside-avoid relative p-6 rounded-[32px] cursor-pointer transition-all duration-300 ease-out group
+                                  border hover:-translate-y-1 active:scale-[0.99]
                                   ${isSelected 
                                       ? 'bg-accent/10 border-accent shadow-[0_0_40px_-10px_var(--accent-glow)]' 
                                       : 'bg-white/80 dark:bg-[#0f0f11]/80 backdrop-blur-md border-black/5 dark:border-white/5 hover:border-accent/30 hover:shadow-xl'
@@ -438,8 +435,8 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                                   <div className="absolute top-6 right-6 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0 hidden md:flex z-20">
                                       {!n.is_pinned && (
                                         <button 
-                                            onClick={(e) => handleDeleteItem(e, n.id)}
-                                            className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center border border-red-500/20 shadow-sm transition-all"
+                                            onClick={(e) => initiateDelete(e, n.id)}
+                                            className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center border border-red-500/20 shadow-sm transition-all active:scale-90"
                                             title="Delete Note"
                                         >
                                             <Trash2 size={14} />
@@ -473,7 +470,7 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
                           initialTasks={activeNote?.tasks || []}
                           initialTags={activeNote?.tags || []}
                           onSave={handleSaveNote}
-                          onDelete={() => handleDeleteNote(activeNoteId!)}
+                          onDelete={() => initiateDelete(null, activeNoteId!)}
                           onBack={handleBackFromEditor}
                           language="en"
                           fontSize={editorFontSize}
@@ -505,6 +502,48 @@ export const SmartNotesView: React.FC<SmartNotesViewProps> = ({ notes, setNotes 
           onApplyUpdates={handleAgentApply}
           onAddTasks={handleAgentTasks}
       />
+
+      {/* CUSTOM DELETE CONFIRMATION MODAL */}
+      {noteToDelete && (
+          <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white dark:bg-[#0a0a0b] w-full max-w-sm rounded-[32px] border border-red-500/20 shadow-[0_20px_50px_-10px_rgba(239,68,68,0.15)] p-8 animate-slide-up flex flex-col items-center text-center relative overflow-hidden">
+                  
+                  {/* Pulse Effect Background */}
+                  <div className="absolute inset-0 bg-red-500/5 pointer-events-none animate-pulse-slow"></div>
+
+                  <div className="w-20 h-20 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500 mb-6 border border-red-500/20 shadow-[0_0_30px_rgba(239,68,68,0.2)]">
+                      <ShieldAlert size={36} strokeWidth={1.5} />
+                  </div>
+
+                  <h3 className="text-2xl font-black italic tracking-tighter text-black dark:text-white uppercase mb-2">
+                      DELETE NOTE?
+                  </h3>
+                  
+                  <p className="text-[10px] font-medium text-neutral-500 mb-2 font-mono uppercase tracking-widest">
+                      ID: {noteToDelete.slice(0, 8)}
+                  </p>
+
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-8 leading-relaxed max-w-[240px]">
+                      Are you sure you want to purge <span className="font-bold text-black dark:text-white">"{noteToDeleteTitle}"</span>? This action is permanent and cannot be undone.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3 w-full relative z-10">
+                      <button 
+                          onClick={() => setNoteToDelete(null)}
+                          className="py-4 rounded-xl font-black uppercase text-[10px] tracking-[0.2em] text-neutral-500 hover:text-black dark:hover:text-white bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 transition-all active:scale-95"
+                      >
+                          CANCEL
+                      </button>
+                      <button 
+                          onClick={confirmDelete}
+                          className="py-4 rounded-xl font-black uppercase text-[10px] tracking-[0.2em] bg-red-500 hover:bg-red-600 text-white shadow-lg hover:shadow-red-500/40 transition-all active:scale-95 flex items-center justify-center gap-2"
+                      >
+                          <Trash2 size={14} /> PURGE
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

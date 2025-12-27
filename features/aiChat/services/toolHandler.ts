@@ -130,8 +130,20 @@ export const executeNeuralTool = async (
 
     // --- 3. VISUAL GENERATION ---
     if (name === 'generate_visual') {
-        const imgUrl = await generateImage(args.prompt);
-        return imgUrl ? `!!IMG:[${args.prompt}]!!` : "ERROR: Failed to synthesize visual.";
+        // Automatically attempt generation.
+        // NOTE: This might take a few seconds. The UI will show "Executing..."
+        try {
+            const imgUrl = await generateImage(args.prompt);
+            if (imgUrl) {
+                // Return Markdown image syntax directly.
+                // Using italic for caption instead of link syntax to prevent confusion
+                return `\n![Generated Visual](${imgUrl})\n\n_Visual Generated: ${args.prompt.slice(0, 50)}..._`;
+            } else {
+                return "ERROR: Visual synthesis failed (No data returned).";
+            }
+        } catch (e: any) {
+            return `ERROR: Visual synthesis failed: ${e.message}`;
+        }
     }
 
     // --- 4. SYSTEM MECHANIC ---

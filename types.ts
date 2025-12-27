@@ -41,6 +41,8 @@ export interface ChatMessage {
     status: 'success' | 'error' | 'retrying';
     errorDetails?: string;
     groundingChunks?: any[];
+    isRerouting?: boolean;
+    systemStatus?: string;
   };
 }
 

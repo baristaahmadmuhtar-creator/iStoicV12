@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { 
   Bold, Italic, Underline, Maximize2, Minimize2, 
@@ -5,7 +6,9 @@ import {
   Minimize2 as MinimizeIcon, Wand2, Clock, 
   Type, CheckSquare, Trash2, Plus, ArrowLeft, Check, 
   AlignLeft, AlignCenter, AlignRight, Undo, Redo, Quote,
-  ChevronDown, Type as FontIcon, AlignJustify
+  ChevronDown, Type as FontIcon, AlignJustify, PanelBottomClose,
+  ListTodo, GripHorizontal, Eraser, CheckCircle2,
+  Heading1, Heading2, List, ListOrdered, Code
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { HANISAH_KERNEL } from '../../services/melsaKernel';
@@ -37,6 +40,7 @@ const ToolbarButton: React.FC<{ onClick: (e: React.MouseEvent) => void; icon: Re
         className={`
             relative flex items-center justify-center gap-1.5 rounded-lg transition-all duration-200 shrink-0
             ${label ? 'px-3 w-auto' : 'w-8'} h-8
+            active:scale-90
             ${isActive 
                 ? 'bg-black dark:bg-white text-white dark:text-black shadow-md' 
                 : 'text-neutral-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
@@ -124,6 +128,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
   useEffect(() => {
       const checkOverlayState = () => {
           const isMobile = window.innerWidth < 768;
+          // Hide navigation if Hanisah is open OR Focus Mode OR Task Panel (on mobile)
           const shouldEnterStealth = showHanisahOverlay || isFocusMode || (isTaskPanelOpen && isMobile);
           
           if (shouldEnterStealth) {
@@ -143,14 +148,11 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
 
   const updateStatsAndFormats = useCallback(() => {
     if (!editorRef.current) return;
-    
-    // Stats
     const text = editorRef.current.innerText || "";
     const words = text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
     setWordCount(words);
     setReadTime(Math.ceil(words / 200)); 
 
-    // Formats (Only if editable)
     if (!isReadonly) {
         const formatBlock = document.queryCommandValue('formatBlock');
         setFormats({
@@ -169,7 +171,6 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
             quote: formatBlock === 'blockquote'
         });
         
-        // Detect Font
         const fontName = document.queryCommandValue('fontName');
         if(fontName) {
             const cleanFont = fontName.replace(/['"]+/g, '');
@@ -179,7 +180,6 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
     }
   }, [isReadonly]);
 
-  // Init
   useEffect(() => {
     if (editorRef.current) {
         if (editorRef.current.innerHTML !== initialContent) {
@@ -199,9 +199,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
   const triggerAutoSave = useCallback(() => {
       setSyncStatus('SYNCING');
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      
       const contentToSave = editorRef.current?.innerHTML || '';
-      
       saveTimeoutRef.current = setTimeout(() => {
           performSave(title, contentToSave, tasks, tags);
       }, 800);
@@ -229,6 +227,13 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
       setTasks(newTasks);
   };
 
+  const clearCompletedTasks = () => {
+      if(confirm("Hapus semua tugas yang sudah selesai?")) {
+          const newTasks = tasks.filter(t => !t.isCompleted);
+          setTasks(newTasks);
+      }
+  };
+
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       setTitle(e.target.value);
       setSyncStatus('SYNCING');
@@ -238,7 +243,6 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
       }, 800);
   };
 
-  // Observer for Content Changes
   useEffect(() => {
     const handleMutation = () => {
       if (!editorRef.current) return;
@@ -250,9 +254,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
       }, 800);
     };
 
-    const handleSelectionChange = () => {
-        updateStatsAndFormats();
-    };
+    const handleSelectionChange = () => { updateStatsAndFormats(); };
 
     const observer = new MutationObserver(handleMutation);
     if (editorRef.current) {
@@ -303,6 +305,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
     }
   };
 
+  // ... (Hanisah AI Logic preserved) ...
   const openHanisahWriter = () => {
       if (isReadonly) return;
       const selection = window.getSelection();
@@ -329,7 +332,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
       const contextText = selectedText || editorRef.current?.innerText || "";
       const contextLabel = selectedText ? "SELECTED_TEXT" : "FULL_DOCUMENT";
       const prompt = `[ROLE: HANISAH_WRITER_MODULE] TASK: ${finalInstruction} CONTEXT (${contextLabel}): """${contextText}""" OUTPUT_DIRECTIVE: Return ONLY the revised/generated text. LANGUAGE_TARGET: ${TRANSLATIONS[currentLang].meta.label}`;
-      const response = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview');
+      const response = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview', "Writer Assistant");
       setHanisahResult(response.text || "Output generation failed.");
     } catch (error) {
       setHanisahResult("Neural processing error.");
@@ -422,7 +425,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
 
              <button 
                 onClick={() => setIsTaskPanelOpen(!isTaskPanelOpen)}
-                className={`relative px-4 py-2 rounded-full flex items-center gap-2 transition-all text-[10px] font-black uppercase tracking-widest border ${isTaskPanelOpen ? 'bg-blue-500 text-white border-blue-600' : 'bg-transparent border-black/10 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white'}`}
+                className={`relative px-4 py-2 rounded-full flex items-center gap-2 transition-all text-[10px] font-black uppercase tracking-widest border active:scale-95 ${isTaskPanelOpen ? 'bg-blue-500 text-white border-blue-600' : 'bg-transparent border-black/10 dark:border-white/10 text-neutral-500 hover:text-black dark:hover:text-white'}`}
                 title="Tasks"
              >
                  <CheckSquare size={14} />
@@ -434,7 +437,7 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
                  )}
              </button>
 
-             <button onClick={() => setIsFocusMode(!isFocusMode)} className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-400 hover:bg-black/5 dark:hover:bg-white/5 transition-all" title="Toggle Focus">
+             <button onClick={() => setIsFocusMode(!isFocusMode)} className="w-10 h-10 rounded-full flex items-center justify-center text-neutral-400 hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-90" title="Toggle Focus">
                  {isFocusMode ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}
              </button>
           </div>
@@ -466,21 +469,37 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
               {/* TOOLBAR */}
               <div className="sticky top-0 z-40 py-3 mb-6 bg-white/95 dark:bg-[#0f0f11]/95 backdrop-blur-md -mx-4 px-4 transition-all border-b border-black/5 dark:border-white/5 shadow-sm">
                   <div className="flex items-center gap-1 overflow-x-auto no-scrollbar relative">
+                        {/* History */}
                         <div className="flex items-center gap-0.5 px-1 border-r border-black/5 dark:border-white/5 pr-2 mr-1 shrink-0">
                             <ToolbarButton onClick={() => executeCommand('undo')} icon={<Undo size={16} />} ariaLabel="Undo" className="w-9 h-9 rounded-xl" />
                             <ToolbarButton onClick={() => executeCommand('redo')} icon={<Redo size={16} />} ariaLabel="Redo" className="w-9 h-9 rounded-xl" />
                         </div>
 
+                        {/* Formatting Groups */}
                         <div className="flex items-center gap-0.5 px-1 border-r border-black/5 dark:border-white/5 pr-2 mr-1 shrink-0">
                             <ToolbarButton onClick={() => executeCommand('bold')} icon={<Bold size={16} />} isActive={formats.bold} ariaLabel="Bold" className="w-9 h-9 rounded-xl" />
                             <ToolbarButton onClick={() => executeCommand('italic')} icon={<Italic size={16} />} isActive={formats.italic} ariaLabel="Italic" className="w-9 h-9 rounded-xl" />
                             <ToolbarButton onClick={() => executeCommand('underline')} icon={<Underline size={16} />} isActive={formats.underline} ariaLabel="Underline" className="w-9 h-9 rounded-xl" />
                         </div>
 
+                        {/* Headings */}
+                        <div className="flex items-center gap-0.5 px-1 border-r border-black/5 dark:border-white/5 pr-2 mr-1 shrink-0">
+                            <ToolbarButton onClick={() => executeCommand('formatBlock', 'H1')} icon={<Heading1 size={16} />} isActive={formats.h1} ariaLabel="Heading 1" className="w-9 h-9 rounded-xl" />
+                            <ToolbarButton onClick={() => executeCommand('formatBlock', 'H2')} icon={<Heading2 size={16} />} isActive={formats.h2} ariaLabel="Heading 2" className="w-9 h-9 rounded-xl" />
+                        </div>
+
+                        {/* Lists & Blocks */}
+                        <div className="flex items-center gap-0.5 px-1 border-r border-black/5 dark:border-white/5 pr-2 mr-1 shrink-0">
+                            <ToolbarButton onClick={() => executeCommand('insertUnorderedList')} icon={<List size={16} />} isActive={formats.ul} ariaLabel="Bullet List" className="w-9 h-9 rounded-xl" />
+                            <ToolbarButton onClick={() => executeCommand('insertOrderedList')} icon={<ListOrdered size={16} />} isActive={formats.ol} ariaLabel="Ordered List" className="w-9 h-9 rounded-xl" />
+                            <ToolbarButton onClick={() => executeCommand('formatBlock', 'blockquote')} icon={<Quote size={16} />} isActive={formats.quote} ariaLabel="Blockquote" className="w-9 h-9 rounded-xl" />
+                            <ToolbarButton onClick={() => executeCommand('formatBlock', 'pre')} icon={<Code size={16} />} isActive={formats.code} ariaLabel="Code Block" className="w-9 h-9 rounded-xl" />
+                        </div>
+
                         <div className="flex items-center gap-2 pl-1 ml-auto shrink-0">
                             <button 
                                 onClick={toggleDictation}
-                                className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all ${
+                                className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-90 ${
                                     isDictating 
                                     ? 'bg-red-500 text-white shadow-lg animate-pulse' 
                                     : 'bg-zinc-100 dark:bg-white/5 text-neutral-500 hover:text-black dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10'
@@ -525,58 +544,95 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
           </div>
       </div>
 
-      {/* TASK PANEL (Sidebar) */}
+      {/* TASK PANEL OVERLAY BACKDROP (Mobile Only) */}
+      {isTaskPanelOpen && (
+          <div 
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1100] md:hidden transition-opacity duration-300"
+              onClick={() => setIsTaskPanelOpen(false)}
+          />
+      )}
+
+      {/* TASK PANEL (Side Drawer) */}
       <div className={`
-          absolute top-0 right-0 bottom-0 w-[85%] md:w-80 bg-white/95 dark:bg-[#0a0a0b]/95 backdrop-blur-xl border-l border-black/5 dark:border-white/5 
-          transform transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] z-50 flex flex-col shadow-2xl
-          ${isTaskPanelOpen ? 'translate-x-0' : 'translate-x-full'}
+          fixed md:absolute 
+          md:top-4 md:right-4 md:bottom-4 md:w-80 
+          inset-x-0 bottom-0 top-auto h-[75dvh] md:h-auto 
+          bg-zinc-50/95 dark:bg-[#09090b]/95 backdrop-blur-xl 
+          border-t md:border border-black/5 dark:border-white/5 
+          rounded-t-[32px] md:rounded-[32px]
+          transform transition-transform duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] 
+          z-[1200] flex flex-col shadow-2xl
+          ${isTaskPanelOpen ? 'translate-y-0 md:translate-x-0' : 'translate-y-full md:translate-y-0 md:translate-x-[110%]'}
       `}>
-          <div className="p-5 border-b border-black/5 dark:border-white/5 flex items-center justify-between bg-zinc-50/50 dark:bg-white/[0.02]">
+          {/* Mobile Handle */}
+          <div className="md:hidden w-full flex justify-center pt-3 pb-1" onClick={() => setIsTaskPanelOpen(false)}>
+              <div className="w-12 h-1.5 bg-neutral-300 dark:bg-neutral-700 rounded-full"></div>
+          </div>
+
+          {/* Header */}
+          <div className="p-6 border-b border-black/5 dark:border-white/5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center">
-                      <CheckSquare size={16} />
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center border border-blue-500/20">
+                      <ListTodo size={20} />
                   </div>
                   <div>
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">{t.tasks}</h3>
-                      <div className="flex items-center gap-2 mt-0.5">
-                          <div className="w-16 h-1 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden">
-                              <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${taskProgress}%` }}></div>
+                      <h3 className="text-xs font-black uppercase tracking-[0.2em]">{t.tasks}</h3>
+                      <div className="flex items-center gap-2 mt-1">
+                          <div className="w-16 h-1.5 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden">
+                              <div className="h-full bg-blue-500 transition-all duration-500 ease-out" style={{ width: `${taskProgress}%` }}></div>
                           </div>
-                          <span className="text-[8px] font-mono text-neutral-500">{Math.round(taskProgress)}%</span>
+                          <span className="text-[9px] font-mono font-bold text-neutral-500">{Math.round(taskProgress)}%</span>
                       </div>
                   </div>
               </div>
-              <button onClick={() => setIsTaskPanelOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 transition-all"><X size={18}/></button>
+              <div className="flex gap-1">
+                  {completedTasksCount > 0 && (
+                      <button onClick={clearCompletedTasks} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-red-500 transition-all active:scale-90" title="Clear Completed">
+                          <Eraser size={16}/>
+                      </button>
+                  )}
+                  <button onClick={() => setIsTaskPanelOpen(false)} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 transition-all active:scale-90">
+                      <PanelBottomClose size={18}/>
+                  </button>
+              </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scroll">
-              {tasks.map(task => (
-                  <div key={task.id} className={`group flex items-start gap-3 p-3 rounded-xl border transition-all ${task.isCompleted ? 'bg-zinc-50 dark:bg-white/[0.02] border-transparent opacity-60' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/5 hover:border-blue-500/30'}`}>
-                      <button 
-                        onClick={() => !isReadonly && toggleTask(task.id)}
-                        className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${task.isCompleted ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-300 dark:border-white/20 hover:border-blue-500'}`}
-                      >
-                          {task.isCompleted && <Check size={12} strokeWidth={3} />}
-                      </button>
-                      <span className={`text-xs font-medium leading-relaxed flex-1 break-words ${task.isCompleted ? 'text-neutral-400 line-through decoration-neutral-300' : 'text-black dark:text-white'}`}>
-                          {task.text}
-                      </span>
-                      {!isReadonly && (
-                          <button 
-                            onClick={() => deleteTask(task.id)} 
-                            className="w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                            title="Delete Task"
-                          >
-                              <Trash2 size={12} />
-                          </button>
-                      )}
+          {/* Task List */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll">
+              {tasks.length === 0 ? (
+                  <div className="text-center py-12 flex flex-col items-center opacity-40 gap-3">
+                      <CheckCircle2 size={32} strokeWidth={1} />
+                      <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500">NO_ACTIVE_DIRECTIVES</p>
                   </div>
-              ))}
-              {tasks.length === 0 && <div className="text-center py-10 text-[10px] font-black text-neutral-400 uppercase tracking-widest opacity-50">NO_TASKS_LINKED</div>}
+              ) : (
+                  tasks.map(task => (
+                      <div key={task.id} className={`group flex items-start gap-3 p-3.5 rounded-2xl border transition-all duration-300 ${task.isCompleted ? 'bg-zinc-100/50 dark:bg-white/[0.02] border-transparent opacity-60' : 'bg-white dark:bg-white/5 border-black/5 dark:border-white/5 hover:border-blue-500/30 shadow-sm'}`}>
+                          <button 
+                            onClick={() => !isReadonly && toggleTask(task.id)}
+                            className={`mt-0.5 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all shrink-0 active:scale-90 ${task.isCompleted ? 'bg-blue-500 border-blue-500 text-white scale-95' : 'border-neutral-300 dark:border-white/20 hover:border-blue-500'}`}
+                          >
+                              {task.isCompleted && <Check size={14} strokeWidth={3} />}
+                          </button>
+                          <span className={`text-xs font-medium leading-relaxed flex-1 break-words pt-0.5 transition-all ${task.isCompleted ? 'text-neutral-400 line-through decoration-neutral-300' : 'text-black dark:text-white'}`}>
+                              {task.text}
+                          </span>
+                          {!isReadonly && (
+                              <button 
+                                onClick={() => deleteTask(task.id)} 
+                                className="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-100 lg:opacity-0 lg:group-hover:opacity-100 active:scale-90"
+                                title="Delete Task"
+                              >
+                                  <Trash2 size={14} />
+                              </button>
+                          )}
+                      </div>
+                  ))
+              )}
           </div>
 
+          {/* Input Area */}
           {!isReadonly && (
-              <div className="p-4 border-t border-black/5 dark:border-white/5 bg-zinc-50/50 dark:bg-white/[0.02]">
+              <div className="p-4 md:p-5 border-t border-black/5 dark:border-white/5 bg-zinc-50/50 dark:bg-white/[0.02] pb-safe">
                   <form 
                     onSubmit={(e) => {
                         e.preventDefault();
@@ -589,10 +645,10 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
                       <input 
                         name="taskInput"
                         placeholder="Add new task..."
-                        className="flex-1 bg-white dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-blue-500 transition-all"
+                        className="flex-1 bg-white dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-blue-500 transition-all shadow-sm"
                         autoComplete="off"
                       />
-                      <button type="submit" className="w-10 flex items-center justify-center bg-black dark:bg-white text-white dark:text-black rounded-xl hover:scale-105 active:scale-95 transition-all shadow-lg">
+                      <button type="submit" className="w-11 flex items-center justify-center bg-black dark:bg-white text-white dark:text-black rounded-xl hover:scale-105 active:scale-95 transition-all shadow-lg">
                           <Plus size={18} />
                       </button>
                   </form>
@@ -602,46 +658,53 @@ export const AdvancedEditor: React.FC<AdvancedEditorProps> = ({
 
       {/* Hanisah Writer Overlay */}
       {showHanisahOverlay && (
-        <div className="fixed inset-0 z-[2500] flex items-center justify-center p-4 bg-[#050505]/80 backdrop-blur-xl animate-fade-in">
-            <div className="w-full max-w-4xl bg-white dark:bg-[#0a0a0b] rounded-[32px] border border-black/5 dark:border-white/5 overflow-hidden shadow-2xl flex flex-col md:flex-row h-[85vh] md:h-[600px] ring-1 ring-white/10">
-                <div className="w-full md:w-[400px] flex flex-col border-r border-black/5 dark:border-white/5 bg-zinc-50/50 dark:bg-black/20">
+        <div className="fixed inset-0 z-[2500] flex items-end md:items-center justify-center p-0 md:p-4 bg-black/70 backdrop-blur-md animate-fade-in">
+            <div className="w-full md:max-w-4xl bg-white dark:bg-[#0a0a0b] rounded-t-[32px] md:rounded-[40px] border border-black/5 dark:border-white/5 overflow-hidden shadow-2xl flex flex-col md:flex-row h-[92dvh] md:h-[650px] ring-1 ring-white/10 animate-slide-up">
+                
+                {/* Left Panel (Mobile: Top, Desktop: Left) */}
+                <div className="w-full md:w-[380px] flex flex-col border-b md:border-b-0 md:border-r border-black/5 dark:border-white/5 bg-zinc-50/50 dark:bg-black/20 h-auto md:h-full shrink-0">
                     <div className="p-6 border-b border-black/5 dark:border-white/5 flex items-center justify-between shrink-0">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 border border-orange-500/20"><Flame size={20} /></div>
                             <div><h3 className="text-xs font-black uppercase tracking-[0.2em] dark:text-white">HANISAH_WRITER</h3><p className="text-[9px] text-neutral-500 font-mono uppercase tracking-widest mt-0.5">NEURAL EDITING MODULE</p></div>
                         </div>
-                        <button onClick={() => setShowHanisahOverlay(false)} className="w-8 h-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center text-neutral-400 transition-all"><X size={18}/></button>
+                        <button onClick={() => setShowHanisahOverlay(false)} className="w-8 h-8 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center text-neutral-400 transition-all active:scale-90"><X size={18}/></button>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scroll p-6 space-y-6">
                          <div className="space-y-3">
                             <label className="text-[9px] font-black text-neutral-400 uppercase tracking-[0.2em] pl-1">QUICK_PROTOCOLS</label>
                             <div className="grid grid-cols-2 gap-2">
                                 {WRITER_PRESETS.map(preset => (
-                                    <button key={preset.id} onClick={() => handleHanisahProcess(preset.prompt)} disabled={isHanisahProcessing} className="p-3 rounded-xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 hover:border-orange-500/30 hover:bg-orange-500/5 transition-all text-left group">
+                                    <button key={preset.id} onClick={() => handleHanisahProcess(preset.prompt)} disabled={isHanisahProcessing} className="p-3 rounded-xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/5 hover:border-orange-500/30 hover:bg-orange-500/5 transition-all text-left group active:scale-95">
                                         <div className="flex items-center gap-2 text-neutral-500 group-hover:text-orange-500 mb-1">{preset.icon}<span className="text-[9px] font-black uppercase tracking-widest">{preset.label}</span></div>
                                     </button>
                                 ))}
                             </div>
                         </div>
-                        <div className="space-y-3">
+                        <div className="space-y-3 flex-1 flex flex-col">
                             <label className="text-[9px] font-black text-neutral-400 uppercase tracking-[0.2em] pl-1">CUSTOM_DIRECTIVE</label>
-                            <textarea value={hanisahInstruction} onChange={(e) => setHanisahInstruction(e.target.value)} className="w-full h-24 bg-white dark:bg-white/5 rounded-xl p-4 text-xs font-medium border border-black/5 dark:border-white/5 focus:outline-none focus:border-orange-500/50 resize-none transition-all placeholder:text-neutral-500" placeholder="E.g., Rewrite this to be funnier..." />
+                            <textarea value={hanisahInstruction} onChange={(e) => setHanisahInstruction(e.target.value)} className="w-full h-24 flex-1 bg-white dark:bg-white/5 rounded-xl p-4 text-xs font-medium border border-black/5 dark:border-white/5 focus:outline-none focus:border-orange-500/50 resize-none transition-all placeholder:text-neutral-500 shadow-inner" placeholder="E.g., Rewrite this to be funnier..." />
                             <button onClick={() => handleHanisahProcess()} disabled={!hanisahInstruction || isHanisahProcessing} className="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50">
                                 {isHanisahProcessing ? <RefreshCw size={14} className="animate-spin" /> : <Wand2 size={14} />} {isHanisahProcessing ? 'SYNTHESIZING...' : 'EXECUTE'}
                             </button>
                         </div>
                     </div>
                 </div>
-                <div className="flex-1 bg-zinc-100 dark:bg-[#0f0f11] flex flex-col overflow-hidden relative">
-                    <div className="h-14 border-b border-black/5 dark:border-white/5 flex items-center justify-between px-6 bg-white dark:bg-[#0a0a0b]">
+
+                {/* Right Panel (Result) */}
+                <div className="flex-1 bg-zinc-100 dark:bg-[#0f0f11] flex flex-col overflow-hidden relative h-full">
+                    {/* Mobile Grip Handle */}
+                    <div className="md:hidden flex justify-center pt-2 pb-1 opacity-20"><GripHorizontal size={20}/></div>
+                    
+                    <div className="h-12 border-b border-black/5 dark:border-white/5 flex items-center justify-between px-6 bg-white dark:bg-[#0a0a0b] shrink-0">
                         <span className="text-[9px] font-black text-neutral-500 uppercase tracking-[0.2em]">RESULT_MATRIX</span>
                     </div>
-                    <div className="flex-1 overflow-y-auto custom-scroll p-6 md:p-8">
-                        {hanisahResult ? <div className="prose dark:prose-invert prose-sm max-w-none text-black dark:text-neutral-200 leading-relaxed bg-white dark:bg-white/5 p-6 rounded-2xl border border-black/5 dark:border-white/5 shadow-sm" dangerouslySetInnerHTML={{ __html: hanisahResult.replace(/\n/g, '<br/>') }} /> : <div className="h-full flex flex-col items-center justify-center opacity-30 text-center gap-4"><Sparkles size={48} strokeWidth={1} /><p className="text-[10px] font-black uppercase tracking-[0.3em]">AWAITING_INSTRUCTION</p></div>}
+                    <div className="flex-1 overflow-y-auto custom-scroll p-6 md:p-8 pb-24 md:pb-8">
+                        {hanisahResult ? <div className="prose dark:prose-invert prose-sm max-w-none text-black dark:text-neutral-200 leading-relaxed bg-white dark:bg-white/5 p-6 rounded-2xl border border-black/5 dark:border-white/5 shadow-sm animate-fade-in" dangerouslySetInnerHTML={{ __html: hanisahResult.replace(/\n/g, '<br/>') }} /> : <div className="h-full flex flex-col items-center justify-center opacity-30 text-center gap-4"><Sparkles size={48} strokeWidth={1} /><p className="text-[10px] font-black uppercase tracking-[0.3em]">AWAITING_INSTRUCTION</p></div>}
                     </div>
-                    {hanisahResult && <div className="p-4 border-t border-black/5 dark:border-white/5 bg-white dark:bg-[#0a0a0b] flex gap-3">
-                        <button onClick={() => applyHanisahResult('INSERT')} className="flex-1 py-3 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-black dark:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">INSERT BELOW</button>
-                        <button onClick={() => applyHanisahResult('REPLACE')} className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-md">REPLACE SELECTION</button>
+                    {hanisahResult && <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-black/5 dark:border-white/5 bg-white/95 dark:bg-[#0a0a0b]/95 backdrop-blur-md flex gap-3 pb-safe z-20">
+                        <button onClick={() => applyHanisahResult('INSERT')} className="flex-1 py-3 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-black dark:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95">INSERT BELOW</button>
+                        <button onClick={() => applyHanisahResult('REPLACE')} className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-md active:scale-95">REPLACE SELECTION</button>
                     </div>}
                 </div>
             </div>

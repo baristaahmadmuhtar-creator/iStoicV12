@@ -78,27 +78,46 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   const [activeTab, setActiveTab] = useState<'AUTO' | 'GOOGLE' | 'OPENAI' | 'DEEPSEEK' | 'GROQ' | 'MISTRAL'>('AUTO');
   const [statuses, setStatuses] = useState<ProviderStatus[]>([]);
   const { features } = useFeatures(); // Get Feature Flags
+  const [visibleTabs, setVisibleTabs] = useState<string[]>([]);
 
   useEffect(() => {
       if (isOpen) {
           const update = () => setStatuses(KEY_MANAGER.getAllProviderStatuses());
-          
-          // Initial update
           update();
           
+          // Load Provider Visibility
+          let visibility: Record<string, boolean> = {};
+          try {
+              const stored = localStorage.getItem('provider_visibility');
+              if (stored) visibility = JSON.parse(stored);
+          } catch(e) {}
+
+          const isVisible = (providerId: string) => visibility[providerId] !== false;
+
+          const tabsToShow = ['AUTO'];
+          if (isVisible('GEMINI')) tabsToShow.push('GOOGLE');
+          if (isVisible('OPENAI')) tabsToShow.push('OPENAI');
+          if (isVisible('GROQ')) tabsToShow.push('GROQ');
+          if (isVisible('DEEPSEEK')) tabsToShow.push('DEEPSEEK');
+          if (isVisible('MISTRAL')) tabsToShow.push('MISTRAL');
+          
+          setVisibleTabs(tabsToShow);
+
+          // Reset active tab if current is hidden
+          if (!tabsToShow.includes(activeTab)) {
+              setActiveTab(tabsToShow[0] as any);
+          }
+
           let interval: any = null;
-          // Only poll if AUTO_DIAGNOSTICS is enabled
           if (features.AUTO_DIAGNOSTICS) {
               interval = setInterval(update, 2000);
-          } else {
-              // If disabled, just keep static initial data or clear
           }
           
           return () => {
               if (interval) clearInterval(interval);
           };
       }
-  }, [isOpen, features.AUTO_DIAGNOSTICS]);
+  }, [isOpen, features.AUTO_DIAGNOSTICS, activeTab]);
 
   if (!isOpen) return null;
 
@@ -195,7 +214,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
             </div>
             <button 
                 onClick={onClose} 
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-all border border-white/5"
+                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-neutral-400 hover:text-white transition-all border border-white/5 active:scale-95"
             >
                 <X size={16} />
             </button>
@@ -205,7 +224,8 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
             
             {/* NAVIGATION MODULE (Responsive: Top Scroll on Mobile, Sidebar on Desktop) */}
             <div className="w-full md:w-64 bg-[#08080a] border-b md:border-b-0 md:border-r border-white/5 flex flex-row md:flex-col p-2 gap-1 overflow-x-auto md:overflow-y-auto no-scrollbar shrink-0">
-                {Object.entries(tabs).map(([key, data]) => {
+                {visibleTabs.map((key) => {
+                    const data = tabs[key as keyof typeof tabs];
                     const isActive = activeTab === key;
                     const providerId = data.models[0]?.provider || 'UNKNOWN';
                     const status = statuses.find(s => s.id === providerId);
@@ -220,7 +240,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
                             onClick={() => !isDisabled && setActiveTab(key as any)}
                             disabled={isDisabled}
                             className={`
-                                relative p-3 rounded-xl flex md:w-full items-center gap-3 transition-all group overflow-hidden border shrink-0
+                                relative p-3 rounded-xl flex md:w-full items-center gap-3 transition-all group overflow-hidden border shrink-0 active:scale-95
                                 ${isActive 
                                     ? 'bg-white/5 border-white/10 shadow-inner' 
                                     : 'bg-transparent border-transparent hover:bg-white/[0.02] hover:border-white/5'
@@ -327,7 +347,7 @@ const ArchitectureCard: React.FC<{
       onClick={onClick}
       className={`
         relative w-full text-left transition-all duration-300 group overflow-hidden
-        rounded-[20px] border p-[1px]
+        rounded-[20px] border p-[1px] active:scale-[0.99]
         ${isActive ? 'bg-white/[0.03]' : 'bg-transparent hover:bg-white/[0.01]'}
         ${isActive ? borderColorClass : 'hover:border-white/10'}
       `}

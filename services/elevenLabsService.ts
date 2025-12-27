@@ -4,7 +4,7 @@ import { debugService } from './debugService';
 
 // --- VOICE MAPPING SYSTEM ---
 export const VOICE_MAPPING: Record<string, string> = {
-    'Hanisah': 'JBFqnCBsd6RMkjVDRZzb', // Reusing Melsa voice ID for Hanisah
+    'Hanisah': 'JBFqnCBsd6RMkjVDRZzb', // Using standard voice ID
     'Zephyr': '21m00Tcm4TlvDq8ikWAM',
     'Kore': 'EXAVITQu4vr4xnSDxMaL',  
     'Fenrir': 'TxGEqnHWrfWFTfGW9XjX',

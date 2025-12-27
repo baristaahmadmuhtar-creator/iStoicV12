@@ -46,7 +46,24 @@ export class HydraVault {
         // ignore errors reading local storage
     }
 
+    // READ PROVIDER VISIBILITY (NEW)
+    let visibility: Record<string, boolean> = {};
+    try {
+        if (typeof window !== 'undefined') {
+            const stored = window.localStorage.getItem('provider_visibility');
+            if (stored) visibility = JSON.parse(stored);
+        }
+    } catch (e) {
+        // ignore
+    }
+
     providers.forEach(provider => {
+        // If provider is explicitly disabled in settings, skip it entirely
+        if (visibility[provider] === false) {
+            this.vault[provider] = [];
+            return;
+        }
+
         const keys = new Set<string>(); // Use Set to avoid duplicates
         
         // 0. User Override (Local Storage)

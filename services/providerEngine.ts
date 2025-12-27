@@ -241,7 +241,7 @@ export async function analyzeMultiModalMedia(provider: string, modelId: string, 
         try {
             const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
-                model: modelId || 'gemini-1.5-flash',
+                model: modelId || 'gemini-3-flash-preview',
                 contents: { parts: [{ inlineData: { data, mimeType } }, { text: prompt }] }
             });
             KEY_MANAGER.reportSuccess('GEMINI');
@@ -325,10 +325,9 @@ export async function generateMultiModalImage(provider: string, modelId: string,
             const validRatios = ["1:1", "16:9", "9:16", "4:3", "3:4"];
             const ratio = validRatios.includes(options?.aspectRatio) ? options.aspectRatio : "1:1";
 
-            // Using standard model for image gen call, which will use the tool internally or specific endpoint
-            // gemini-2.0-flash-exp supports generation
+            // Using gemini-2.5-flash-image which is the proper endpoint for image generation
             const response = await ai.models.generateContent({
-                model: modelId || 'gemini-2.0-flash-exp', 
+                model: modelId || 'gemini-2.5-flash-image', 
                 contents: { parts: [{ text: prompt }] },
                 config: { imageConfig: { aspectRatio: ratio } } 
             });

@@ -11,21 +11,13 @@ import { type ModelMetadata } from "../types";
 import { KEY_MANAGER } from "./geminiService"; 
 
 export const MODEL_CATALOG: ModelMetadata[] = [
-  // --- GEMINI (GOOGLE) ---
-  { 
-    id: 'gemini-3-flash-preview', 
-    name: 'Gemini 3 Flash', 
-    category: 'GEMINI_3', 
-    provider: 'GEMINI', 
-    description: 'Model Google terbaru untuk task cepat dan gratis (Preview).', 
-    specs: { context: '1M', speed: 'INSTANT', intelligence: 9.2 } 
-  },
+  // --- GEMINI (GOOGLE) - STABILITY FIRST ---
   { 
     id: 'gemini-2.0-flash-exp', 
-    name: 'Gemini 2.0 Flash Exp', 
+    name: 'Gemini 2.0 Flash (Stable)', 
     category: 'GEMINI_2_5', 
     provider: 'GEMINI', 
-    description: 'Experimental: Multimodal & Low Latency.', 
+    description: 'Model tercepat dan paling stabil untuk Free Tier saat ini.', 
     specs: { context: '1M', speed: 'INSTANT', intelligence: 9.5 } 
   },
   {
@@ -33,8 +25,24 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     name: 'Auto Pilot (Hydra)',
     category: 'GEMINI_2_5',
     provider: 'GEMINI', 
-    description: 'Hanisah Engine: Omni-Race (Gemini 3 Flash vs Llama 3.3).',
+    description: 'Hanisah Engine: Omni-Race (Gemini vs Llama).',
     specs: { context: 'AUTO', speed: 'INSTANT', intelligence: 9.8 } 
+  },
+  { 
+    id: 'gemini-1.5-flash', 
+    name: 'Gemini 1.5 Flash', 
+    category: 'GEMINI_2_5', 
+    provider: 'GEMINI', 
+    description: 'Model legacy paling stabil. Gunakan ini jika error 429.', 
+    specs: { context: '1M', speed: 'INSTANT', intelligence: 9.0 } 
+  },
+  { 
+    id: 'gemini-3-flash-preview', 
+    name: 'Gemini 3 Flash (Preview)', 
+    category: 'GEMINI_3', 
+    provider: 'GEMINI', 
+    description: 'Experimental. Sering kena limit (429).', 
+    specs: { context: '1M', speed: 'INSTANT', intelligence: 9.2 } 
   },
   { 
     id: 'gemini-3-pro-preview', 
@@ -163,14 +171,14 @@ export class HanisahKernel {
 
     let currentModelId = initialModelId;
     
-    // Auto Fallback for older IDs if stored
-    if (currentModelId === 'gemini-1.5-flash') currentModelId = 'gemini-3-flash-preview';
+    // Auto Fallback Logic for deprecated models
+    if (currentModelId === 'gemini-1.5-flash-latest') currentModelId = 'gemini-1.5-flash';
 
     if (initialModelId === 'auto-best') {
         const isEnabled = this.isOmniRaceEnabled();
         if (!isEnabled) {
-            yield { metadata: { systemStatus: "Omni-Race Disabled. Switching to Gemini 3 Flash...", isRerouting: true } };
-            currentModelId = 'gemini-3-flash-preview'; 
+            yield { metadata: { systemStatus: "Omni-Race Disabled. Switching to Gemini 2.0...", isRerouting: true } };
+            currentModelId = 'gemini-2.0-flash-exp'; 
         } else {
             try {
                 const hanisahImg = imageData ? { data: imageData.data, mimeType: imageData.mimeType } : null;
@@ -182,13 +190,13 @@ export class HanisahKernel {
             } catch (e: any) {
                 if (e.message === "ABORTED" || signal?.aborted) return;
                 yield { metadata: { systemStatus: `Omni-Engine Failed. Switching to Standard...`, isRerouting: true } };
-                currentModelId = 'gemini-3-flash-preview';
+                currentModelId = 'gemini-2.0-flash-exp';
             }
         }
     }
 
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 6; // High retry count for aggressive rotation
 
     while (attempts < maxAttempts) {
         if (signal?.aborted) break;
@@ -200,13 +208,14 @@ export class HanisahKernel {
         if (!key) {
             debugService.log('WARN', 'KERNEL', 'NO_KEY', `No keys for ${provider}. Attempting fallback switch.`);
             if (provider === 'GEMINI') {
+                // If Gemini keys empty, try Groq as a backup
                 if (KEY_MANAGER.getKey('GROQ')) {
                     currentModelId = 'llama-3.3-70b-versatile';
                     yield { metadata: { systemStatus: "Gemini Exhausted. Rerouting to Groq LPU...", isRerouting: true } };
                     continue;
                 }
             }
-            yield { text: `\n\n> ⛔ *CRITICAL: No keys available for ${provider} or fallbacks.*` };
+            yield { text: `\n\n> ⛔ *CRITICAL: No keys available for ${provider}. Check Settings > Provider Matrix.*` };
             break;
         }
 
@@ -257,22 +266,41 @@ export class HanisahKernel {
             }
         } catch (err: any) {
             if (signal?.aborted) return;
+            
+            // REPORT FAILURE TO VAULT (This freezes the key)
             GLOBAL_VAULT.reportFailure(provider as Provider, key, err);
+            
             const errStr = JSON.stringify(err);
             const isQuota = errStr.includes('429') || errStr.includes('resource_exhausted') || errStr.includes('limit');
             const isBalance = errStr.includes('402');
+            const isNotFound = errStr.includes('404') || errStr.includes('not found');
             
-            if (isQuota || isBalance) {
-                if (provider === 'GEMINI') {
-                    if (KEY_MANAGER.getKey('GROQ')) {
-                        yield { metadata: { systemStatus: "Gemini Stalled. Rerouting to Groq LPU...", isRerouting: true } };
-                        currentModelId = 'llama-3.3-70b-versatile';
-                        continue;
-                    } 
+            console.warn(`[KERNEL] Error on ${model.id} (Key: ...${key.slice(-4)}): ${err.message}`);
+
+            if (provider === 'GEMINI') {
+                // AGGRESSIVE DOWNGRADE LOGIC
+                if (isQuota || isNotFound) {
+                     if (currentModelId === 'gemini-3-flash-preview') {
+                         currentModelId = 'gemini-2.0-flash-exp';
+                         yield { metadata: { systemStatus: "Gemini 3 Limit Reached. Retrying with 2.0 Flash (Stable)...", isRerouting: true } };
+                         continue;
+                     } else if (currentModelId === 'gemini-2.0-flash-exp') {
+                         currentModelId = 'gemini-1.5-flash';
+                         yield { metadata: { systemStatus: "Gemini 2.0 Limit Reached. Retrying with 1.5 Flash (Legacy)...", isRerouting: true } };
+                         continue;
+                     }
+                     // If 1.5 also fails, we just loop to try a new key on 1.5
+                     yield { metadata: { systemStatus: "Switching API Key...", isRerouting: true } };
+                     continue;
                 }
-                yield { text: `\n\n> ⛔ *Resource Exhausted on ${provider}. No fallback available.*` };
-                throw err;
             }
+
+            if (isQuota || isBalance) {
+                // Generic retry for other providers or if models are exhausted
+                continue;
+            }
+            
+            // Unknown fatal error
             yield { text: `\n\n> ⚠️ *Connection Error:* ${err.message}` };
             throw err;
         }

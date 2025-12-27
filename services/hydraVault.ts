@@ -55,21 +55,25 @@ export class HydraVault {
 
         const keys = new Set<string>(); // Use Set to avoid duplicates
         
-        // Helper to add keys (handles commas, quotes, and multiple formats)
+        // Helper to add keys (handles commas, quotes, PIPES, NEWLINES and multiple formats)
         const addKey = (val: string | undefined) => {
             if (val && typeof val === 'string' && val.length > 5) {
-                // Remove quotes if present (e.g. "key1,key2")
-                const cleanVal = val.replace(/['"]/g, '').trim();
+                // 1. Remove quotes
+                let cleanVal = val.replace(/['"]/g, '').trim();
                 
-                if (cleanVal.includes(',')) {
-                    // Split by comma for multiple keys in one variable
-                    cleanVal.split(',').forEach(v => {
-                        const trimmed = v.trim();
-                        if (trimmed.length > 5) keys.add(trimmed);
-                    });
-                } else {
-                    keys.add(cleanVal);
-                }
+                // 2. Normalize delimiters: Replace newlines and pipes with commas
+                cleanVal = cleanVal.replace(/[\n|]/g, ',');
+
+                // 3. Split by comma
+                const parts = cleanVal.split(',');
+
+                parts.forEach(v => {
+                    const trimmed = v.trim();
+                    // Basic validation: Gemini keys usually start with AIza
+                    if (trimmed.length > 10) { 
+                        keys.add(trimmed);
+                    }
+                });
             }
         };
 
@@ -85,7 +89,7 @@ export class HydraVault {
         addKey(env[`${provider}_API_KEY`]);
 
         // 3. Explicit Numbered Scan (Force check for VITE_GEMINI_KEY_1 to 50)
-        for (let i = 1; i <= 20; i++) {
+        for (let i = 1; i <= 50; i++) {
             addKey(env[`VITE_${provider}_KEY_${i}`]);
             addKey(env[`${provider}_KEY_${i}`]);
             addKey(env[`VITE_${provider}_API_KEY_${i}`]);
@@ -104,6 +108,8 @@ export class HydraVault {
     });
     
     const totalKeys = Object.values(this.vault).flat().length;
+    // Log visible to console to help debugging in Vercel logs
+    console.log(`[HYDRA] Vault initialized. Total Keys: ${totalKeys}`);
     debugService.log('KERNEL', 'HYDRA_VAULT', 'INIT', `Vault initialized with ${totalKeys} keys across ${providers.length} providers.`);
   }
 
@@ -116,19 +122,20 @@ export class HydraVault {
     if (!pool || pool.length === 0) return null;
 
     // 1. Try to find ACTIVE keys
-    const activeKeys = pool.filter((k) => k.status === 'ACTIVE');
+    // Sort by usageCount ascending (Prioritize least used keys)
+    const activeKeys = pool
+        .filter((k) => k.status === 'ACTIVE')
+        .sort((a, b) => a.usageCount - b.usageCount);
 
     if (activeKeys.length > 0) {
-      // Return a random active key to distribute load (stochastic load balancing)
-      const randomKey = activeKeys[Math.floor(Math.random() * activeKeys.length)];
-      randomKey.usageCount++;
-      return randomKey.key;
+      // Pick the least used key
+      const bestKey = activeKeys[0];
+      bestKey.usageCount++;
+      return bestKey.key;
     }
 
     // 2. REVIVE THRESHOLD LOGIC
     // If NO active keys, check COOLDOWN keys.
-    // Logic: If a key has < 5000ms remaining in cooldown, we deem it "safe enough"
-    // for an emergency revive to prevent total service outage.
     const now = Date.now();
     const emergencyKey = pool.find((k) => {
       return k.status === 'COOLDOWN' && (k.cooldownUntil - now < 5000);
@@ -140,6 +147,14 @@ export class HydraVault {
       emergencyKey.cooldownUntil = 0;
       emergencyKey.usageCount++;
       return emergencyKey.key;
+    }
+
+    // 3. DESPERATE MEASURE: Just pick any key if all else fails (Better to try and fail than not try)
+    // Sometimes 429s are transient seconds later.
+    const desperateKey = pool[Math.floor(Math.random() * pool.length)];
+    if (desperateKey) {
+         debugService.log('WARN', 'HYDRA_VAULT', 'DESPERATE_PICK', `All keys in cooldown. Forcing retry on random key.`);
+         return desperateKey.key;
     }
 
     debugService.log('ERROR', 'HYDRA_VAULT', 'EXHAUSTED', `No keys available for ${provider}. All ${pool.length} keys in cooldown.`);
@@ -165,9 +180,9 @@ export class HydraVault {
     const now = Date.now();
 
     // PENALTY LOGIC
-    // Rate Limit (429) = 60 Seconds (Aggressive rotation, try others)
+    // Rate Limit (429) = 2 Minutes (Google Free Tier resets RPM every minute, but we want to be safe)
     // Standard Error (500, Network) = 15 Seconds (Temporary blip)
-    const penaltyMs = isRateLimit ? 60_000 : 15_000;
+    const penaltyMs = isRateLimit ? 120_000 : 15_000;
     
     keyRecord.cooldownUntil = now + penaltyMs;
 
